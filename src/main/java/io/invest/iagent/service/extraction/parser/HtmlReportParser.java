@@ -88,8 +88,8 @@ public class HtmlReportParser extends ReportParser {
         List<TableRow> rows = parseTableRows(tableElement);
         table.setRows(rows);
 
-        // 推断币种和单位
-        inferCurrencyAndUnit(table);
+        // 推断币种和单位 - 增强版,检查表格前后的文本
+        inferCurrencyAndUnit(table, tableElement);
 
         return table;
     }
@@ -225,6 +225,10 @@ public class HtmlReportParser extends ReportParser {
             row.setSubtotalRow(true);
         }
 
+        // 检测是否为粗体文本（节标题特征）
+        boolean isBold = detectBoldStyle(firstCell);
+        row.setBold(isBold);
+
         // 解析数据单元格（从第二个开始）
         for (int i = 1; i < cells.size(); i++) {
             Element cellElement = cells.get(i);
@@ -259,6 +263,33 @@ public class HtmlReportParser extends ReportParser {
         
         // 每4个空格算一级缩进
         return Math.min(level / 4, 5); // 最多5级
+    }
+
+    /**
+     * 检测单元格是否为粗体样式
+     * 支持多种HTML粗体标记方式
+     */
+    private boolean detectBoldStyle(Element cellElement) {
+        // 方法1: 检查是否有<b>, <strong>, <b>标签
+        if (!cellElement.select("b, strong").isEmpty()) {
+            return true;
+        }
+        
+        // 方法2: 检查CSS样式是否包含font-weight: bold
+        String style = cellElement.attr("style");
+        if (style != null && style.toLowerCase().contains("bold")) {
+            return true;
+        }
+        
+        // 方法3: 检查class属性是否暗示粗体
+        String className = cellElement.className();
+        if (className != null && 
+            (className.toLowerCase().contains("bold") || 
+             className.toLowerCase().contains("header"))) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -319,12 +350,19 @@ public class HtmlReportParser extends ReportParser {
     }
 
     /**
-     * 推断币种和单位
+     * 推断币种和单位(增强版)
+     * 检查表格标题、表头以及周围的文本内容
      */
-    private void inferCurrencyAndUnit(FinancialTable table) {
+    private void inferCurrencyAndUnit(FinancialTable table, Element tableElement) {
         String title = table.getTitle() != null ? table.getTitle().toLowerCase() : "";
         String allHeaders = String.join(" ", table.getHeaders()).toLowerCase();
         String combined = title + " " + allHeaders;
+
+        // 检查表格前后的兄弟元素,查找单位说明
+        String surroundingText = extractSurroundingText(tableElement);
+        if (surroundingText != null && !surroundingText.isEmpty()) {
+            combined += " " + surroundingText.toLowerCase();
+        }
 
         // 推断币种
         if (combined.contains("rmb") || combined.contains("人民币") || combined.contains("元")) {
@@ -335,7 +373,7 @@ public class HtmlReportParser extends ReportParser {
             table.setCurrency("USD");
         }
 
-        // 推断单位
+        // 推断单位 - 优先级: million > billion > thousand
         if (combined.contains("million") || combined.contains("百万")) {
             table.setUnit("million");
         } else if (combined.contains("billion") || combined.contains("十亿")) {
@@ -343,6 +381,89 @@ public class HtmlReportParser extends ReportParser {
         } else if (combined.contains("thousand") || combined.contains("千")) {
             table.setUnit("thousand");
         }
+    }
+
+    /**
+     * 提取表格周围的文本(用于识别单位说明)
+     * 增强版:不仅检查直接兄弟元素,还检查附近的段落
+     */
+    private String extractSurroundingText(Element tableElement) {
+        StringBuilder text = new StringBuilder();
+        
+        // 方法1: 检查前一个兄弟元素
+        Element prev = tableElement.previousElementSibling();
+        if (prev != null) {
+            String prevText = prev.text().trim();
+            if (prevText.length() < 300 && isUnitDescription(prevText)) {
+                text.append(prevText);
+            }
+        }
+        
+        // 方法2: 如果前一个元素不是单位说明,向前查找最多5个元素
+        if (text.length() == 0) {
+            Element current = tableElement.previousElementSibling();
+            int lookbackCount = 0;
+            while (current != null && lookbackCount < 5) {
+                String elemText = current.text().trim();
+                if (elemText.length() < 300 && isUnitDescription(elemText)) {
+                    text.append(elemText);
+                    break;
+                }
+                current = current.previousElementSibling();
+                lookbackCount++;
+            }
+        }
+        
+        // 方法3: 检查后一个兄弟元素
+        if (text.length() == 0) {
+            Element next = tableElement.nextElementSibling();
+            if (next != null) {
+                String nextText = next.text().trim();
+                if (nextText.length() < 300 && isUnitDescription(nextText)) {
+                    text.append(nextText);
+                }
+            }
+        }
+        
+        // 方法4: 检查父元素的文本内容(如果是页面标题或章节标题)
+        if (text.length() == 0) {
+            Element parent = tableElement.parent();
+            if (parent != null) {
+                Elements allElements = parent.getAllElements();
+                int tableIndex = allElements.indexOf(tableElement);
+                if (tableIndex > 0) {
+                    for (int i = tableIndex - 1; i >= Math.max(0, tableIndex - 10); i--) {
+                        Element elem = allElements.get(i);
+                        if (elem.tagName().equals("p") || elem.tagName().equals("div")) {
+                            String elemText = elem.text().trim();
+                            if (elemText.length() < 300 && isUnitDescription(elemText)) {
+                                text.append(elemText);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return text.toString();
+    }
+
+    /**
+     * 判断是否是单位说明文本
+     */
+    private boolean isUnitDescription(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        String lower = text.toLowerCase();
+        return lower.contains("amounts in") || 
+               lower.contains("in thousands") || 
+               lower.contains("in millions") || 
+               lower.contains("in billions") ||
+               lower.contains("(amounts") ||
+               lower.contains("单位:") ||
+               lower.contains("金额单位");
     }
 
 }

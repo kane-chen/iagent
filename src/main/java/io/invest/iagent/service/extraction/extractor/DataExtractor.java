@@ -168,7 +168,7 @@ public class DataExtractor {
             String period = periodSequence.get(idx);
             TableCell cell = validNumericCells.get(idx);
 
-            // 跳过累计周期（QTD9 / H 等），只保留季度数据
+            // 跳过累计周期（QTD9 / QTD6 / H 等），只保留季度数据
             if (period.endsWith("QTD9") || period.endsWith("QTD6") || period.endsWith("H")) {
                 continue;
             }
@@ -202,8 +202,9 @@ public class DataExtractor {
         List<String> periodSequence = new java.util.ArrayList<>();
 
         // 1) 扫描表头前5行，按出现顺序收集"周期分组标记"列表和"年份"列表
-        //    周期分组列表按出现位置排序 [{列, 后缀}, ...]
-        //    年份列表按出现位置排序 [{列, 年份}, ...]
+        //    周期分组列表按出现位置排序 [{列, 后缀index}]
+        //    年份列表按出现位置排序 [{列, 年份}
+
         List<int[]> groupColumns = new java.util.ArrayList<>(); // [列, 后缀index]
         List<String> groupSuffixes = new java.util.ArrayList<>(); // suffix序列
         List<int[]> yearColumns = new java.util.ArrayList<>(); // [列, 年份]
@@ -461,13 +462,20 @@ public class DataExtractor {
             if (row.getLabel() == null) continue;
             String lowerLabel = row.getLabel().toLowerCase().trim();
 
-            // 检查是否是指标节标题（包含关键词且以冒号结尾）
+            // 检查是否是指标节标题
             for (String keyword : keywords) {
                 if (lowerLabel.contains(keyword)) {
-                    // 典型的节标题格式："Revenues:", "Operating income (loss):"
+                    // 格式1: 典型的节标题格式："Revenues:", "Operating income (loss):"
                     if (lowerLabel.endsWith(":") || lowerLabel.contains("total")) {
                         return i;
                     }
+                    
+                    // 格式2: 粗体标题但不带冒号（如PDD格式：<B>Revenues</B>）
+                    if (row.isBold() && isStandaloneSectionTitle(lowerLabel, keyword)) {
+                        logger.trace("Detected bold section title: {} at row {}", lowerLabel, i);
+                        return i;
+                    }
+                    
                     // 也可能是表格标题的一部分
                     if (table.getTitle() != null && table.getTitle().toLowerCase().contains(keyword)) {
                         return -1; // 指标在表格标题中，不需要节边界
@@ -480,6 +488,28 @@ public class DataExtractor {
     }
 
     /**
+     * 判断是否为独立的节标题
+     * 用于识别粗体格式的节标题（如PDD财报）
+     */
+    private boolean isStandaloneSectionTitle(String label, String keyword) {
+        // 必须是独立的一行（只有关键词本身或非常简短）
+        if (label.length() < 50 && label.contains(keyword)) {
+            // 不包含具体数值（避免误匹配数据行）
+            int digitCount = 0;
+            for (char c : label.toCharArray()) {
+                if (Character.isDigit(c)) {
+                    digitCount++;
+                }
+            }
+            // 数字占比不超过20%
+            if (digitCount == 0 || (double) digitCount / label.length() < 0.2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 找到下一个节标题行的位置
      */
     private int findNextSectionHeaderRow(FinancialTable table, int startRow) {
@@ -488,13 +518,25 @@ public class DataExtractor {
             if (row.getLabel() == null) continue;
             String lowerLabel = row.getLabel().toLowerCase().trim();
 
-            // 检查是否是另一个节的标题（以冒号结尾，或者包含指标关键词）
+            // 检查是否是另一个节的标题
+            // 格式1: 以冒号结尾
             if (lowerLabel.endsWith(":") &&
                 (lowerLabel.contains("revenue") || lowerLabel.contains("income") ||
                  lowerLabel.contains("profit") || lowerLabel.contains("expense") ||
                  lowerLabel.contains("cost") || lowerLabel.contains("loss") ||
                  lowerLabel.contains("supplemental"))) {
                 return i;
+            }
+            
+            // 格式2: 粗体标题（PDD等公司格式）
+            if (row.isBold() && isStandaloneSectionTitle(lowerLabel, "")) {
+                // 检查是否包含任何指标关键词
+                if (lowerLabel.contains("revenue") || lowerLabel.contains("income") ||
+                    lowerLabel.contains("profit") || lowerLabel.contains("expense") ||
+                    lowerLabel.contains("cost") || lowerLabel.contains("loss")) {
+                    logger.trace("Detected next bold section title: {} at row {}", lowerLabel, i);
+                    return i;
+                }
             }
         }
         return -1;
@@ -547,7 +589,14 @@ public class DataExtractor {
             String label = r.getLabel();
             if (label == null) continue;
             String ll = label.toLowerCase().trim();
-            if (ll.endsWith(":") || ll.contains("total")) {
+            
+            // 格式1: 带冒号的节标题（BABA/GOOGL格式）
+            boolean isSectionTitleWithColon = ll.endsWith(":") || ll.contains("total");
+            
+            // 格式2: 粗体节标题（PDD格式）
+            boolean isBoldSectionTitle = r.isBold() && isStandaloneSectionTitle(ll, "");
+            
+            if (isSectionTitleWithColon || isBoldSectionTitle) {
                 if (ll.contains("revenue") || ll.contains("revenues")) {
                     hasRevenueSection = true;
                 }
@@ -742,7 +791,7 @@ public class DataExtractor {
     }
 
     /**
-     * 创建指标对象（带周期）
+     * 创建指标对象(带周期)
      */
     private SegmentMetric createMetricWithPeriod(String metricCode, TableCell cell, FinancialTable table, String period) {
         SegmentMetric metric = new SegmentMetric();
@@ -755,9 +804,11 @@ public class DataExtractor {
             metric.setMetricName(dict.getMetricName());
         }
 
-        metric.setValue(cell.getNumericValue());
+        // 处理单位转换:统一转换为百万(million)
+        double normalizedValue = normalizeToMillion(cell.getNumericValue(), table.getUnit());
+        metric.setValue(normalizedValue);
         metric.setCurrency(table.getCurrency());
-        metric.setUnit(table.getUnit());
+        metric.setUnit("million"); // 统一设置为million
         metric.setSourceType("TABLE_EXTRACT");
         metric.setSourceLocation(table.getTableId());
 
@@ -768,6 +819,37 @@ public class DataExtractor {
         return metric;
     }
 
+    /**
+     * 将数值统一转换为百万单位
+     * @param value 原始数值
+     * @param unit 原始单位
+     * @return 转换后的百万单位数值
+     */
+    private double normalizeToMillion(double value, String unit) {
+        if (unit == null || unit.trim().isEmpty()) {
+            return value;
+        }
+
+        String lowerUnit = unit.toLowerCase().trim();
+
+        // 如果已经是百万,直接返回
+        if (lowerUnit.contains("million") || lowerUnit.contains("百万")) {
+            return value;
+        }
+
+        // 如果是千,需要除以1000
+        if (lowerUnit.contains("thousand") || lowerUnit.contains("千")) {
+            return Math.floor(value / 1000.0);
+        }
+
+        // 如果是十亿,需要乘以1000
+        if (lowerUnit.contains("billion") || lowerUnit.contains("十亿")) {
+            return Math.floor(value * 1000.0);
+        }
+
+        // 其他情况,假设已经是百万
+        return value;
+    }
 
     /**
      * 计算置信度
@@ -867,7 +949,7 @@ public class DataExtractor {
      * 从子节点累加指标数据到父节点
      */
     private void aggregateFromChildren(Segment parent) {
-        // 按指标代码和周期分组，累加子节点的数值
+        // 按指标代码和周期分组,累加子节点的数值
         java.util.Map<String, java.util.Map<String, Double>> aggregatedValues = new java.util.HashMap<>();
         java.util.Map<String, String> currencyMap = new java.util.HashMap<>();
         java.util.Map<String, String> unitMap = new java.util.HashMap<>();
@@ -879,7 +961,7 @@ public class DataExtractor {
                 aggregatedValues.computeIfAbsent(key, k -> new java.util.HashMap<>())
                         .merge("value", childMetric.getValue(), Double::sum);
 
-                // 记录币种和单位（假设所有子节点一致）
+                // 记录币种和单位(假设所有子节点一致)
                 if (childMetric.getCurrency() != null) {
                     currencyMap.put(childMetric.getMetricCode(), childMetric.getCurrency());
                 }
@@ -903,7 +985,7 @@ public class DataExtractor {
                 aggregatedMetric.setValue(totalValue);
                 aggregatedMetric.setPeriod(period);
                 aggregatedMetric.setCurrency(currencyMap.get(metricCode));
-                aggregatedMetric.setUnit(unitMap.get(metricCode));
+                aggregatedMetric.setUnit("million"); // 统一设置为million
                 aggregatedMetric.setSourceType("AGGREGATED");
                 aggregatedMetric.setSourceLocation("aggregated from children");
                 aggregatedMetric.setConfidenceScore(70); // 累加数据置信度稍低

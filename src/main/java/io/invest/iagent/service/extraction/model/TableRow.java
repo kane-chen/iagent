@@ -16,10 +16,12 @@ public class TableRow {
     private int indentLevel;
     private boolean isTotalRow;
     private boolean isSubtotalRow;
+    private boolean isBold;
 
     public TableRow() {
         this.cells = new ArrayList<>();
         this.indentLevel = 0;
+        this.isBold = false;
     }
 
     /**

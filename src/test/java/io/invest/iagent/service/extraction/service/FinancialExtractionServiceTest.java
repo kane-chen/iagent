@@ -31,8 +31,8 @@ class FinancialExtractionServiceTest {
         System.out.println(JSON.toJSONString(segments));
         Assertions.assertEquals(2420D,localValue(segments,"CLOUD_INTELLIGENCE","ADJUSTED_EBITA","2025Q1"));
         Assertions.assertEquals(1432D,localValue(segments,"CLOUD_INTELLIGENCE","ADJUSTED_EBITA","2024Q1"));
-        Assertions.assertEquals(425526D,localValue(getSubSegments(segments,"TAOBAO_TMALL"),"CHINA_COMMERCE_RETAIL","REVENUE","2025FY"));
-        Assertions.assertEquals(414414D,localValue(getSubSegments(segments,"TAOBAO_TMALL"),"CHINA_COMMERCE_RETAIL","REVENUE","2024FY"));
+        Assertions.assertEquals(95581,localValue(getSubSegments(segments,"TAOBAO_TMALL"),"CHINA_COMMERCE_RETAIL","REVENUE","2025Q1"));
+        Assertions.assertEquals(88264,localValue(getSubSegments(segments,"TAOBAO_TMALL"),"CHINA_COMMERCE_RETAIL","REVENUE","2024Q1"));
     }
 
     @Test
@@ -75,6 +75,59 @@ class FinancialExtractionServiceTest {
     }
 
     @Test
+    public void extract_pdd() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/PDD/filings/fil_0001104659-25-026115/tm259886d1_ex99-1.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("PDD",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(57011	,locale(segments,"Online_Marketing_Services").getMetric("REVENUE","2024Q4").getValue());
+        Assertions.assertEquals(40205	,locale(segments,"Transaction_Services").getMetric("REVENUE","2023Q4").getValue());
+    }
+
+    @Test
+    public void extract_pdd2() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/PDD/filings/fil_0001104659-26-067186/tm2615739d1_ex99-1.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("PDD",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(48722	,locale(segments,"Online_Marketing_Services").getMetric("REVENUE","2025Q1").getValue());
+        Assertions.assertEquals(46950	,locale(segments,"Transaction_Services").getMetric("REVENUE","2025Q1").getValue());
+    }
+
+    @Test
+    public void extract_microsoft() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/MSFT/filings/fil_0000950170-25-061046/msft-20250331.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("MSFT",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(29944	,locale(segments,"PRODUCTIVITY_BUSINESS").getMetric("REVENUE","2025Q1").getValue());
+        Assertions.assertEquals(27113	,locale(segments,"PRODUCTIVITY_BUSINESS").getMetric("REVENUE","2024Q1").getValue());
+        Assertions.assertEquals(17379	,locale(segments,"PRODUCTIVITY_BUSINESS").getMetric("OPERATING_INCOME","2025Q1").getValue());
+        Assertions.assertEquals(15143	,locale(segments,"PRODUCTIVITY_BUSINESS").getMetric("OPERATING_INCOME","2024Q1").getValue());
+        Assertions.assertEquals(26751	,locale(segments,"INTELLIGENT_CLOUD").getMetric("REVENUE","2025Q1").getValue());
+        Assertions.assertEquals(11095	,locale(segments,"INTELLIGENT_CLOUD").getMetric("OPERATING_INCOME","2025Q1").getValue());
+        Assertions.assertEquals(3526	,locale(segments,"PERSONAL_COMPUTING").getMetric("OPERATING_INCOME","2025Q1").getValue());
+    }
+
+    @Test
+    public void extract_nvda() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/NVDA/filings/fil_0001045810-26-000021/nvda-20260125.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("NVDA",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(29944	,locale(segments,"Compute_Networking").getMetric("REVENUE","2025Q1").getValue());
+        Assertions.assertEquals(17379	,locale(segments,"Compute_Networking").getMetric("OPERATING_INCOME","2025Q1").getValue());
+        Assertions.assertEquals(26751	,locale(segments,"Graphics").getMetric("REVENUE","2025Q1").getValue());
+        Assertions.assertEquals(11095	,locale(segments,"Graphics").getMetric("OPERATING_INCOME","2025Q1").getValue());
+    }
+
+
+
+    @Test
     public void extract_baba_2025() throws IOException {
         FinancialExtractionService service = new FinancialExtractionService("BABA",workspace);
         List<Segment> segments = service.extractFromHtmlFile("BABA",null,null) ;
@@ -84,8 +137,8 @@ class FinancialExtractionServiceTest {
 
     @Test
     public void extract_google() throws IOException {
-        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/GOOGL/filings/fil_0001652044-25-000043/goog-20250331.htm").toFile() ;
-        FinancialExtractionService service = new FinancialExtractionService("GOOGL",workspace);
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/GOOG/filings/fil_0001652044-25-000043/goog-20250331.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("GOOG",workspace);
         List<Segment> segments = service.extractFromHtmlFile(file) ;
         Assertions.assertNotNull(segments);
         System.out.println(JSON.toJSONString(segments));

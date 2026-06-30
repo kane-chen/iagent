@@ -122,6 +122,17 @@ public class FinancialFilingDownloadToolIntegrationTest {
     }
 
     @Test
+    @Disabled("Integration test requires network access, run manually if needed")
+    void downloadMeituan() {
+        String ticker = "03690";
+        String fy = "2024,2025,2026";
+        String result = tool.downloadFiling(ticker, fy, null,false);
+        System.out.println(result);
+        Assertions.assertThat(Objects.requireNonNull(result))
+                .containsAnyOf( ticker,fy);
+    }
+
+    @Test
     void downloadMao() {
         String ticker = "600519";
         String fy = "2025";
