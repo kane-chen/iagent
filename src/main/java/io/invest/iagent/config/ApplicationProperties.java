@@ -72,7 +72,7 @@ public class ApplicationProperties {
         /**
          * Milvus server endpoint URL.
          */
-        private String endpoint = "http://192.168.1.6:19530";
+        private String endpoint = "http://127.0.0.1:19530";
 
         /**
          * Authentication token for Milvus (if required).
@@ -154,6 +154,7 @@ public class ApplicationProperties {
 
     @Data
     public static class WorkspaceProperties {
-        private String baseDir = Paths.get(System.getProperty("user.dir")).resolve("workspace").toAbsolutePath().toString() ;
+        private String baseDir  ;
     }
+
 }

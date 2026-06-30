@@ -76,6 +76,17 @@ class StockInfoToolTest {
     }
 
     @Test
+    public void test_process_ticker_futu() throws IOException, InterruptedException {
+        List<StockInfoTool.StockInfo> stocks = tool.searchTicker("富途", null,1);
+        Assertions.assertNotNull(stocks.get(0));
+        Assertions.assertEquals("FUTU", stocks.get(0).getSymbol());
+        Assertions.assertEquals("US_DOMESTIC", stocks.get(0).getCompanyType());
+        Assertions.assertEquals("10-K", stocks.get(0).getAnnualReportType());
+        Assertions.assertEquals("10-Q", stocks.get(0).getQuarterlyReportType());
+        Assertions.assertEquals("美国SEC", stocks.get(0).getFilingAuthority());
+    }
+
+    @Test
     public void test_process_ticker_meituan() throws IOException, InterruptedException {
         List<StockInfoTool.StockInfo> stocks = tool.searchTicker("美团", Lists.newArrayList("HKG"),1);
         Assertions.assertNotNull(stocks.get(0));

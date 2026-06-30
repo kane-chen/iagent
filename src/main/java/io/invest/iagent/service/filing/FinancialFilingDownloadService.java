@@ -63,7 +63,7 @@ public class FinancialFilingDownloadService {
 
         this.secDownloader = new SecFilingDownloader(baseDir, httpClient, objectMapper, secUserAgent);
         this.cnInfoDownloader = new CnInfoDownloader(baseDir, httpClient, objectMapper);
-        this.hkexDownloader = new HkexDownloader(baseDir, objectMapper);
+        this.hkexDownloader = new HkexDownloader(baseDir, httpClient, objectMapper);
     }
 
     // ========== 服务入口 ==========
@@ -217,7 +217,7 @@ public class FinancialFilingDownloadService {
         return switch (market) {
             case US -> Set.of("10-K", "10-Q", "20-F", "6-K", "8-K", "DEF 14A", "SC 13D", "SC 13G");
             case CN_A -> Set.of("FY", "H1", "Q1", "Q3");
-            case HK -> Set.of("FY", "H1");
+            case HK -> Set.of("FY", "H1","Q1","Q2","Q3","Q4");
         };
     }
 
@@ -268,7 +268,11 @@ public class FinancialFilingDownloadService {
             case HK -> switch (lower) {
                 case "annual", "年报", "fy" -> Set.of("FY");
                 case "interim", "中报", "半年报", "h1" -> Set.of("H1");
-                case "quarterly", "季报" -> Set.of("Q1", "Q3");
+                case "quarterly", "季报" -> Set.of("Q1", "Q2", "Q3", "Q4");
+                case "q1" -> Set.of("Q1");
+                case "q2" -> Set.of("Q2");
+                case "q3" -> Set.of("Q3");
+                case "q4" -> Set.of("Q4");
                 default -> {
                     try {
                         FinancialFormType ft = FinancialFormType.fromCode(input);

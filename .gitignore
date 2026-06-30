@@ -22,3 +22,23 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# IntelliJ IDEA
+.idea/
+
+# Maven/Gradle build output
+target/
+
+test-filings/
+
+# Local config files
+src/test/resources/test.properties
+src/main/resources/application.properties
+
+# workspace
+workspace/agents
+workspace/portfolio
+workspace/excels
+workspace/logs
+workspace/sec
+workspace/skills/futuapi

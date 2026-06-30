@@ -22,14 +22,15 @@ class FilingKnowledgeBaseServiceTest {
     public void init(){
         // process
         Path workspace = Paths.get(System.getProperty("user.dir")).resolve("./test-filings");
-        FilingPreprocessService preprocessService =  new FilingPreprocessService(workspace);
+        // 创建带有财务报表提取功能的预处理服务
+        FilingPreprocessService preprocessService = new FilingPreprocessService(workspace);
         // embedding
         String baseUri = "http://localhost:11434/api/embed";
         String apiKey = "local" ;
         String model = "qwen3-embedding:4b" ;
         EmbeddingService embeddingService = new ModelEmbeddingService(baseUri,apiKey, model,1024);
         // vector-store
-        String endpoint = "http://192.168.1.6:19530" ;
+        String endpoint = "http://127.0.0.1:19530" ;
         String token = null; // "root:Milvus" ;
         String collectionName = "invest_filing_test" ;
         VectorStoreService vectorStoreService = new VectorStoreServiceByMilvus(endpoint,token,collectionName) ;

@@ -31,15 +31,18 @@ import io.invest.iagent.service.kb.vector.VectorStoreServiceByMilvus;
 import io.invest.iagent.tools.*;
 import io.invest.iagent.tools.filing.FinancialFilingDownloadTool;
 import io.invest.iagent.tools.filing.FinancialMetricsQueryTool;
+import io.invest.iagent.tools.filing.FinancialSegmentMetricsTool;
 import io.invest.iagent.tools.kb.FilingKnowledgeBaseTool;
 import io.invest.iagent.tools.web.CompanySourceSearchTool;
 import io.invest.iagent.tools.web.WebSearchTool;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Set;
 
@@ -51,6 +54,18 @@ public class AgentConfig {
 
     @Autowired
     private ApplicationProperties applicationProperties;
+
+    @PostConstruct
+    public void init() {
+        TracerRegistry.register(new LoggingTracer(102400));
+        userAgent = applicationProperties.getFiling().getSecUserAgent();
+        String workSpaceBaseDir = applicationProperties.getWorkspace().getBaseDir() ;
+        if(StringUtils.isBlank(workSpaceBaseDir)){
+            workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
+        }else{
+            workspace = Paths.get(workSpaceBaseDir);
+        }
+    }
 
     @Bean
     public FinancialFilingDownloadService financialFilingDownloadService() {
@@ -77,20 +92,16 @@ public class AgentConfig {
         String collectionName = milvusProps.getCollection();
         VectorStoreService vectorStoreService = new VectorStoreServiceByMilvus(endpoint, token, collectionName);
 
+        // 创建带有财务报表提取功能的预处理服务
+        FilingPreprocessService preprocessService = new FilingPreprocessService(workspace);
+
         return new FilingKnowledgeBaseService(
-                new FilingPreprocessService(workspace),
+                preprocessService,
                 embeddingService,
                 vectorStoreService,
                 new FilingQueryCategoryResolver(),
                 applicationProperties
         );
-    }
-
-    @PostConstruct
-    public void init() {
-        TracerRegistry.register(new LoggingTracer(102400));
-        userAgent = applicationProperties.getFiling().getSecUserAgent();
-        workspace = Path.of(applicationProperties.getWorkspace().getBaseDir());
     }
 
     @Bean
@@ -101,7 +112,7 @@ public class AgentConfig {
                 .modelName(applicationProperties.getLlm().getModel())
                 .stream(false)
                 .generateOptions(GenerateOptions.builder()
-                        .temperature(0.7)
+                        .temperature(0.3)
                         .topP(0.9)
                         .maxTokens(applicationProperties.getLlm().getMaxTokens())
                         .build())
@@ -117,13 +128,11 @@ public class AgentConfig {
         toolkit.registerTool(new FinancialFilingDownloadTool(financialFilingDownloadService));
         toolkit.registerTool(new FinancialMetricsQueryTool(financialMetricsQueryService));
         toolkit.registerTool(new FilingKnowledgeBaseTool(filingKnowledgeBaseService));
-        // shell-command
-        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("sh","bash","python","python3"));
-        toolkit.registerTool(shellCommandTool);
+        // shell-command (use python to call futu_financial skill scripts on Windows)
+        // 注意：Windows 环境不要使用 withShell()，避免内部调用不存在的 sh 导致错误
         // skill-box
         SkillBox skillBox = new SkillBox(toolkit) ;
         skillBox.codeExecution()
-                .withShell(shellCommandTool)
                 .withRead()
                 .withWrite()
                 .workDir(workspace.toAbsolutePath().toString())
@@ -148,16 +157,15 @@ public class AgentConfig {
                 .name("SubAgentFiling")
                 .sysPrompt("""
                         你是一个财报文件助理，可以回答用户有关公司财报数据的问题。
-                        执行步骤：
-                            回答用户问题前需要先获取财报事实数据，然后检索知识库获取财报文件中的相关内容，整合之后进行回答。
                         注意：
                         1、用户如果没有提供公司股票代码，你需要首先调用工具获取股票代码，然后再执行后续的操作。
                         2、不需要检查工作空间的文件，工具接口里自己会检查财报文件，你只需要调用对应的工具即可。
-                        3、用户询问财报定性原因、管理层解释、风险因素时，可以使用财报知识库工具预处理、构建并检索相关段落。
+                        3、用户询问财报定性原因、管理层解释、风险因素时，可以使用财报知识库工具检索相关段落；仅在检索结果为空且用户明确需要时才构建知识库。
                         提别提醒：
                         1、你是一个独立自主的员工，可以在职责范围内自主进行工作，不需要用户确认，直接执行即可。
                         2、你的风格是逻辑严谨、语言精炼。
                         3、你是一个克制的员工，仅会就用户提到的问题进行回答，不会引申和发散问题。
+                        4、避免重复下载或重复构建已有的知识库，优先复用已有数据。
                         """)
                 .model(model)
                 .toolkit(toolkit)
@@ -216,8 +224,8 @@ public class AgentConfig {
                                         .build()
                         ).build());
         toolkit.registerTool(new WebSearchTool());
-        // shell-command
-        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("sh","bash","python","python3","pip"));
+        // shell-command (python is allowed for futu_financial skill)
+        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
         toolkit.registerTool(shellCommandTool);
         SkillBox skillBox = new SkillBox(toolkit) ;
         skillBox.codeExecution()
@@ -308,5 +316,62 @@ public class AgentConfig {
                 ## 限制
                 """;
     }
+
+
+    @Bean HarnessAgent baseAgent(Model model) {
+        // tool-kit
+        Toolkit toolkit = new Toolkit(
+                ToolkitConfig.builder()
+                        .parallel(true)                    // 并行执行多个工具
+                        .allowToolDeletion(false)          // 禁止删除工具
+                        .executionConfig(
+                                ExecutionConfig.builder()
+                                        .timeout(Duration.ofSeconds(900))
+                                        .build()
+                        ).build());
+        toolkit.registerTool(new StockInfoTool());
+        toolkit.registerTool(new FinancialSegmentMetricsTool(workspace));
+        // shell-command
+        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
+        toolkit.registerTool(shellCommandTool);
+        SkillBox skillBox = new SkillBox(toolkit) ;
+        skillBox.codeExecution()
+                .withShell(shellCommandTool)
+                .withRead()
+                .withWrite()
+                .workDir(workspace.toAbsolutePath().toString());
+        // agent
+        return HarnessAgent.builder()
+                .name("BaseAgent")
+                .enableAgentTracingLog(true)
+                .model(model)
+                .modelExecutionConfig(
+                        ExecutionConfig.builder()
+                                .timeout(Duration.ofSeconds(900))
+                                .maxAttempts(1)
+                                .build())
+                .toolkit(toolkit)
+                .toolExecutionConfig(
+                        ExecutionConfig.builder()
+                                .timeout(Duration.ofSeconds(900))
+                                .maxAttempts(1)
+                                .build())
+                .sysPrompt("""
+                        你是一个理智严谨的工作助理，你的特点如下：
+                        1、你可以在职责范围内独立自主进行工作，职责范围内不需要用户确认，直接执行即可。
+                        2、你的风格是逻辑严谨、语言精炼，仅会就用户提到的问题进行回答，不会做问题的引申和发散。
+                        """)
+                .workspace(workspace)
+                .disableMemoryHooks()
+                .disableSessionPersistence()
+                .disableSubagents()
+                .disableMemoryTools()
+                .maxIters(50)
+                .hook(new DetailedTracingHook(102400))
+                .hook(new AgentTraceHook())
+                .hook(new SkillHook(skillBox))
+                .build();
+    }
+
 }
 

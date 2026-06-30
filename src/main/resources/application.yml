@@ -6,6 +6,6 @@ logging:
     filing_process : debug
     filing_query : debug
   file:
-    path: D:/dev/codes/iagent/workspace/logs/app
+    path: D:/dev/codes/github/iagent/workspace/logs/app
   console:
     enabled: true

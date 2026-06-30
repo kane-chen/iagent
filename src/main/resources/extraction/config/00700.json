@@ -1,0 +1,76 @@
+{
+  "companyCode": "00700",
+  "companyName": "腾讯控股",
+  "market": "HKEX",
+  "defaultCurrency": "RMB",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1", "Q2", "Q3", "Q4", "H1", "H2", "FY"],
+  "segments": [
+    {
+      "segmentCode": "VAS",
+      "segmentName": "增值服务",
+      "aliases": ["增值服务", "Value-added services", "VAS", "Value added services"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "GAMES",
+      "segmentName": "游戏",
+      "aliases": ["游戏", "Online games", "Games", "网络游戏"],
+      "level": 2,
+      "parentCode": "VAS"
+    },
+    {
+      "segmentCode": "SOCIAL_NETWORKS",
+      "segmentName": "社交网络",
+      "aliases": ["社交网络", "Social networks", "Social media"],
+      "level": 2,
+      "parentCode": "VAS"
+    },
+    {
+      "segmentCode": "ONLINE_ADS",
+      "segmentName": "网络广告",
+      "aliases": ["网络广告", "Online advertising", "Advertising", "Social & others advertising", "Media advertising"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "FINTECH",
+      "segmentName": "金融科技及企业服务",
+      "aliases": ["金融科技及企业服务", "FinTech and Business Services", "Fintech", "WeChat Pay", "金融科技"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "CLOUD",
+      "segmentName": "云服务",
+      "aliases": ["云服务", "Cloud services", "Tencent Cloud", "腾讯云"],
+      "level": 2,
+      "parentCode": "FINTECH"
+    },
+    {
+      "segmentCode": "OTHERS",
+      "segmentName": "其他业务",
+      "aliases": ["其他业务", "Others", "其他"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenue", "Revenues", "收入", "营业额", "营收"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating profit", "经营利润", "营业利润", "经营收益"]
+    }
+  ],
+  "pdfColumnMappings": [
+    {
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCodesByRow": ["REVENUE", "GROSS_PROFIT"]
+    }
+  ]
+}

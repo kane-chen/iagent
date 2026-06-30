@@ -6,6 +6,7 @@ import java.util.Arrays;
 
 public enum FilingContentCategory {
     FINANCIAL_STATEMENTS("financial_statements"),
+    FINANCIAL_METRICS("financial_metrics"),
     BUSINESS_OPERATIONS("business_operations"),
     FINANCIAL_OPERATIONS("financial_operations"),
     OPERATING_RISKS("operating_risks"),

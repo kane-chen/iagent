@@ -3,6 +3,9 @@ package io.invest.iagent.tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
+import io.agentscope.core.tool.Tool;
+import io.agentscope.core.tool.ToolParam;
+import io.invest.iagent.model.WebSearchResponseDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -99,9 +102,8 @@ public class StockInfoTool {
     /**
      * 从东方财富搜索接口查询股票代码（已过滤衍生品）
      */
-    public List<StockInfo> doSearchTicker(String companyName, int limit)
-            throws IOException, InterruptedException {
 
+    public List<StockInfo> doSearchTicker(String companyName, Integer limit)throws IOException, InterruptedException {
         String encodedName = URLEncoder.encode(companyName, StandardCharsets.UTF_8);
         String uriStr = SEARCH_URL + "?input=" + encodedName
                 + "&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=" + limit;
@@ -250,7 +252,17 @@ public class StockInfoTool {
         }
     }
 
-    public List<StockInfo> searchTicker(String companyName,List<String> preferredExchanges, int limit)
+    @Tool(name = "get_stock_ticker", description = "根据公司名获取该公司的股票代码、上市市场信息。")
+    public List<StockInfo> searchTicker(
+            @ToolParam(name = "companyName", required = true, description = "公司名") String companyName
+            ,@ToolParam(name = " preferredExchanges", required = false, description = "优先获取的股票市场，可为空。") List<String> preferredExchanges)
+            throws IOException, InterruptedException {
+        return searchTicker(companyName, preferredExchanges, 1);
+    }
+
+    public List<StockInfo> searchTicker(String companyName
+            ,List<String> preferredExchanges
+            ,int limit)
             throws IOException, InterruptedException {
         List<StockInfo> results = doSearchTicker(companyName, 20);
 

@@ -79,7 +79,8 @@ public class LoggingTracer implements Tracer {
         // log input
         String inputMessagesStr = buildString(inputMessages);
         String toolSchemasStr = buildString(toolSchemas);
-        log.info("call model ::: input= {}, tools= {}, tokens = {}",inputMessagesStr,toolSchemasStr,length(inputMessagesStr,toolSchemasStr));
+//        log.info("call model ::: input= {}, tools= {}, tokens = {}",inputMessagesStr,toolSchemasStr,length(inputMessagesStr,toolSchemasStr));
+        log.info("call model ::: input= {},tokens = {}",inputMessagesStr,length(inputMessagesStr,toolSchemasStr));
         // execute
         long startTime = System.currentTimeMillis();
         return modelCall.get()

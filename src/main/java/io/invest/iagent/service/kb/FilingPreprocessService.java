@@ -11,6 +11,9 @@ import io.invest.iagent.service.kb.chunk.FilingChunkingStrategy;
 import io.invest.iagent.service.kb.chunk.FilingChunkingStrategyFactory;
 import io.invest.iagent.service.kb.summary.FilingChunkSummarizationService;
 import io.invest.iagent.service.kb.summary.NoopFilingChunkSummarizationService;
+import io.invest.iagent.service.filing.metrics.LocalFinancialMetricsDataFetcher;
+import io.invest.iagent.service.filing.util.SecFilingDataUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -28,6 +31,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 财报预处理服务
+ * 负责将财报文本分片，并提取财务报表数据存入知识库
+ */
+@Slf4j
 public class FilingPreprocessService {
 
     private final Path workspace;
@@ -55,8 +63,27 @@ public class FilingPreprocessService {
         this.summarizationService = summarizationService;
     }
 
+
     public List<KnowledgeBaseChunkDTO> preprocess(String ticker, boolean force) throws IOException {
         return preprocess(ticker, null, force);
+    }
+
+    /**
+     * 列出指定公司下所有财报文档的 documentId（即 filings 目录下的子目录名）。
+     * 用于逐个文档构建知识库。
+     */
+    public List<String> listDocumentIds(String ticker) throws IOException {
+        String normalizedTicker = StringUtils.upperCase(ticker);
+        Path filingsDir = WorkspacePaths.filingsDir(workspace, normalizedTicker);
+        if(!Files.isDirectory(filingsDir)){
+            return List.of();
+        }
+        try(var stream = Files.list(filingsDir)){
+            return stream.filter(Files::isDirectory)
+                    .map(dir -> dir.getFileName().toString())
+                    .sorted()
+                    .toList();
+        }
     }
 
     public List<KnowledgeBaseChunkDTO> preprocess(String ticker, String documentId, boolean force) throws IOException {
@@ -88,25 +115,66 @@ public class FilingPreprocessService {
         }
         String documentId = StringUtils.defaultIfBlank(meta.getString("document_id"), filingDir.getFileName().toString());
         Path processedDir = WorkspacePaths.processedDir(workspace, ticker, documentId);
-        Path chunksFile = processedDir.resolve("kb_chunks.jsonl");
-        if(!force && Files.exists(chunksFile)){
-            return readChunks(chunksFile);
-        }
-        List<KnowledgeBaseChunkDTO> chunks = new ArrayList<>();
-        for(Path sourceFile : sourceSelector.selectSourceFiles(filingDir, meta)){
-            chunks.addAll(preprocessSourceFile(ticker, documentId, sourceFile, meta));
-        }
-        enrichSummaries(chunks);
         Files.createDirectories(processedDir);
-        List<String> lines = chunks.stream().map(JSON::toJSONString).toList();
-        Files.write(processedDir.resolve("kb_chunks.jsonl"), lines);
+
+        // 分开检查文本内容和报表数据的处理状态
+        Path textChunksFile = processedDir.resolve("kb_text_chunks.jsonl");
+        Path metricsChunksFile = processedDir.resolve("kb_metrics_chunks.jsonl");
+        Path textProcessedMarker = processedDir.resolve(".text_processed");
+
+        boolean textAlreadyProcessed = !force && Files.exists(textProcessedMarker);
+
+        // 如果两部分都已处理，直接返回空列表，避免后续 embedding 消耗资源
+        if (textAlreadyProcessed) {
+            log.info("Filing already processed, skipping: ticker={}, documentId={}", ticker, documentId);
+            return List.of();
+        }
+
+        List<KnowledgeBaseChunkDTO> chunks = new ArrayList<>();
+
+        // Step 1: 处理财报文本内容（如果尚未处理）
+        log.info("Processing filing text content: ticker={}, documentId={}", ticker, documentId);
+        List<KnowledgeBaseChunkDTO> textChunks = new ArrayList<>();
+        for(Path sourceFile : sourceSelector.selectSourceFiles(filingDir, meta)){
+            textChunks.addAll(preprocessSourceFile(ticker, documentId, sourceFile, meta));
+        }
+        enrichSummaries(textChunks);
+
+        // 保存文本 chunks 并标记已处理
+        if (!textChunks.isEmpty()) {
+            List<String> textLines = textChunks.stream().map(JSON::toJSONString).toList();
+            Files.write(textChunksFile, textLines);
+            Files.createFile(textProcessedMarker);
+            log.info("Text content processed: {} chunks", textChunks.size());
+        }
+        chunks.addAll(textChunks);
+
+
+        // 合并保存到完整的 kb_chunks.jsonl（用于向后兼容）
+        List<KnowledgeBaseChunkDTO> allChunks = new ArrayList<>();
+        if (Files.exists(textChunksFile)) {
+            allChunks.addAll(readChunks(textChunksFile));
+        }
+        if (Files.exists(metricsChunksFile)) {
+            allChunks.addAll(readChunks(metricsChunksFile));
+        }
+        if (!allChunks.isEmpty()) {
+            List<String> allLines = allChunks.stream().map(JSON::toJSONString).toList();
+            Files.write(processedDir.resolve("kb_chunks.jsonl"), allLines);
+        }
+
+        // 更新元数据
         Map<String,Object> kbMeta = new LinkedHashMap<>();
         kbMeta.put("ticker", ticker);
         kbMeta.put("document_id", documentId);
-        kbMeta.put("chunk_count", chunks.size());
+        kbMeta.put("chunk_count", allChunks.size());
+        kbMeta.put("text_chunk_count", Files.exists(textChunksFile) ? countLines(textChunksFile) : 0);
+        kbMeta.put("metrics_chunk_count", Files.exists(metricsChunksFile) ? countLines(metricsChunksFile) : 0);
         kbMeta.put("source_fingerprint", meta.getString("source_fingerprint"));
         kbMeta.put("processed_at", Instant.now().toString());
+        kbMeta.put("text_processed", Files.exists(textProcessedMarker));
         Files.writeString(processedDir.resolve("kb_meta.json"), JSON.toJSONString(kbMeta));
+
         return chunks;
     }
 
@@ -195,6 +263,18 @@ public class FilingPreprocessService {
 
     private String normalize(String text){
         return StringUtils.defaultString(text).replace(' ',' ').replaceAll("\\s+", " ").trim();
+    }
+
+    /**
+     * 统计文件行数
+     */
+    private int countLines(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return 0;
+        }
+        try (java.util.stream.Stream<String> lines = Files.lines(file)) {
+            return (int) lines.filter(StringUtils::isNotBlank).count();
+        }
     }
 
 }

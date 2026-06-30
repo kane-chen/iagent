@@ -1,0 +1,41 @@
+{
+  "companyCode": "MSFT",
+  "companyName": "Microsoft",
+  "market": "NASDAQ",
+  "defaultCurrency": "USD",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4"],
+  "segments": [
+    {
+      "segmentCode": "PRODUCTIVITY_BUSINESS",
+      "segmentName": "Productivity and Business Processes",
+      "aliases": ["Productivity and Business Processes", "生产力与业务流程", "Productivity"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "INTELLIGENT_CLOUD",
+      "segmentName": "Intelligent Cloud",
+      "aliases": ["Intelligent Cloud", "智能云", "Azure Cloud", "Microsoft Cloud"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "PERSONAL_COMPUTING",
+      "segmentName": "More Personal Computing",
+      "aliases": ["More Personal Computing", "更多个人计算", "Personal Computing", "个人计算"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenues", "Revenue", "收入", "Total revenue"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating Income", "Operating income (loss):", "经营利润", "营业利润"]
+    }
+  ]
+}

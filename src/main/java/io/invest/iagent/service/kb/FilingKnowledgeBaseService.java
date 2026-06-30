@@ -69,27 +69,106 @@ public class FilingKnowledgeBaseService {
 
     public KnowledgeBaseOperationResult build(String ticker, String documentId, boolean force) {
         try{
-            List<KnowledgeBaseChunkDTO> chunks = preprocessService.preprocess(ticker, documentId, force);
-            List<List<Float>> embeddings = new ArrayList<>();
-            for(KnowledgeBaseChunkDTO chunk : chunks){
-                embeddings.add(embeddingService.embed(chunk.getText()));
+            String normalizedTicker = StringUtils.upperCase(ticker);
+
+            // 如果不是强制构建，先检查是否已有索引
+            if (!force) {
+                List<KnowledgeBaseDocumentDTO> existing = list(normalizedTicker);
+                if (StringUtils.isBlank(documentId) && !existing.isEmpty()) {
+                    // 构建整个公司的知识库，但该公司已有索引
+                    return KnowledgeBaseOperationResult.builder()
+                            .success(true)
+                            .operation("build")
+                            .ticker(normalizedTicker)
+                            .knowledgeBaseId(knowledgeBaseId(ticker))
+                            .chunkCount(0)
+                            .documentIds(existing.stream().map(KnowledgeBaseDocumentDTO::getDocumentId).toList())
+                            .message("知识库已存在，跳过构建。如需重新构建，请使用 force=true")
+                            .metadata(Map.of("existing_documents", existing.size()))
+                            .build();
+                } else if (StringUtils.isNotBlank(documentId)) {
+                    // 检查指定 documentId 是否已存在
+                    boolean exists = existing.stream()
+                            .anyMatch(d -> StringUtils.equals(d.getDocumentId(), documentId));
+                    if (exists) {
+                        return KnowledgeBaseOperationResult.builder()
+                                .success(true)
+                                .operation("build")
+                                .ticker(normalizedTicker)
+                                .documentId(documentId)
+                                .knowledgeBaseId(knowledgeBaseId(ticker))
+                                .chunkCount(0)
+                                .documentIds(List.of(documentId))
+                                .message("文档 " + documentId + " 已在知识库中，跳过构建。如需重新构建，请使用 force=true")
+                                .build();
+                    }
+                }
             }
-            upsertInBatches(chunks, embeddings, 512);
-            int summaryCandidateCount = upsertSummaryCandidates(chunks);
+
+            List<String> targetDocumentIds;
+            if (StringUtils.isNotBlank(documentId)) {
+                targetDocumentIds = List.of(documentId);
+            } else {
+                // documentId 为空时，逐个处理该公司目录下的每个文档
+                targetDocumentIds = preprocessService.listDocumentIds(ticker);
+            }
+
+            if (targetDocumentIds.isEmpty()) {
+                return KnowledgeBaseOperationResult.builder()
+                        .success(true)
+                        .operation("build")
+                        .ticker(normalizedTicker)
+                        .documentId(documentId)
+                        .knowledgeBaseId(knowledgeBaseId(ticker))
+                        .chunkCount(0)
+                        .message("没有找到可处理的财报文件，请先下载财报")
+                        .build();
+            }
+
+            // 逐个文档处理：chunk -> embedding -> upsert，避免所有文档一起处理
+            int totalChunkCount = 0;
+            int totalSummaryCandidateCount = 0;
+            List<String> processedDocumentIds = new ArrayList<>();
+            for (String currentDocumentId : targetDocumentIds) {
+                List<KnowledgeBaseChunkDTO> chunks = preprocessService.preprocess(ticker, currentDocumentId, force);
+                if (chunks.isEmpty()) {
+                    continue;
+                }
+                List<List<Float>> embeddings = new ArrayList<>();
+                for (KnowledgeBaseChunkDTO chunk : chunks) {
+                    embeddings.add(embeddingService.embed(chunk.getText()));
+                }
+                upsertInBatches(chunks, embeddings, 512);
+                totalSummaryCandidateCount += upsertSummaryCandidates(chunks);
+                totalChunkCount += chunks.size();
+                processedDocumentIds.addAll(documentIds(chunks));
+            }
+
+            if (totalChunkCount == 0) {
+                return KnowledgeBaseOperationResult.builder()
+                        .success(true)
+                        .operation("build")
+                        .ticker(normalizedTicker)
+                        .documentId(documentId)
+                        .knowledgeBaseId(knowledgeBaseId(ticker))
+                        .chunkCount(0)
+                        .message("没有找到可处理的财报文件，请先下载财报")
+                        .build();
+            }
             return KnowledgeBaseOperationResult.builder()
                     .success(true)
                     .operation("build")
-                    .ticker(StringUtils.upperCase(ticker))
+                    .ticker(normalizedTicker)
                     .documentId(documentId)
                     .knowledgeBaseId(knowledgeBaseId(ticker))
-                    .chunkCount(chunks.size())
-                    .documentIds(documentIds(chunks))
-                    .message("知识库构建完成，写入 " + chunks.size() + " 个chunk")
+                    .chunkCount(totalChunkCount)
+                    .documentIds(processedDocumentIds.stream().distinct().toList())
+                    .message("知识库构建完成，写入 " + totalChunkCount + " 个chunk")
                     .metadata(Map.of(
                             "embedding_model", embeddingService.model(),
                             "embedding_dimension", embeddingService.dimension(),
-                            "summary_candidate_count", summaryCandidateCount,
-                            "summary_enabled", summaryCandidateCount > 0))
+                            "summary_candidate_count", totalSummaryCandidateCount,
+                            "summary_enabled", totalSummaryCandidateCount > 0))
                     .build();
         }catch (Exception e){
             return error("build", ticker, documentId, e);
