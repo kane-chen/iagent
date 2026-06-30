@@ -1,0 +1,11 @@
+logging:
+  level:
+    root: info
+    io.invest.iagent: debug
+    filing_download: debug
+    filing_process : debug
+    filing_query : debug
+  file:
+    path: D:/dev/codes/iagent/workspace/logs/app
+  console:
+    enabled: true

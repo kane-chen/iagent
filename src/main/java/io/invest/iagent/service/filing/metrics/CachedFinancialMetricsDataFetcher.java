@@ -1,0 +1,24 @@
+package io.invest.iagent.service.filing.metrics;
+
+import io.invest.iagent.model.FinanceQueryParam;
+import io.invest.iagent.model.FinancialIndexValueDTO;
+import io.invest.iagent.service.filing.util.SecFilingDataUtil;
+
+import java.util.List;
+
+public class CachedFinancialMetricsDataFetcher extends AbstractFinancialMetricsDataFetcher {
+
+    public CachedFinancialMetricsDataFetcher(SecFilingDataUtil secFilingDataUtil) {
+        super(secFilingDataUtil);
+    }
+
+    @Override
+    public FinancialMetricsSourcePreference source() {
+        return FinancialMetricsSourcePreference.CACHE;
+    }
+
+    @Override
+    public List<FinancialIndexValueDTO> fetch(String ticker, FinanceQueryParam query) throws Exception {
+        return queryCompanyFacts(ticker, query, false);
+    }
+}
