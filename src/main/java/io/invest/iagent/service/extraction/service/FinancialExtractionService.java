@@ -86,7 +86,6 @@ public class FinancialExtractionService {
                 }
             } catch (IOException e) {
                 log.error("extract failed:{}",file.toAbsolutePath(),e);
-                return null;
             }
         }
 

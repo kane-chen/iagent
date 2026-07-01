@@ -152,7 +152,7 @@ public class FinancialFileFilter {
         List<Path> htmlFiles = new ArrayList<>();
         for(String name : metaFileNames(meta)){
             String lower = StringUtils.lowerCase(name);
-            if(!StringUtils.endsWithAny(lower,".htm", ".html")){
+            if(!StringUtils.endsWithAny(lower,".htm")){
                 continue;
             }
             Path path = filingDir.resolve(name);
@@ -175,8 +175,7 @@ public class FinancialFileFilter {
         JSONArray files = meta.getJSONArray("files");
         if(Objects.nonNull(files)){
             for(int i=0;i<files.size();i++){
-                JSONObject item = files.getJSONObject(i);
-                String name = item.getString("name");
+                String name = files.getString(i);
                 if(StringUtils.isNotBlank(name)){
                     names.add(name);
                 }

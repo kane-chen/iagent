@@ -1,0 +1,218 @@
+{
+  "_comment": "futu-announcements 下载脚本配置。companies 列出所有支持的股票；marketProfiles 描述各市场差异。",
+  "_comment_perCompany": [
+    "每个 company 可自定义以下过滤字段（都可为空数组=不判断）：",
+    "  supportFileTypes: 列表，可选 10-K / 10-Q / 20-F / 6-K —— 只保留标题里含这些关键字的公告（美股常用）",
+    "  titleKeyWords:    列表，用户自定义，如 年报/中期报告/业绩/季度 —— 只保留标题里含这些关键字的公告（港股/A 股常用）",
+    "  filingSuffixNames:列表，用户自定义 —— 美股 SEC accession 目录里只下载文件名以这些后缀结尾的文件（如 ['ex99-1.htm','_10q.htm']）。为空则退回默认命名推断（见 SKILL.md）"
+  ],
+
+  "companies": [
+    {
+      "ticker": "00700",
+      "market": "HK",
+      "stockId": "54047868453564",
+      "displayName": "腾讯",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "财报公布",
+        "业绩公布"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "83690",
+      "market": "HK",
+      "stockId": "83833466734314",
+      "displayName": "美团",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "业绩公告",
+        "财报公告"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "09992",
+      "market": "HK",
+      "stockId": "79869211846408",
+      "displayName": "泡泡玛特",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "年报",
+        "中期报告"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "09988",
+      "market": "HK",
+      "stockId": "78224239372036",
+      "displayName": "阿里巴巴",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "业绩公告",
+        "财报公告"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "600519",
+      "market": "CN",
+      "stockId": "49649823542279",
+      "displayName": "茅台",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "季度报告",
+        "年度报告",
+        "半年度报告"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "000002",
+      "market": "CN",
+      "stockId": "33058365277314",
+      "displayName": "万科",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "季度报告",
+        "年度报告",
+        "半年度报告"
+      ],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "BABA",
+      "market": "US",
+      "stockId": "210182",
+      "cik": "0001577552",
+      "displayName": "阿里巴巴",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": ["0331.htm","ex99-1.htm"]
+    },
+    {
+      "ticker": "PDD",
+      "market": "US",
+      "stockId": "76141180439059",
+      "cik": "0001737806",
+      "displayName": "拼多多",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "AAPL",
+      "market": "US",
+      "stockId": "205189",
+      "cik": "0000320193",
+      "displayName": "Apple",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": []
+    },
+    {
+      "ticker": "GOOG",
+      "market": "US",
+      "stockId": "202736",
+      "cik": "0000320193",
+      "displayName": "GOOGLE",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ]
+    },
+    {
+      "ticker": "MSFT",
+      "market": "US",
+      "stockId": "201345",
+      "cik": "0000320193",
+      "displayName": "微软",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ]
+    },
+    {
+      "ticker": "NVDA",
+      "market": "US",
+      "stockId": "202597",
+      "cik": "0000320193",
+      "displayName": "英伟达",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ]
+    },
+    {
+      "ticker": "LI",
+      "market": "US",
+      "stockId": "79255031731480",
+      "cik": "0001791706",
+      "displayName": "理想汽车",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": []
+    }
+  ],
+
+  "marketProfiles": {
+    "HK": {
+      "dirPrefix": "hk",
+      "marketType": 1,
+      "downloadStyle": "single",
+      "_comment_pdf": "港股公告 PDF 主要在 newsfile.futunn.com。hkexnews.hk 是极少数直连披露易的备份。正则用 [^\\s\"'<>()] 终止，避免匹配 CSS/JS 里跨字符串的 .pdf。",
+      "primaryPdfPatterns": [
+        "https?://newsfile\\.futunn\\.com/public/NN-PersistNoticeAttachment/[^\\s\"'<>()]+\\.(?:PDF|pdf)",
+        "https?://newsfile\\.futunn\\.com/notice/[^\\s\"'<>()]+\\.(?:PDF|pdf)"
+      ],
+      "fallbackPdfPatterns": [
+        "https?://www1?\\.hkexnews\\.hk/listedco/[^\\s\"'<>()]+\\.pdf"
+      ]
+    },
+    "CN": {
+      "dirPrefix": "cn",
+      "marketType": 3,
+      "downloadStyle": "single",
+      "primaryPdfPatterns": [
+        "https?://newsfile\\.futunn\\.com/[^\\s\"'<>()]+\\.(?:PDF|pdf)",
+        "https?://static\\.cninfo\\.com\\.cn/[^\\s\"'<>()]+\\.pdf"
+      ],
+      "fallbackPdfPatterns": []
+    },
+    "US": {
+      "dirPrefix": "us",
+      "marketType": 2,
+      "downloadStyle": "sec_folder",
+      "_comment_pdf": "美股公告落到 SEC EDGAR，futunn 给出的是 accession 目录里的首文件（如 6-K 或 10-Q 的 .htm）。下载时反向拿 index.json 拉全部文件（含 ex99-1.htm 业绩正文），按 filingSuffixNames / 表格类型 白名单过滤。",
+      "urlPrefix": "https://www.sec.gov/Archives/edgar/data",
+      "primaryPdfPatterns": [
+        "https?://www\\.sec\\.gov/Archives/edgar/data/\\d+/\\d+/[^\\s\"'<>()]+\\.(?:htm|html|pdf)"
+      ],
+      "fallbackPdfPatterns": []
+    }
+  },
+
+  "_comment_useragents": "SEC EDGAR 要求 UA 里带联系人信息（reasonable UA policy）。若维护者要落到生产，请改成自己的邮箱。",
+  "secEdgarUserAgent": "iagent-financial-research contact@example.com",
+
+  "_comment_defaults": "默认拉多少条公告、下载间隔（秒）。总速率控制在 30 秒 30 次以内。",
+  "defaults": {
+    "pageSize": 50,
+    "sleepBetweenDocs": 0.5,
+    "sleepBetweenFilesInAccession": 0.3
+  }
+}

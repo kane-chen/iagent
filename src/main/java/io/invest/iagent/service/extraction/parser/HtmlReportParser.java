@@ -274,21 +274,46 @@ public class HtmlReportParser extends ReportParser {
         if (!cellElement.select("b, strong").isEmpty()) {
             return true;
         }
-        
+
         // 方法2: 检查CSS样式是否包含font-weight: bold
-        String style = cellElement.attr("style");
-        if (style != null && style.toLowerCase().contains("bold")) {
+        //   同时检查 cell 自身以及其内部的 <p>/<span>/<div> 等后代元素 ——
+        //   微软 10-Q 用 <td><p><span style="font-weight:bold">Revenue</span></p></td>
+        //   把粗体挂在最内层 span 上，只查 td.style 会漏掉。
+        if (styleHasBold(cellElement.attr("style"))) {
             return true;
         }
-        
+        for (Element descendant : cellElement.select("*")) {
+            if (styleHasBold(descendant.attr("style"))) {
+                return true;
+            }
+        }
+
         // 方法3: 检查class属性是否暗示粗体
         String className = cellElement.className();
-        if (className != null && 
-            (className.toLowerCase().contains("bold") || 
+        if (className != null &&
+            (className.toLowerCase().contains("bold") ||
              className.toLowerCase().contains("header"))) {
             return true;
         }
-        
+
+        return false;
+    }
+
+    /** style="font-weight:bold" / "font-weight: 700" 都视为粗体。 */
+    private boolean styleHasBold(String style) {
+        if (style == null || style.isEmpty()) return false;
+        String s = style.toLowerCase();
+        if (s.contains("font-weight")) {
+            // 明示 bold 或 700+
+            if (s.contains("bold")) return true;
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("font-weight\\s*:\\s*(\\d{3})").matcher(s);
+            if (m.find()) {
+                try {
+                    return Integer.parseInt(m.group(1)) >= 600;
+                } catch (NumberFormatException ignored) {}
+            }
+        }
         return false;
     }
 

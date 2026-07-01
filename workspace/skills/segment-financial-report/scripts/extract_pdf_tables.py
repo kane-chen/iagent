@@ -361,7 +361,83 @@ def _extract_with_pdfplumber(pdf_path, max_pages):
                 for raw_rows in tables:
                     results.append((engine, page_num, raw_rows))
 
+            # 引擎 5：plaintext 兜底 —— 直接从页面文字里 regex 找"标签 + 数字*"的行，
+            # 用于 PDF 里表格是"内联文字"（没有 ruling line、字符间距紧凑）的情况，
+            # 例如腾讯年报正文里"分部收入构成"是段落里嵌入的一段固定格式文字：
+            #     增值服务 69,079 45% 70,417 49%
+            #     网络广告 29,794 19% 24,660 17%
+            # camelot/pdfplumber 的 line/text 策略都识别不到列边界，只能靠这条兜底。
+            for raw_rows in _extract_plaintext_rows(page_text):
+                results.append(("pdfplumber-plaintext", page_num, raw_rows))
+
     return results, page_texts
+
+
+# 数字 token：正负号 + 千分位 + 小数 + 可选百分号 + 括号负数
+_NUM_TOKEN = re.compile(r"^[\(\-]?[\d]{1,3}(?:,\d{3})*(?:\.\d+)?[\%\)]?[\*\)]?$")
+
+
+def _tokenize_line_for_table(line):
+    """把一行文字切成 [label, num, num, ...] 的候选 token 列表。
+    切分规则：从右往左识别"数字/百分号"末尾 token，剩下前缀作为 label。
+    返回 None 表示这行不像"标签 + 数字*"结构。"""
+    tokens = re.split(r"\s+", line.strip())
+    if len(tokens) < 3:
+        return None
+    # 尾部连续数字/百分号
+    numeric_tail = []
+    while tokens and _NUM_TOKEN.match(tokens[-1]):
+        numeric_tail.insert(0, tokens.pop())
+    if len(numeric_tail) < 2 or len(numeric_tail) > 8:
+        return None
+    if not tokens:  # 全是数字，没标签
+        return None
+    label = " ".join(tokens).strip()
+    if not label:
+        return None
+    # 剔除明显是"数字-开头"的伪标签（如页码/年份）
+    if re.fullmatch(r"[\d\s\-\.,]+", label):
+        return None
+    # label 至少含一个非数字字符，通常是中文/英文
+    return [label] + numeric_tail
+
+
+def _extract_plaintext_rows(page_text):
+    """从页面文本按行扫描，聚合连续 3+ 行"标签+数字*"结构的行段成候选表格。
+    列数按段内多数派对齐；不匹配的行按空 token 填充。"""
+    if not page_text:
+        return []
+    lines = page_text.split("\n")
+    groups = []
+    current = []
+    for raw in lines:
+        row = _tokenize_line_for_table(raw)
+        if row is not None:
+            current.append(row)
+        else:
+            if len(current) >= 3:
+                groups.append(current)
+            current = []
+    if len(current) >= 3:
+        groups.append(current)
+
+    output = []
+    for group in groups:
+        # 目标列数：取组内数字列数的众数
+        col_counts = [len(r) for r in group]
+        target = max(set(col_counts), key=col_counts.count)
+        norm = []
+        for r in group:
+            if len(r) == target:
+                norm.append(r)
+            elif len(r) < target:
+                # 补空以对齐 —— 但只当差距 <= 1 时才收，避免把无关行拉进来
+                if target - len(r) <= 1:
+                    norm.append(r + [""] * (target - len(r)))
+            # 长于 target：丢弃（可能是标题混入）
+        if len(norm) >= 3:
+            output.append(norm)
+    return output
 
 
 # ---- 主流程 ------------------------------------------------------------------

@@ -444,7 +444,9 @@ public class DataExtractor {
     }
 
     /**
-     * 找到指标对应的节标题行位置
+     * 找到指标对应的节标题行位置。
+     * 何为"节标题行"由 {@link SectionTitleDetector#isSectionTitleRow(TableRow, String)} 决定
+     * ——本方法只在此基础上加"标签包含 metric 关键词"的过滤。
      */
     private int findMetricSectionHeaderRow(String metricCode, FinancialTable table) {
         if (metricCode == null) {
@@ -456,30 +458,29 @@ public class DataExtractor {
             return -1;
         }
 
-        // 搜索包含指标关键词的标题行
+        // 先完整扫描所有行找结构性节标题（冒号/合计/粗体/空数据行），
+        // 找到就直接用；扫完再判断是否有"表格标题包含关键词"的降级短路。
+        // ——不能在扫描过程中就短路，否则会漏掉靠后的、更精确的节标题。
         for (int i = 0; i < table.getRows().size(); i++) {
             TableRow row = table.getRows().get(i);
             if (row.getLabel() == null) continue;
             String lowerLabel = row.getLabel().toLowerCase().trim();
 
-            // 检查是否是指标节标题
+            if (!containsAny(lowerLabel, keywords)) continue;
+            if (SectionTitleDetector.isSectionTitleRow(row, lowerLabel)) {
+                logger.trace("Detected {} section title: {} at row {}", metricCode, lowerLabel, i);
+                return i;
+            }
+        }
+
+        // 扫描无果，才启用"表格标题里已经写明单一指标"的短路。
+        // 但如果标题里同时提到多个指标（如 MSFT: "Segment revenue and operating income..."），
+        // 短路是不安全的 —— 需要节边界来区分两个 metric 区块，此时退回 -1（不启用短路）由外层继续处理。
+        if (table.getTitle() != null) {
+            String lowerTitle = table.getTitle().toLowerCase();
             for (String keyword : keywords) {
-                if (lowerLabel.contains(keyword)) {
-                    // 格式1: 典型的节标题格式："Revenues:", "Operating income (loss):"
-                    if (lowerLabel.endsWith(":") || lowerLabel.contains("total")) {
-                        return i;
-                    }
-                    
-                    // 格式2: 粗体标题但不带冒号（如PDD格式：<B>Revenues</B>）
-                    if (row.isBold() && isStandaloneSectionTitle(lowerLabel, keyword)) {
-                        logger.trace("Detected bold section title: {} at row {}", lowerLabel, i);
-                        return i;
-                    }
-                    
-                    // 也可能是表格标题的一部分
-                    if (table.getTitle() != null && table.getTitle().toLowerCase().contains(keyword)) {
-                        return -1; // 指标在表格标题中，不需要节边界
-                    }
+                if (lowerTitle.contains(keyword) && !titleMentionsOtherMetrics(lowerTitle, metricCode)) {
+                    return -1;
                 }
             }
         }
@@ -487,30 +488,40 @@ public class DataExtractor {
         return -1;
     }
 
-    /**
-     * 判断是否为独立的节标题
-     * 用于识别粗体格式的节标题（如PDD财报）
-     */
-    private boolean isStandaloneSectionTitle(String label, String keyword) {
-        // 必须是独立的一行（只有关键词本身或非常简短）
-        if (label.length() < 50 && label.contains(keyword)) {
-            // 不包含具体数值（避免误匹配数据行）
-            int digitCount = 0;
-            for (char c : label.toCharArray()) {
-                if (Character.isDigit(c)) {
-                    digitCount++;
-                }
-            }
-            // 数字占比不超过20%
-            if (digitCount == 0 || (double) digitCount / label.length() < 0.2) {
-                return true;
-            }
+    private boolean containsAny(String lowerLabel, List<String> keywords) {
+        for (String k : keywords) {
+            if (lowerLabel.contains(k)) return true;
         }
         return false;
     }
 
     /**
-     * 找到下一个节标题行的位置
+     * 表格标题里是否除本指标外还提到了其他财务指标。
+     * 用于判断"标题包含 metric 关键词"的短路是否安全 —— 混合表不能用短路。
+     */
+    private boolean titleMentionsOtherMetrics(String lowerTitle, String currentMetric) {
+        // 依次检查其他常见指标的标志词
+        boolean hasRevenue = lowerTitle.contains("revenue") || lowerTitle.contains("收入");
+        boolean hasOperating = lowerTitle.contains("operating income") ||
+                lowerTitle.contains("operating profit") ||
+                lowerTitle.contains("income from operations") ||
+                lowerTitle.contains("经营利润") ||
+                lowerTitle.contains("营业利润");
+        boolean hasGross = lowerTitle.contains("gross profit") || lowerTitle.contains("毛利");
+        boolean hasEbit = lowerTitle.contains("ebit"); // 覆盖 ebit/ebitda/adjusted ebita
+
+        int otherCount = 0;
+        if (hasRevenue && !"REVENUE".equals(currentMetric)) otherCount++;
+        if (hasOperating && !"OPERATING_INCOME".equals(currentMetric)) otherCount++;
+        if (hasGross && !"GROSS_PROFIT".equals(currentMetric)) otherCount++;
+        if (hasEbit && !"ADJUSTED_EBITA".equals(currentMetric)
+                && !"EBIT".equals(currentMetric) && !"EBITDA".equals(currentMetric)) otherCount++;
+        return otherCount >= 1;
+    }
+
+    /**
+     * 找到下一个节标题行的位置 —— 用于确定当前节的结束边界。
+     * 只要 (a) 标签命中任一常见 metric 关键词、(b) 该行属于节标题结构（冒号/粗体/空数据行），即返回。
      */
     private int findNextSectionHeaderRow(FinancialTable table, int startRow) {
         for (int i = startRow; i < table.getRows().size(); i++) {
@@ -518,25 +529,14 @@ public class DataExtractor {
             if (row.getLabel() == null) continue;
             String lowerLabel = row.getLabel().toLowerCase().trim();
 
-            // 检查是否是另一个节的标题
-            // 格式1: 以冒号结尾
-            if (lowerLabel.endsWith(":") &&
-                (lowerLabel.contains("revenue") || lowerLabel.contains("income") ||
-                 lowerLabel.contains("profit") || lowerLabel.contains("expense") ||
-                 lowerLabel.contains("cost") || lowerLabel.contains("loss") ||
-                 lowerLabel.contains("supplemental"))) {
-                return i;
-            }
-            
-            // 格式2: 粗体标题（PDD等公司格式）
-            if (row.isBold() && isStandaloneSectionTitle(lowerLabel, "")) {
-                // 检查是否包含任何指标关键词
-                if (lowerLabel.contains("revenue") || lowerLabel.contains("income") ||
+            boolean containsMetricKeyword =
+                    lowerLabel.contains("revenue") || lowerLabel.contains("income") ||
                     lowerLabel.contains("profit") || lowerLabel.contains("expense") ||
-                    lowerLabel.contains("cost") || lowerLabel.contains("loss")) {
-                    logger.trace("Detected next bold section title: {} at row {}", lowerLabel, i);
-                    return i;
-                }
+                    lowerLabel.contains("cost") || lowerLabel.contains("loss") ||
+                    lowerLabel.contains("supplemental");
+            if (containsMetricKeyword && SectionTitleDetector.isSectionTitleRow(row, lowerLabel)) {
+                logger.trace("Detected next section title: {} at row {}", lowerLabel, i);
+                return i;
             }
         }
         return -1;
@@ -581,7 +581,7 @@ public class DataExtractor {
         String lowerTitle = title != null ? title.toLowerCase() : "";
 
         // 从行标签中识别节标题，例如 "Revenues:" 或 "Operating income (loss):"
-        // 没有标题或标题无法推断时，回退到扫描节标题行
+        // 各家 HTML 节标题写法差异统一交由 SectionTitleDetector 判定。
         boolean hasRevenueSection = false;
         boolean hasOperatingIncomeSection = false;
         boolean hasEbitaSection = false;
@@ -589,14 +589,8 @@ public class DataExtractor {
             String label = r.getLabel();
             if (label == null) continue;
             String ll = label.toLowerCase().trim();
-            
-            // 格式1: 带冒号的节标题（BABA/GOOGL格式）
-            boolean isSectionTitleWithColon = ll.endsWith(":") || ll.contains("total");
-            
-            // 格式2: 粗体节标题（PDD格式）
-            boolean isBoldSectionTitle = r.isBold() && isStandaloneSectionTitle(ll, "");
-            
-            if (isSectionTitleWithColon || isBoldSectionTitle) {
+
+            if (SectionTitleDetector.isSectionTitleRow(r, ll)) {
                 if (ll.contains("revenue") || ll.contains("revenues")) {
                     hasRevenueSection = true;
                 }

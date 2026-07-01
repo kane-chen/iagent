@@ -1,0 +1,2 @@
+# Never commit login state
+cookies.json

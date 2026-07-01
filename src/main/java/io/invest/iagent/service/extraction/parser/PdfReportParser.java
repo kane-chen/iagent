@@ -163,6 +163,9 @@ public class PdfReportParser extends ReportParser {
      *
      * 拆成"单 mapping × 单表"是为了让外层能实现"每张表只被一条 mapping 独占"
      * 的分配策略 —— 见 {@link #parseSegments(File)} 中的 consumedTables 逻辑。
+     *
+     * 若 mapping 上开了 {@code discardValues=true}，仍然做完整的匹配和一致性校验，
+     * 但把数据写到一个丢弃桶（不返回给上层）—— 用于"占位消费掉重复同型表"的场景。
      */
     private int applySingleMapping(CompanyConfig.PdfColumnMapping mapping,
                                    JsonNode tableJson, FilingContext context,
@@ -186,6 +189,12 @@ public class PdfReportParser extends ReportParser {
             dataRows.add(rowCells);
         }
 
+        // discardValues 的 mapping：把 sink 指到临时 map，命中返回给外层用于消费计数，
+        // 但产生的指标数据不会流入真实的 segmentsByCode。
+        Map<String, Segment> sink = mapping.isDiscardValues()
+                ? new LinkedHashMap<>()
+                : segmentsByCode;
+
         // mapping.columnCount 的解释依 layout 而异：
         //   SEGMENTS_AS_COLUMNS: 整行数据列数（无标签列）
         //   SEGMENTS_AS_ROWS:    标签后的数据列数
@@ -193,10 +202,10 @@ public class PdfReportParser extends ReportParser {
         return switch (mapping.getLayout()) {
             case SEGMENTS_AS_COLUMNS ->
                     applySegmentsAsColumns(mapping, dataRows, tableId, currency, unit,
-                            context, segmentsByCode);
+                            context, sink);
             case SEGMENTS_AS_ROWS ->
                     applySegmentsAsRows(mapping, dataRows, tableId, currency, unit,
-                            context, segmentsByCode);
+                            context, sink);
         };
     }
 

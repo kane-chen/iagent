@@ -167,6 +167,15 @@ public class CompanyConfig {
          */
         private List<String> filingPeriods;
 
+        /**
+         * 可选：命中即消费一张同型表但**不写入指标数据**。
+         * 用于"过滤性 mapping"：如腾讯年报里同型的 5×5 表出现两次（page 7 全年合计、page 12 单 Q4），
+         * 我们只要后者。把前者用 {@code discardValues=true} 的 mapping 先"吃掉"，
+         * 让真正想要数据的 mapping 落到 Q4 那张表。
+         * 默认 false —— 向后兼容既有 mapping 行为。
+         */
+        private boolean discardValues = false;
+
         public PdfColumnMapping() {
             this.segmentCodes = new ArrayList<>();
             this.metricCodesByRow = new ArrayList<>();
