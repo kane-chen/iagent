@@ -86,6 +86,15 @@ public class HkIRConfigLoader {
     }
 
     /**
+     * 获取公司季度业绩专用 IR 页面（部分公司如腾讯在主页外另设季度业绩页）。
+     * 未配置则返回 null，调用方应回退到 {@link #getIrPageUrl}。
+     */
+    public static String getQuarterlyPageUrl(String stockCode) {
+        HkCompanyIRConfig.CompanyConfig config = getCompanyConfig(stockCode);
+        return config != null ? config.getQuarterlyPageUrl() : null;
+    }
+
+    /**
      * 获取公司名称
      */
     public static String getCompanyName(String stockCode) {

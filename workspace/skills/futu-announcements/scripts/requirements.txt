@@ -1,0 +1,5 @@
+# Playwright drives a real Chromium so the user can log in interactively;
+# after login, we serialize cookies to disk and use `requests` for subsequent
+# API calls (much lighter than keeping a browser alive).
+playwright>=1.40.0
+requests>=2.31.0

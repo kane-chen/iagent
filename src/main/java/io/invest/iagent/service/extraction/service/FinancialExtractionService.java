@@ -102,14 +102,17 @@ public class FinancialExtractionService {
         String fileName = file.getName().toLowerCase();
         log.info("Extracting financial data from file: {}", fileName);
 
-        List<FinancialTable> tables;
         if (fileName.endsWith(".pdf")) {
-            // PDF文件使用PDF解析器
-            tables = pdfReportParser.parse(file);
-        } else {
-            // HTML文件使用HTML解析器
-            tables = htmlReportParser.parse(file);
+            // PDF文件：直接由 PdfReportParser 通过 mapping 输出 Segment，
+            // 不经过 HTML 那套基于标签匹配的 DataExtractor —— 因为港股 PDF 字体乱码后
+            // 没有可识别的中文标签，只能靠"位置映射"。
+            List<Segment> segments = pdfReportParser.parseSegments(file);
+            log.info("PDF parser produced {} segments for file {}", segments.size(), fileName);
+            return segments;
         }
+
+        // HTML文件使用HTML解析器
+        List<FinancialTable> tables = htmlReportParser.parse(file);
         log.info("Parsed file {} financial tables", tables.size());
 
         // 2. 从表格中提取分部数据

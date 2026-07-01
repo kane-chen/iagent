@@ -89,6 +89,17 @@ public class FinancialFilingDownloadToolIntegrationTest {
     }
 
     @Test
+    void downloadJd() {
+        String ticker = "JD";
+        String fy = "2024,2025,2026";
+        String filingType = "20-F,6-K";
+        String result = tool.downloadFiling(ticker, fy, filingType);
+        System.out.println(result);
+        Assertions.assertThat(Objects.requireNonNull(result))
+                .containsAnyOf( ticker,fy);
+    }
+
+    @Test
     void downloadBABA() {
         String ticker = "BABA";
         String fy = "2022,2023,2024,2025,2026";

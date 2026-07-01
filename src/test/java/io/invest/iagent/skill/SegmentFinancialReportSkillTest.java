@@ -125,4 +125,12 @@ public class SegmentFinancialReportSkillTest {
         Assertions.assertNotNull(result);
     }
 
+    @Test
+    public void test_tool_03690_build() {
+        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
+        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
+        String result = tool.exportSegmentExcel("03690") ;
+        Assertions.assertNotNull(result);
+    }
+
 }

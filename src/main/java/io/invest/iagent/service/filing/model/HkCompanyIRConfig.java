@@ -1,5 +1,6 @@
 package io.invest.iagent.service.filing.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.List;
 /**
  * 港股公司投资者关系配置
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class HkCompanyIRConfig {
 
     private List<CompanyConfig> companies;
@@ -44,15 +46,30 @@ public class HkCompanyIRConfig {
     /**
      * 公司配置
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class CompanyConfig {
         private String stockCode;
         private String name;
         private String nameEn;
         private String irPageUrl;
+        /**
+         * 季度业绩专用 IR 页面（可选）。
+         * 部分公司（如腾讯）主 IR 页面只列年报/中期报告，季度业绩另有专门页面 —
+         * 例如 https://www.tencent.com/zh-cn/investors/quarter-result.html
+         * 若配置了此字段，请求季度报告时会优先抓取此 URL 而不是 {@link #irPageUrl}。
+         */
+        private String quarterlyPageUrl;
         private String pdfUrlPattern;
         private List<String> reportTypes;
         private List<Integer> annualReportMonths;
         private List<Integer> interimReportMonths;
+        /**
+         * 季度报告发布月份约定，格式：["Q1:5", "Q2:8", "Q3:11", "Q4:3"] 或 ["Q1:5", "Q3:11"]。
+         * 用于把"发布日期的月份"映射回具体的会计季度 —— 因为季度页面上不容易靠正文关键词
+         * 明确区分 Q1/Q2/Q3/Q4，但发布时间点是稳定的。
+         * 空则退化到旧的启发式：3=Q4/FY、5=Q1、8=Q2/H1、11=Q3。
+         */
+        private List<String> quarterlyReportMonths;
         private boolean supportsQuarterly;
         private String remarks;
 
@@ -86,6 +103,41 @@ public class HkCompanyIRConfig {
 
         public void setIrPageUrl(String irPageUrl) {
             this.irPageUrl = irPageUrl;
+        }
+
+        public String getQuarterlyPageUrl() {
+            return quarterlyPageUrl;
+        }
+
+        public void setQuarterlyPageUrl(String quarterlyPageUrl) {
+            this.quarterlyPageUrl = quarterlyPageUrl;
+        }
+
+        public List<String> getQuarterlyReportMonths() {
+            return quarterlyReportMonths;
+        }
+
+        public void setQuarterlyReportMonths(List<String> quarterlyReportMonths) {
+            this.quarterlyReportMonths = quarterlyReportMonths;
+        }
+
+        /**
+         * 依据 quarterlyReportMonths 把发布月份映射为 Q1/Q2/Q3/Q4。
+         * 找不到匹配返回 null（调用方要么用启发式兜底，要么直接跳过）。
+         */
+        public String quarterFromReleaseMonth(int releaseMonth) {
+            if (quarterlyReportMonths == null) return null;
+            for (String entry : quarterlyReportMonths) {
+                if (entry == null) continue;
+                int colon = entry.indexOf(':');
+                if (colon <= 0 || colon >= entry.length() - 1) continue;
+                String q = entry.substring(0, colon).trim().toUpperCase();
+                try {
+                    int m = Integer.parseInt(entry.substring(colon + 1).trim());
+                    if (m == releaseMonth) return q;
+                } catch (NumberFormatException ignored) {}
+            }
+            return null;
         }
 
         public String getPdfUrlPattern() {

@@ -4,7 +4,7 @@
   "market": "HKEX",
   "defaultCurrency": "RMB",
   "defaultUnit": "million",
-  "includePeriodTypes": ["Q1", "Q2", "Q3", "Q4", "H1", "H2", "FY"],
+  "includePeriodTypes": ["Q1", "Q2", "Q3", "Q4","FY"],
   "segments": [
     {
       "segmentCode": "VAS",
@@ -30,14 +30,14 @@
     {
       "segmentCode": "ONLINE_ADS",
       "segmentName": "网络广告",
-      "aliases": ["网络广告", "Online advertising", "Advertising", "Social & others advertising", "Media advertising"],
+      "aliases": ["网络广告", "Online advertising", "Advertising", "Social & others advertising", "Media advertising","營銷服務"],
       "level": 1,
       "parentCode": null
     },
     {
       "segmentCode": "FINTECH",
       "segmentName": "金融科技及企业服务",
-      "aliases": ["金融科技及企业服务", "FinTech and Business Services", "Fintech", "WeChat Pay", "金融科技"],
+      "aliases": ["金融科技及企业服务", "FinTech and Business Services", "Fintech", "WeChat Pay", "金融科技","企業服務"],
       "level": 1,
       "parentCode": null
     },
@@ -59,7 +59,11 @@
   "metricMappingRules": [
     {
       "standardMetricCode": "REVENUE",
-      "rawMetricNames": ["Revenue", "Revenues", "收入", "营业额", "营收"]
+      "rawMetricNames": ["Revenue", "Revenues", "收入","分部收入", "营业额", "营收"]
+    },
+    {
+      "standardMetricCode": "GROSS_PROFIT",
+      "rawMetricNames": ["GROSS_PROFIT", "毛利"]
     },
     {
       "standardMetricCode": "OPERATING_INCOME",
@@ -68,9 +72,66 @@
   ],
   "pdfColumnMappings": [
     {
+      "_comment": "Tencent H1 page-44/45 style: 5 columns = segments, rows = REVENUE / GROSS_PROFIT, single current period (Q2). H1 only.",
+      "layout": "SEGMENTS_AS_COLUMNS",
       "columnCount": 5,
       "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
-      "metricCodesByRow": ["REVENUE", "GROSS_PROFIT"]
+      "metricCodesByRow": ["REVENUE", "GROSS_PROFIT"],
+      "filingPeriods": ["H1"]
+    },
+    {
+      "_comment": "Tencent H1 page-10 style (revenue breakdown, H1 only): 5 rows = [VAS, ONLINE_ADS, FINTECH, OTHERS, TOTAL], 5 data cols = [current_Q, prior_Q, %YoY, %curr_ratio, %prior_ratio]. Only first two are numeric.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["H1"]
+    },
+    {
+      "_comment": "Tencent H1 page-11 style (gross profit, H1 only): 5 rows = segments, 6 data cols = [current_Q_gross, prior_Q_gross, %YoY, %curr_margin, '', %prior_margin].",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 6,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", "", ""],
+      "filingPeriods": ["H1"]
+    },
+    {
+      "_comment": "Tencent Q3 page-6 style (revenue breakdown, Q3 only): 5 rows, 5 data cols = [current_Q, prior_Q, %YoY, %curr_ratio, %prior_ratio]. Same shape as H1 revenue but semantic differs — for Q3 filing CURRENT_Q=Q3.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["Q3"]
+    },
+    {
+      "_comment": "Tencent Q3 page-7 style (gross profit breakdown, Q3 only): 5 rows, 5 data cols = [current_Q_gross, prior_Q_gross, %YoY, %curr_margin, %prior_margin].",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["Q3"]
+    },
+    {
+      "_comment": "Tencent Q1 income-statement segment breakdown (page-16 style, Q1 only): 5 rows = [VAS, ONLINE_ADS, FINTECH, OTHERS, TOTAL], 3 data cols = ['', current_Q_revenue, prior_Q_revenue]. First data col carries footnote refs and is ignored.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 3,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["", "CURRENT_Q", "PRIOR_Q"],
+      "filingPeriods": ["Q1"]
+    },
+    {
+      "_comment": "Tencent Q1 gross-profit breakdown (page-6 style, Q1 only): 5 rows = segments, 5 data cols = [current_Q_gross, prior_Q_gross, %YoY, %curr_margin, %prior_margin]. Same shape as Q3 page-7 gross profit — reused mapping with Q1 filingPeriods.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["Q1"]
     }
   ]
 }

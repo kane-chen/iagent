@@ -1,0 +1,84 @@
+{
+  "companyCode": "03690",
+  "companyName": "美团",
+  "market": "HKEX",
+  "defaultCurrency": "RMB",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1", "Q2", "Q3", "Q4", "FY"],
+  "segments": [
+    {
+      "segmentCode": "LOCAL_SERVICE",
+      "segmentName": "核心本地商業",
+      "aliases": ["本地商業"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "DELIVERY",
+      "segmentName": "配送服務",
+      "aliases": ["配送服務","DELIVERY"],
+      "level": 2,
+      "parentCode": "LOCAL_SERVICE"
+    },
+    {
+      "segmentCode": "DELIVERY",
+      "segmentName": "配送服務",
+      "aliases": ["配送服務","DELIVERY"],
+      "level": 2,
+      "parentCode": "LOCAL_SERVICE"
+    },
+    {
+      "segmentCode": "COMISSION",
+      "segmentName": "佣金",
+      "aliases": ["配送服務","DELIVERY"],
+      "level": 2,
+      "parentCode": "LOCAL_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_SERVICE",
+      "segmentName": "新業務",
+      "aliases": ["新業務"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenue", "Revenues", "收入","分部收入", "营业额", "营收"]
+    },
+    {
+      "standardMetricCode": "GROSS_PROFIT",
+      "rawMetricNames": ["GROSS_PROFIT", "毛利"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating profit", "经营利润", "营业利润", "经营收益","經營虧損","經營溢利╱（虧損）","經營溢利"]
+    }
+  ],
+  "pdfColumnMappings": [
+    {
+      "_comment": "Tencent page-44/45 style: 5 columns = segments, rows = REVENUE / GROSS_PROFIT, single current period",
+      "layout": "SEGMENTS_AS_COLUMNS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCodesByRow": ["REVENUE", "GROSS_PROFIT"]
+    },
+    {
+      "_comment": "Tencent page-10 style (revenue breakdown): 5 rows = [VAS, ONLINE_ADS, FINTECH, OTHERS, TOTAL], 5 data cols = [current_Q, prior_Q, %YoY, %curr_ratio, %prior_ratio]. Only first two are numeric values we care about.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""]
+    },
+    {
+      "_comment": "Tencent page-11 style (gross profit breakdown): 5 rows = segments, 6 data cols = [current_Q_gross, prior_Q_gross, %YoY, %curr_margin, '', %prior_margin]. Only first two are numeric values.",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 6,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", "", ""]
+    }
+  ]
+}
