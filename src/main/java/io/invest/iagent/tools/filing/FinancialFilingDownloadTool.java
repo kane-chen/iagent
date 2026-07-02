@@ -15,7 +15,9 @@ import java.util.Set;
 /**
  * 统一的财报下载工具。
  * Agent 工具层只保留注解入口和兼容方法，核心实现委托给 service 包。
+ * 改用skill：futu-announcements
  */
+@Deprecated
 public class FinancialFilingDownloadTool {
 
     private final FinancialFilingDownloadService service;

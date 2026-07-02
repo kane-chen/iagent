@@ -31,8 +31,6 @@ public class SegmentFinancialReportSkillTest {
 
     private RuntimeContext context;
 
-
-
     @BeforeEach
     public void init() {
     }
@@ -126,10 +124,34 @@ public class SegmentFinancialReportSkillTest {
     }
 
     @Test
-    public void test_tool_03690_build() {
+    public void test_tool_83690_build() {
         Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
         FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("03690") ;
+        String result = tool.exportSegmentExcel("83690") ;
+        Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void test_tool_baba_build() {
+        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
+        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
+        String result = tool.exportSegmentExcel("BABA") ;
+        Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void test_tool_pdd_build() {
+        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
+        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
+        String result = tool.exportSegmentExcel("PDD") ;
+        Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void test_tool_beke_build() {
+        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
+        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
+        String result = tool.exportSegmentExcel("BEKE") ;
         Assertions.assertNotNull(result);
     }
 

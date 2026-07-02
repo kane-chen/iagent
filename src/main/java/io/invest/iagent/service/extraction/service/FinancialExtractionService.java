@@ -4,6 +4,8 @@ import com.google.common.collect.Lists;
 import lombok.Data;
 import io.invest.iagent.service.extraction.config.CompanyConfigLoader;
 import io.invest.iagent.service.extraction.extractor.DataExtractor;
+import io.invest.iagent.service.extraction.extractor.HtmlExtractionSupport;
+import io.invest.iagent.service.extraction.extractor.HtmlReportOrchestrator;
 import io.invest.iagent.service.extraction.mapper.MetricMapper;
 import io.invest.iagent.service.extraction.model.*;
 import io.invest.iagent.service.extraction.parser.HtmlReportParser;
@@ -37,6 +39,11 @@ public class FinancialExtractionService {
     private final FinancialFileFilter fileFilter;
     private SegmentRecognizer segmentRecognizer;
     private DataExtractor dataExtractor;
+    /**
+     * HTML 分派器：把 tables 依次交给注册的 {@link io.invest.iagent.service.extraction.extractor.HtmlLayoutHandler}
+     * 处理，特化优先，泛用兜底。setCompanyConfig 时和 dataExtractor 一起重建。
+     */
+    private HtmlReportOrchestrator htmlOrchestrator;
     @Getter
     private CompanyConfig companyConfig;
 
@@ -58,6 +65,8 @@ public class FinancialExtractionService {
         this.companyConfig = configLoader.loadConfig(companyCode);
         this.segmentRecognizer = new SegmentRecognizer(companyConfig);
         this.dataExtractor = new DataExtractor(segmentRecognizer, metricMapper);
+        this.htmlOrchestrator = HtmlReportOrchestrator.standard(
+                new HtmlExtractionSupport(metricMapper), segmentRecognizer, dataExtractor);
         this.pdfReportParser.setCompanyConfig(companyConfig);
     }
 
@@ -69,6 +78,8 @@ public class FinancialExtractionService {
         this.companyConfig = companyConfig;
         this.segmentRecognizer = new SegmentRecognizer(companyConfig);
         this.dataExtractor = new DataExtractor(segmentRecognizer, metricMapper);
+        this.htmlOrchestrator = HtmlReportOrchestrator.standard(
+                new HtmlExtractionSupport(metricMapper), segmentRecognizer, dataExtractor);
         this.pdfReportParser.setCompanyConfig(companyConfig);
     }
 
@@ -114,8 +125,8 @@ public class FinancialExtractionService {
         List<FinancialTable> tables = htmlReportParser.parse(file);
         log.info("Parsed file {} financial tables", tables.size());
 
-        // 2. 从表格中提取分部数据
-        List<Segment> segments = dataExtractor.extractFromMultipleTables(tables);
+        // 2. 从表格中提取分部数据 —— 走策略分派：特化 handler 优先、GenericHtmlLayoutHandler 兜底
+        List<Segment> segments = htmlOrchestrator.extractFromTables(tables, companyConfig);
         log.info("Extracted file {} segments with financial data", segments.size());
 
         return segments;
@@ -132,7 +143,7 @@ public class FinancialExtractionService {
         log.info("Parsed {} financial tables", tables.size());
 
         // 2. 从表格中提取分部数据
-        List<Segment> segments = dataExtractor.extractFromMultipleTables(tables);
+        List<Segment> segments = htmlOrchestrator.extractFromTables(tables, companyConfig);
         log.info("Extracted {} segments with financial data", segments.size());
 
         return segments;
@@ -157,6 +168,8 @@ public class FinancialExtractionService {
         this.companyConfig = companyConfig;
         this.segmentRecognizer = new SegmentRecognizer(companyConfig);
         this.dataExtractor = new DataExtractor(segmentRecognizer, metricMapper);
+        this.htmlOrchestrator = HtmlReportOrchestrator.standard(
+                new HtmlExtractionSupport(metricMapper), segmentRecognizer, dataExtractor);
         this.pdfReportParser.setCompanyConfig(companyConfig);
     }
 

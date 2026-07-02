@@ -203,7 +203,7 @@ public class HtmlReportParser extends ReportParser {
      */
     private TableRow parseTableRow(Element trElement) {
         TableRow row = new TableRow();
-        
+
         Elements cells = trElement.select("td, th");
         if (cells.isEmpty()) {
             return null;
@@ -229,15 +229,51 @@ public class HtmlReportParser extends ReportParser {
         boolean isBold = detectBoldStyle(firstCell);
         row.setBold(isBold);
 
-        // 解析数据单元格（从第二个开始）
+        // 先收集所有数据单元格的原始文本（从第二个开始），
+        // 然后合并跨单元格的括号负数（如 "(138" + ")" 合并成 "(138)"）——
+        // 部分 SEC HTML（BABA 的分部 EBITA 表）把 "(" 与 ")" 拆到相邻 <td>，
+        // 直接构造 TableCell 会因括号不闭合而解析失败。
+        List<String> cellTexts = new ArrayList<>(cells.size() - 1);
         for (int i = 1; i < cells.size(); i++) {
-            Element cellElement = cells.get(i);
-            String cellText = cleanText(cellElement.text());
-            TableCell cell = new TableCell(cellText);
-            row.addCell(cell);
+            cellTexts.add(cleanText(cells.get(i).text()));
+        }
+        mergeSplitParentheses(cellTexts);
+
+        // 解析数据单元格
+        for (String cellText : cellTexts) {
+            row.addCell(new TableCell(cellText));
         }
 
         return row;
+    }
+
+    /**
+     * 合并被 HTML 拆到相邻 <td> 的括号负数：
+     * 当某个 cell 以 "(" 开头且没有以 ")" 结尾时，向后查找下一个非空 cell，
+     * 若其以 ")" 开头，则把两者合并成一个完整的 "(N)"（原位置置空，保持列数）。
+     *
+     * <p>典型场景：BABA 2026Q1 报表 "Adjusted EBITA by segment" 里的负值行，
+     * 每个 (数字) 被拆成 "(数字"、""、")" 三个 td。若不合并，TableCell 无法解析出数值，
+     * 该整段分部行会被识别为"没有数据"，进而漏抓 ADJUSTED_EBITA。
+     */
+    private void mergeSplitParentheses(List<String> cellTexts) {
+        for (int i = 0; i < cellTexts.size(); i++) {
+            String t = cellTexts.get(i);
+            if (t == null || t.isEmpty()) continue;
+            if (!t.startsWith("(") || t.endsWith(")")) continue;
+
+            for (int j = i + 1; j < cellTexts.size(); j++) {
+                String next = cellTexts.get(j);
+                if (next == null || next.isEmpty()) continue;
+                if (next.startsWith(")")) {
+                    // 合并：把闭括号（含后缀，如 ")%"）拼到 t，位置 j 置空以保持列数
+                    cellTexts.set(i, t + next);
+                    cellTexts.set(j, "");
+                }
+                // 无论是否合并，遇到第一个非空 cell 就停止扫描 —— 后面不再是配对候选
+                break;
+            }
+        }
     }
 
     /**

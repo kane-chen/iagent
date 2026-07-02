@@ -29,9 +29,30 @@ public class FutuFinancialReportSkillTest {
     }
 
     @Test
-    public void test_excel() {
-        String companyName = "英伟达";
-        String reportName = "利润表";
+    public void test_nvda() {
+        String responseText = doCall("英伟达", "利润表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_baba() {
+        String responseText = doCall("阿里巴巴", "利润表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_pdd() {
+        String responseText = doCall("拼多多", "资产负债表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_byd() {
+        String responseText = doCall("比亚迪股份", "利润表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    private String doCall(String companyName, String reportName){
         String template = """
                 生成公司[%s]最近32个季度的%s报表，
                 执行流程如下：
@@ -46,8 +67,7 @@ public class FutuFinancialReportSkillTest {
 
         Msg qaMsg = this.buildUserMsg(String.format(template, companyName, reportName));
         Msg response = baseAgent.call(qaMsg).block();
-        String responseText = Objects.requireNonNull(response).getTextContent();
-        Assert.notNull(responseText, "question response");
+        return Objects.requireNonNull(response).getTextContent();
     }
 
     private Msg buildUserMsg(String content){

@@ -110,6 +110,17 @@ class StockInfoToolTest {
     }
 
     @Test
+    public void test_process_ticker_byd() throws IOException, InterruptedException {
+        List<StockInfoTool.StockInfo> stocks = tool.searchTicker("比亚迪股份", null);
+        Assertions.assertNotNull(stocks.get(0));
+        Assertions.assertEquals("01211", stocks.get(0).getSymbol());
+        Assertions.assertEquals("HK_LISTED", stocks.get(0).getCompanyType());
+        Assertions.assertEquals("年报", stocks.get(0).getAnnualReportType());
+        Assertions.assertEquals("季度业绩公告（自愿）", stocks.get(0).getQuarterlyReportType());
+        Assertions.assertEquals("香港联交所", stocks.get(0).getFilingAuthority());
+    }
+
+    @Test
     public void test_process_ticker_vanke() throws IOException, InterruptedException {
         List<StockInfoTool.StockInfo> stocks = tool.searchTicker("万科", Lists.newArrayList("SZSE"),1);
         Assertions.assertNotNull(stocks.get(0));

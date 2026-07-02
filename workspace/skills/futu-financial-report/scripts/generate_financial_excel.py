@@ -524,21 +524,26 @@ def get_unit_config(reports):
 def get_financial_data_with_structure(stock_code, statement_type, num=16, logger=None):
     """从富途API获取财务数据及字段结构
 
-    根据报表类型选择合适的 financial_type：
-    - 利润表：9 = 单季报组合（Q1/Q2/Q3/Q4）
-    - 资产负债表/现金流量表：7 = 年报
+    根据报表类型 + 市场选择合适的 financial_type：
+    - 利润表：
+        - 美股 (US.)：10 = 单季报+年报（美股按 10-Q/10-K 发布独立季度报表）
+        - 港股 (HK.) / A 股 (SH./SZ.)：11 = 累计季报（Q1/Q6/Q9/年报）
+          H 股/A 股企业只发布"一季报/半年报/三季报/年报"，不发布独立 Q2/Q3/Q4 单季报，
+          因此用 11 才能拿到 Q6（半年报）与 Q9（三季报）；若继续用 10 会导致 Q2/Q3 全空、
+          Excel 只剩 Q1 和 FY。
+    - 资产负债表/现金流量表：7 = 年报（时点/年度快照）
     """
     st_code = STATEMENT_TYPES[statement_type][0]
 
-    # 资产负债表和现金流量表通常使用年报数据
     if statement_type in ['balance', 'cashflow']:
         financial_type = 7  # 年报
     else:
-        # 利润表使用 10 = 全部报告（年报+半年报+季报），港股部分公司只提供年报和半年报
-        financial_type = 10  # 全部报告
+        market_type = get_market_type(stock_code)
+        # 港股 / A 股走累计季报 (Q1/Q6/Q9/FY)；美股走单季报+年报 (Q1/Q2/Q3/Q4/FY)。
+        financial_type = 11 if market_type in ('hk', 'a_share') else 10
 
     if logger:
-        msg = {7: '年报', 9: '单季报组合', 10: '全部报告（年报+半年报+季报）'}
+        msg = {7: '年报', 9: '单季报组合', 10: '单季报+年报', 11: '累计季报（Q1/Q6/Q9/年报）'}
         logger.info(f"使用 financial_type={financial_type} ({msg.get(financial_type, '未知')})")
 
     try:

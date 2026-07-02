@@ -35,7 +35,7 @@ public class FutuAnnouncementsSkillTest {
 
     @Test
     public void test_mt() {
-        String responseText = doDownload("美团", "2024", "2026");
+        String responseText = doDownload("美团", "2023", "2026");
         Assert.notNull(responseText, "call response");
     }
 
@@ -47,31 +47,43 @@ public class FutuAnnouncementsSkillTest {
 
     @Test
     public void test_pdd() {
-        String responseText = doDownload("拼多多", "2024", "2026");
+        String responseText = doDownload("拼多多", "2020", "2026");
         Assert.notNull(responseText, "call response");
     }
 
     @Test
     public void test_baba() {
-        String responseText = doDownload("阿里巴巴", "2024", "2026");
+        String responseText = doDownload("阿里巴巴", "2020", "2026");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_beke() {
+        String responseText = doDownload("贝壳", "2020", "2026");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_li() {
+        String responseText = doDownload("理想汽车", "2024", "2026");
         Assert.notNull(responseText, "call response");
     }
 
     @Test
     public void test_apple() {
-        String responseText = doDownload("苹果", "2023", "2025");
+        String responseText = doDownload("苹果", "2020", "2025");
         Assert.notNull(responseText, "call response");
     }
 
     @Test
     public void test_google() {
-        String responseText = doDownload("谷歌", "2023", "2026");
+        String responseText = doDownload("谷歌", "2020", "2026");
         Assert.notNull(responseText, "call response");
     }
 
     @Test
     public void test_ms() {
-        String responseText = doDownload("微软", "2023", "2026");
+        String responseText = doDownload("微软", "2020", "2026");
         Assert.notNull(responseText, "call response");
     }
 

@@ -201,12 +201,22 @@ def get_table_context(page_text):
     year = extract_year(page_text)
 
     currency = "RMB"
+    # 优先级：从大到小 —— billion > million > thousand
+    # 港股 PDF 常见形式：（人民幣百萬元） / （人民幣千元） / (in millions) / (in thousands)
+    text = page_text or ""
+    lower = text.lower()
     unit = "million"
-    if "billion" in page_text.lower() or "十亿" in page_text:
+    if "billion" in lower or "十亿" in text or "十億" in text:
         unit = "billion"
-    if "hkd" in page_text.lower() or "hk$" in page_text.lower() or "港元" in page_text:
+    elif "百萬" in text or "百万" in text or "million" in lower:
+        unit = "million"
+    elif "千元" in text or "千港元" in text or "千人民幣" in text or "千美元" in text \
+            or "in thousands" in lower or "thousand" in lower:
+        unit = "thousand"
+
+    if "hkd" in lower or "hk$" in lower or "港元" in text:
         currency = "HKD"
-    if "us$" in page_text.lower() or "usd" in page_text.lower():
+    if "us$" in lower or "usd" in lower:
         currency = "USD"
 
     return {
@@ -243,20 +253,24 @@ def _cleanup_rows(table_data):
 
 
 def _table_fingerprint(page_num, clean_rows):
-    """生成一个表格指纹用于去重：(page, columnCount, 前 5 个数值)"""
-    nums = []
+    """生成一个表格指纹用于去重：(page, columnCount, rowCount, 每行第一个 >=100 的数值)。
+    加入 rowCount 是为了让"同一页上不同引擎抽出的、行数不同的分部表"能被同时保留 ——
+    比如美团 Q3 报的 page 2 有 camelot-stream 的截断 5 行版和 plaintext 完整 7 行版；
+    加入"每行首个大数值"是为了让"同一页上不同表（如收入 vs 毛利，第一行的数字不同）"
+    在行数相同时也能被识别为不同表 —— 否则 GP 映射可能命中一张 REVENUE 内容的重复表。"""
+    per_row_nums = []
     for row in clean_rows:
+        first = None
         for c in row:
             if c and is_numeric_cell(c):
                 v = parse_number(c)
                 if v is not None and abs(v) >= 100:
-                    nums.append(round(v, 2))
-                    if len(nums) >= 5:
-                        break
-        if len(nums) >= 5:
-            break
+                    first = round(v, 2)
+                    break
+        per_row_nums.append(first)
     cols = len(clean_rows[0]) if clean_rows and clean_rows[0] else 0
-    return (page_num, cols, tuple(nums))
+    rows = len(clean_rows)
+    return (page_num, cols, rows, tuple(per_row_nums))
 
 
 # ---- 引擎实现 ----------------------------------------------------------------
@@ -376,19 +390,36 @@ def _extract_with_pdfplumber(pdf_path, max_pages):
 # 数字 token：正负号 + 千分位 + 小数 + 可选百分号 + 括号负数
 _NUM_TOKEN = re.compile(r"^[\(\-]?[\d]{1,3}(?:,\d{3})*(?:\.\d+)?[\%\)]?[\*\)]?$")
 
+# "空占位符" token：常见破折号，也覆盖港股 PDF 字体乱码后的替换字符（如 "�C"、"�cC"）。
+# 港股财报 PDF 常把中文 em-dash 编码成一堆 U+FFFD/单字母 fallback，
+# 这些位置在原表里是"—"（空），需要当空 cell 处理，否则我们会把带空占位的分部表整个漏掉。
+_PLACEHOLDER_TOKEN = re.compile(r"^[\-–—−�－ーCcｰ]{1,4}$")
+
 
 def _tokenize_line_for_table(line):
     """把一行文字切成 [label, num, num, ...] 的候选 token 列表。
-    切分规则：从右往左识别"数字/百分号"末尾 token，剩下前缀作为 label。
+    切分规则：从右往左识别"数字/占位符"末尾 token，剩下前缀作为 label。
+    占位符（em-dash 及其乱码变体）会转成空串保留在数据 token 里。
     返回 None 表示这行不像"标签 + 数字*"结构。"""
     tokens = re.split(r"\s+", line.strip())
     if len(tokens) < 3:
         return None
-    # 尾部连续数字/百分号
+    # 尾部连续 数字 / 占位符
     numeric_tail = []
-    while tokens and _NUM_TOKEN.match(tokens[-1]):
-        numeric_tail.insert(0, tokens.pop())
+    while tokens:
+        last = tokens[-1]
+        if _NUM_TOKEN.match(last):
+            numeric_tail.insert(0, tokens.pop())
+        elif _PLACEHOLDER_TOKEN.match(last):
+            numeric_tail.insert(0, "")
+            tokens.pop()
+        else:
+            break
     if len(numeric_tail) < 2 or len(numeric_tail) > 8:
+        return None
+    # 尾部至少 2 个真数字（不含纯占位符）
+    real_numeric = sum(1 for t in numeric_tail if t and _NUM_TOKEN.match(t))
+    if real_numeric < 2:
         return None
     if not tokens:  # 全是数字，没标签
         return None
@@ -404,14 +435,47 @@ def _tokenize_line_for_table(line):
 
 def _extract_plaintext_rows(page_text):
     """从页面文本按行扫描，聚合连续 3+ 行"标签+数字*"结构的行段成候选表格。
-    列数按段内多数派对齐；不匹配的行按空 token 填充。"""
+    列数按段内多数派对齐；不匹配的行按空 token 填充。
+
+    ── 2 行标签补丁 ──
+    港股财报常把长中文标签（如"金融科技及企業服務"）在 PDF 里排版成两行：
+        金融科技及
+        企業服務  60,818 56,125 8% 31% 33%
+    单看第 1 行没有数字，会打断"连续行段"聚合，导致该分部行漏掉、整张表少 1 行。
+    这里在遇到"无数字文本行 + 紧跟'非空标签+数字'行"时，把两行标签合并再解析。
+    """
     if not page_text:
         return []
     lines = page_text.split("\n")
+
+    # 预处理：把"续行标签"合并进下一行
+    merged_lines = []
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        row = _tokenize_line_for_table(raw)
+        if row is None and i + 1 < len(lines):
+            stripped = raw.strip()
+            # 只对"看起来是纯文字（无数字、有非空白字符、长度 <= 30）"的行做续行合并
+            if stripped and len(stripped) <= 30 and not any(ch.isdigit() for ch in stripped):
+                next_row = _tokenize_line_for_table(lines[i + 1])
+                if next_row is not None:
+                    # 把上一行的文本前缀拼到 next_row 的 label 前面
+                    merged_label = stripped + " " + next_row[0]
+                    merged_lines.append([merged_label] + next_row[1:])
+                    i += 2
+                    continue
+        merged_lines.append(row if row is not None else raw)
+        i += 1
+
     groups = []
     current = []
-    for raw in lines:
-        row = _tokenize_line_for_table(raw)
+    for item in merged_lines:
+        if isinstance(item, list):  # 已经是解析后的 row
+            current.append(item)
+            continue
+        # 原始 str：再尝试一次（含 label 续行合并后的漏网）
+        row = _tokenize_line_for_table(item)
         if row is not None:
             current.append(row)
         else:
@@ -502,16 +566,17 @@ def extract_tables(pdf_path, max_pages=0):
         if not looks_like_segment_table(clean_rows):
             continue
 
-        fp = _table_fingerprint(page_num, clean_rows)
-        if fp in seen_fingerprints:
-            continue
-        seen_fingerprints.add(fp)
-
         page_text = page_texts.get(page_num, "")
         context = get_table_context(page_text)
         header_rows, data_rows = _split_header_data(clean_rows)
         if not data_rows:
             continue
+
+        # 指纹用"数据行"计算，避开不同引擎在表头识别上的差异
+        fp = _table_fingerprint(page_num, data_rows)
+        if fp in seen_fingerprints:
+            continue
+        seen_fingerprints.add(fp)
 
         # tableId 形如 page45_camelot-lattice_t0
         key = (page_num, engine)

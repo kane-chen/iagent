@@ -74,9 +74,12 @@
     "腾讯港股财报 PDF 因字体乱码无法读中文标签，只能靠位置匹配。",
     "全部 5 行分部结构：[VAS, ONLINE_ADS, FINTECH, OTHERS, TOTAL]，末行 TOTAL 用于一致性校验。",
     "季度报（Q1/Q2/Q3）：映射顺序 = 文档页面顺序，REVENUE 必须在 GROSS_PROFIT 前面。",
-    "年报（FY）：报里有 4 张 5×5 同型表（p7 全年 REV / p8 全年 GP / p12 单 Q4 REV / p13 单 Q4 GP）。",
-    "  由于我们要 Q4 的数据（对应 FY 报的当期季度 = year+Q4），用 discardValues=true 的 mapping",
-    "  先按页序把 p7/p8 消费掉，再让真正的 REV/GP mapping 落到 p12/p13。"
+    "年报（FY）：不同年份 Q4 分部构成表列数不同 —— 2022~2024 FY 是 4 列 [值/占比/值/占比]，",
+    "  2025 FY 起改成 5 列 [当期值/上年值/同比%/当期占比/上年占比]。两套 mapping 并存，",
+    "  行长不匹配的会自动跳过（SegmentsAsRowsHandler 要求 row.size==1+columnCount）。",
+    "  报里同型 5×N 表出现 4 次（p7 全年 REV / p8 全年 GP / p11(2025)/p12(2023) 单 Q4 REV / p13(2023) 单 Q4 GP 或 p12(2025) 单 Q4 GP）——",
+    "  两套 mapping 都放 discardValues 占位吃掉前 2 张，让真正的 REV/GP mapping 落到 Q4 表。",
+    "  同一 (segment, metric, period) 由 PdfExtractionSupport.addMetric 去重保底，防止双套 mapping 命中重复。"
   ],
   "pdfColumnMappings": [
     {
@@ -116,7 +119,7 @@
       "filingPeriods": ["Q1", "Q2", "Q3"]
     },
     {
-      "_comment": "FY 年报占位 1：吃掉 page 7 的『全年 REVENUE 分部构成』5×5 表（值是全年合计，非本次目标）。列 [label, curr_val, curr_pct, prior_val, prior_pct]",
+      "_comment": "FY 年报占位 1（2022~2024 老版式，4 列）：吃掉 page 7 的『全年 REVENUE 分部构成』5×5 表（值是全年合计）。列 [label, curr_val, curr_pct, prior_val, prior_pct]。",
       "layout": "SEGMENTS_AS_ROWS",
       "columnCount": 4,
       "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
@@ -126,7 +129,7 @@
       "discardValues": true
     },
     {
-      "_comment": "FY 年报占位 2：吃掉 page 8 的『全年 GROSS_PROFIT 分部构成』5×5 表。",
+      "_comment": "FY 年报占位 2（2022~2024 老版式，4 列）：吃掉 page 8 的『全年 GROSS_PROFIT 分部构成』5×5 表。",
       "layout": "SEGMENTS_AS_ROWS",
       "columnCount": 4,
       "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
@@ -136,7 +139,7 @@
       "discardValues": true
     },
     {
-      "_comment": "FY 年报 REVENUE：真正目标 page 12 的『第四季度 REVENUE 分部构成』5×5 表。列 [label, 当期Q4值, 当期Q4占比%, 上年Q4值, 上年Q4占比%]。",
+      "_comment": "FY 年报 REVENUE（2022~2024 老版式，4 列）：真正目标 page 12 的『第四季度 REVENUE 分部构成』5×5 表。列 [label, 当期Q4值, 当期Q4占比%, 上年Q4值, 上年Q4占比%]。",
       "layout": "SEGMENTS_AS_ROWS",
       "columnCount": 4,
       "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
@@ -145,12 +148,50 @@
       "filingPeriods": ["FY"]
     },
     {
-      "_comment": "FY 年报 GROSS_PROFIT：真正目标 page 13 的『第四季度 GP 分部构成』5×5 表。",
+      "_comment": "FY 年报 GROSS_PROFIT（2022~2024 老版式，4 列）：真正目标 page 13 的『第四季度 GP 分部构成』5×5 表。",
       "layout": "SEGMENTS_AS_ROWS",
       "columnCount": 4,
       "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
       "metricCode": "GROSS_PROFIT",
       "periodCodesByColumn": ["CURRENT_Q", "", "PRIOR_Q", ""],
+      "filingPeriods": ["FY"]
+    },
+    {
+      "_comment": "FY 年报占位 3（2025 起新版式，5 列）：吃掉 page 7 的『全年 REVENUE 分部构成』5×6 表。列 [label, curr_val, prior_val, YoY%, curr_pct%, prior_pct%]。",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["FY"],
+      "discardValues": true
+    },
+    {
+      "_comment": "FY 年报占位 4（2025 起新版式，5 列）：吃掉 page 8 的『全年 GROSS_PROFIT 分部构成』5×6 表。",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["FY"],
+      "discardValues": true
+    },
+    {
+      "_comment": "FY 年报 REVENUE（2025 起新版式，5 列）：目标 page 11 的『第四季度 REVENUE 分部构成』5×6 表。",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "REVENUE",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
+      "filingPeriods": ["FY"]
+    },
+    {
+      "_comment": "FY 年报 GROSS_PROFIT（2025 起新版式，5 列）：目标 page 12 的『第四季度 GP 分部构成』5×6 表。",
+      "layout": "SEGMENTS_AS_ROWS",
+      "columnCount": 5,
+      "segmentCodes": ["VAS", "ONLINE_ADS", "FINTECH", "OTHERS", "TOTAL"],
+      "metricCode": "GROSS_PROFIT",
+      "periodCodesByColumn": ["CURRENT_Q", "PRIOR_Q", "", "", ""],
       "filingPeriods": ["FY"]
     }
   ]

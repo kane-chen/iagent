@@ -2,11 +2,11 @@
   "_comment": "futu-announcements 下载脚本配置。companies 列出所有支持的股票；marketProfiles 描述各市场差异。",
   "_comment_perCompany": [
     "每个 company 可自定义以下过滤字段（都可为空数组=不判断）：",
-    "  supportFileTypes: 列表，可选 10-K / 10-Q / 20-F / 6-K —— 只保留标题里含这些关键字的公告（美股常用）",
-    "  titleKeyWords:    列表，用户自定义，如 年报/中期报告/业绩/季度 —— 只保留标题里含这些关键字的公告（港股/A 股常用）",
-    "  filingSuffixNames:列表，用户自定义 —— 美股 SEC accession 目录里只下载文件名以这些后缀结尾的文件（如 ['ex99-1.htm','_10q.htm']）。为空则退回默认命名推断（见 SKILL.md）"
+    "  supportFileTypes:   列表，可选 10-K / 10-Q / 20-F / 6-K —— 只保留标题里含这些关键字的公告（美股常用）",
+    "  titleKeyWords:      列表，用户自定义，如 年报/中期报告/业绩/季度 —— 只保留标题里含这些关键字的公告（港股/A 股常用）",
+    "  filingSuffixNames:  列表，用户自定义 —— 美股 SEC accession 目录里只下载文件名以这些后缀结尾的文件（如 ['ex99-1.htm','_10q.htm']）。为空则退回默认命名推断（见 SKILL.md）",
+    "  supportPeriodTypes: 列表，可选 Q1 / Q2 / Q3 / Q4 / H1 / H2 / FY —— 只保留 classify() 归类到这些周期的公告；为空不检查"
   ],
-
   "companies": [
     {
       "ticker": "00700",
@@ -18,7 +18,8 @@
         "财报公布",
         "业绩公布"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "83690",
@@ -30,7 +31,8 @@
         "业绩公告",
         "财报公告"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "09992",
@@ -42,7 +44,8 @@
         "年报",
         "中期报告"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "09988",
@@ -54,7 +57,8 @@
         "业绩公告",
         "财报公告"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "600519",
@@ -67,7 +71,8 @@
         "年度报告",
         "半年度报告"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "000002",
@@ -80,7 +85,8 @@
         "年度报告",
         "半年度报告"
       ],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "BABA",
@@ -93,7 +99,11 @@
         "20-F"
       ],
       "titleKeyWords": [],
-      "filingSuffixNames": ["0331.htm","ex99-1.htm"]
+      "filingSuffixNames": [
+        "0331.htm",
+        "ex99-1.htm"
+      ],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "PDD",
@@ -106,7 +116,8 @@
         "20-F"
       ],
       "titleKeyWords": [],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "AAPL",
@@ -119,7 +130,8 @@
         "10-Q"
       ],
       "titleKeyWords": [],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "GOOG",
@@ -130,7 +142,8 @@
       "supportFileTypes": [
         "10-K",
         "10-Q"
-      ]
+      ],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "MSFT",
@@ -141,7 +154,8 @@
       "supportFileTypes": [
         "10-K",
         "10-Q"
-      ]
+      ],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "NVDA",
@@ -152,7 +166,22 @@
       "supportFileTypes": [
         "10-K",
         "10-Q"
-      ]
+      ],
+      "supportPeriodTypes": []
+    },
+    {
+      "ticker": "BEKE",
+      "market": "US",
+      "stockId": "79310866306388",
+      "cik": "0001791706",
+      "displayName": "贝壳",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     },
     {
       "ticker": "LI",
@@ -165,10 +194,10 @@
         "20-F"
       ],
       "titleKeyWords": [],
-      "filingSuffixNames": []
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     }
   ],
-
   "marketProfiles": {
     "HK": {
       "dirPrefix": "hk",
@@ -205,10 +234,8 @@
       "fallbackPdfPatterns": []
     }
   },
-
   "_comment_useragents": "SEC EDGAR 要求 UA 里带联系人信息（reasonable UA policy）。若维护者要落到生产，请改成自己的邮箱。",
   "secEdgarUserAgent": "iagent-financial-research contact@example.com",
-
   "_comment_defaults": "默认拉多少条公告、下载间隔（秒）。总速率控制在 30 秒 30 次以内。",
   "defaults": {
     "pageSize": 50,

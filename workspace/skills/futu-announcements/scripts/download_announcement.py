@@ -66,7 +66,7 @@ NEWS_LIST_API = "https://www.futunn.com/quote-api/quote-v2/get-news-list"
 DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 
-VALID_FORM_TYPES = {"FY", "H1", "Q1", "Q2", "Q3", "Q4"}
+VALID_FORM_TYPES = {"FY", "H1", "H2", "Q1", "Q2", "Q3", "Q4"}
 
 
 # ---------------------------------------------------------------------------
@@ -128,12 +128,14 @@ class CompanyEntry:
     cik: Optional[str] = None
     display_name: Optional[str] = None
     # 每公司自定义过滤规则（都可空）：
-    #   supportFileTypes: 只保留标题含这些关键字的公告（美股常用：10-K/10-Q/20-F/6-K）
-    #   titleKeyWords:    只保留标题含这些关键字的公告（港股/A 股常用：年报/中期报告/业绩/季度）
-    #   filingSuffixNames:美股 SEC 目录里只下载以这些后缀结尾的文件（如 ["ex99-1.htm","_10q.htm"]）
+    #   supportFileTypes:   只保留标题含这些关键字的公告（美股常用：10-K/10-Q/20-F/6-K）
+    #   titleKeyWords:      只保留标题含这些关键字的公告（港股/A 股常用：年报/中期报告/业绩/季度）
+    #   filingSuffixNames:  美股 SEC 目录里只下载以这些后缀结尾的文件（如 ["ex99-1.htm","_10q.htm"]）
+    #   supportPeriodTypes: 只保留 classify() 归类到这些周期的公告；可选值 Q1/Q2/Q3/Q4/H1/H2/FY
     support_file_types: list[str] = field(default_factory=list)
     title_keywords: list[str] = field(default_factory=list)
     filing_suffix_names: list[str] = field(default_factory=list)
+    support_period_types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -168,6 +170,7 @@ def load_config(path: Path) -> Config:
             support_file_types=[s.strip() for s in c.get("supportFileTypes", []) if s and s.strip()],
             title_keywords=[s for s in c.get("titleKeyWords", []) if s],
             filing_suffix_names=[s.strip() for s in c.get("filingSuffixNames", []) if s and s.strip()],
+            support_period_types=[s.strip().upper() for s in c.get("supportPeriodTypes", []) if s and s.strip()],
         )
 
     profiles: dict[str, MarketProfile] = {}
@@ -276,9 +279,11 @@ def classify(ann: Announcement) -> list[ClassifiedFiling]:
     if end_month in (3, 6, 9, 12):
         # 港股年度业绩公告标题非常多样，最常见的关键词组合：
         #   "全年業績" / "全年业绩" / "年度業績" / "年度业绩" / "末期業績" / "末期业绩" / "annual results"
+        #   还有 "年度财报" / "年度財報"（如美团 2024FY 用 "截至2024年12月31日止年度财报公告"）
         has_annual_words = any(kw in title for kw in
                                ("全年業績", "全年业绩", "年度業績", "年度业绩",
-                                "末期業績", "末期业绩", "年度業績報告", "年度业绩报告")) \
+                                "末期業績", "末期业绩", "年度業績報告", "年度业绩报告",
+                                "年度财报", "年度財報", "全年财报", "全年財報")) \
                            or "annual results" in lower
         is_interim = ("六个月" in title or "六個月" in title
                       or "interim" in lower or "中期" in title)
@@ -294,13 +299,15 @@ def classify(ann: Announcement) -> list[ClassifiedFiling]:
         elif is_quarter:
             form_types = [{3: "Q1", 6: "Q2", 9: "Q3", 12: "Q4"}[end_month]]
 
-    # 2) 年报 / annual report / 年度报告 / 年度业绩公告
+    # 2) 年报 / annual report / 年度报告 / 年度业绩公告 / 年度财报公告
     if not form_types:
         if (("年报" in title or "年報" in title) and not ("季报" in title or "季報" in title)):
             form_types = ["FY"]
         elif ("annual report" in lower or "年度报告" in title or "年度報告" in title
               or "年度业绩公告" in title or "年度業績公告" in title
-              or "全年业绩公告" in title or "全年業績公告" in title):
+              or "全年业绩公告" in title or "全年業績公告" in title
+              or "年度财报" in title or "年度財報" in title
+              or "全年财报" in title or "全年財報" in title):
             form_types = ["FY"]
 
     # 3) 中期报告 —— H1 + Q2
@@ -358,15 +365,16 @@ def _infer_us_quarter(title: str, release_month: int) -> Optional[str]:
     if m:
         return {"一": "Q1", "二": "Q2", "三": "Q3", "四": "Q4",
                 "1": "Q1", "2": "Q2", "3": "Q3", "4": "Q4"}.get(m.group(1))
-    # 兜底：release month 反推。美股 10-Q/8-K 通常在季度结束后 30-45 天发布
-    # 3/31 财季结束 → 4/5 月发；6/30 → 7/8 月；9/30 → 10/11 月；12/31 → 1/2 月
-    if release_month in (1, 2):
+    # 兜底：release month 反推 —— 以季度末月为界，把发布月归到最近结束的季度。
+    # 3/31 财季结束 → 4-6 月发；6/30 → 7-9 月；9/30 → 10-12 月；12/31 → 1-3 月。
+    # 覆盖 12 个月完整区间：3/6/9/12 月发的通用 6-K（标题不带 QX / 第X季度）也能兜到。
+    if release_month in (1, 2, 3):
         return "Q4"
-    if release_month in (4, 5):
+    if release_month in (4, 5, 6):
         return "Q1"
-    if release_month in (7, 8):
+    if release_month in (7, 8, 9):
         return "Q2"
-    if release_month in (10, 11):
+    if release_month in (10, 11, 12):
         return "Q3"
     return None
 
@@ -557,6 +565,144 @@ def fetch_notice_pdf_url(session: requests.Session, detail_url: str, cookies: di
 # 下载：HK 单 PDF vs US SEC accession folder
 # ---------------------------------------------------------------------------
 
+# 判断"6-K 里的 ex99-1 到底是不是业绩报告"的正/负关键词表。
+# —— Futu 的 news list API 对所有 6-K 都吐同一个通用标题（"6-K：外国私营发行人报告"），
+# 上游 title/classify 无法区分季度业绩、股东大会决议、章程修订、上市转换等。
+# 到 SEC 文件下载完之后，读一次 primary 文件的前 20 KB 用关键词分类：
+# 命中正向关键词 & 没命中强负向关键词 → 保留；否则删掉临时目录，丢弃这份公告。
+_FINANCIAL_POSITIVE_MARKERS = (
+    # 英文业绩发布 —— "Announces <period> Results"
+    "announces first quarter", "announces second quarter",
+    "announces third quarter", "announces fourth quarter",
+    "announces full year", "announces fiscal", "announces annual",
+    "announces march quarter", "announces june quarter",
+    "announces september quarter", "announces december quarter",
+    # 常见结构语
+    "financial results for", "unaudited financial results",
+    "business and financial highlights",
+    "business highlights",
+    "financial review and prospects",
+    "quarter summary financial",           # BABA 常见小标题
+    "consolidated results of the company", # BABA 通稿开场白
+    # 中概股常见的"合并财务报表附件"（LI/BABA 半年报把 F-2/F-3 的 balance sheet 直接嵌 ex99-1）
+    "unaudited condensed consolidated financial statements",
+    "condensed consolidated balance sheet",
+    "condensed consolidated statements of comprehensive",
+    "condensed consolidated statements of operations",
+    # SEC 表格自身标识（20-F 主报告文件里出现）
+    "annual report pursuant to section",
+    "form 20-f", "form 10-k", "form 10-q",
+    # 半年度/中期
+    "interim report", "interim financial",
+)
+
+# 强负向关键词：只要出现（在标题区）就基本可确认是非业绩类 6-K。
+# 谨慎起见，用**明确指向公告标题主题**的措辞，而不是常见于正文脚注的短语：
+#   "postponement of certain projects" 是业绩通稿常见用语 —— 不能用 "postponement of " 简写捕捉。
+#   "annual general meeting" 也常出现在通稿"授权回购"章节 —— 已通过限定"仅前 2000 字符"避免。
+_FINANCIAL_NEGATIVE_MARKERS = (
+    "announces results of annual general meeting",
+    "announces results of extraordinary general meeting",
+    "notice of annual general meeting",
+    "notice of extraordinary general meeting",
+    "notice of special meeting",
+    "to hold annual general meeting",
+    "to hold extraordinary general meeting",
+    "proposed amendments to the memorandum",
+    "amendments to the memorandum and articles",
+    "amended and restated memorandum",
+    "voluntary conversion to dual primary listing",
+    "adjournment of annual general",
+    "adjournment of extraordinary",
+    "postponement of annual general",
+    "postponement of extraordinary",
+    "poll results of the annual general",
+    "circular in relation to",
+    "form of proxy for",
+    "announces change of ",         # 董事变更、公司名变更等
+    "announces resignation of ",
+    "announces appointment of ",
+    "announces retirement of ",
+    "announces the completion of the ",  # 交易/发债完成
+)
+
+
+def is_financial_report_content(primary_path: Path, max_bytes: int = 120_000) -> bool:
+    """读 primary 文件前 max_bytes 字节，按关键词判定是否为财报正文。
+
+    专为**美股 6-K 的 ex99-1 附件（HTML）**做二次筛查设计 —— Futu news list API
+    对所有 6-K 都返回同一条通用中文标题，无法在上游 title/classify 阶段区分业绩发布 vs
+    股东大会决议/章程修订/董事变更等，此函数用文件内容关键词兜底。
+
+    **PDF 二进制安全**：真正的 PDF 文件（以 `%PDF-` magic 起头）直接返回 True —— 用来
+    读 UTF-8 会全是乱码，任何关键词都匹配不到，会把合法财报全部误杀。HK/CN 单 PDF 流
+    在上游 titleKeyWords 已经做过精确过滤，也不需要走内容级筛查。
+
+    对 20-F/10-K/10-Q 主报告文件走"文件名兜底"分支：那些文件前几十 KB 通常是 XBRL/CSS
+    头，业务文本要 100 KB 之后才出现。
+
+    小工具原则：读文件失败或内容太短一律返回 True，让下游按老逻辑保留。
+    """
+    if primary_path is None:
+        return True
+
+    # PDF 二进制 → 直接放行（内容级筛查不适用）
+    try:
+        with primary_path.open("rb") as f:
+            magic = f.read(8)
+        if magic.startswith(b"%PDF-"):
+            return True
+    except Exception:
+        return True
+
+    # 文件名兜底：SEC 表格主报告的命名极稳定，直接放行不再看内容。
+    #   20-F   → <ticker>-yyyymmddx20f.htm[l]  /  *_20f.htm  /  *20f.html
+    #   10-K   → <ticker>-yyyymmdd.htm         （无后缀标识但目录里只有它 + XBRL）
+    #   10-Q   → 同上，或者 *_10q.htm
+    name_lower = primary_path.name.lower()
+    if (name_lower.endswith("20f.htm") or name_lower.endswith("20f.html")
+            or name_lower.endswith("_20f.htm") or name_lower.endswith("_20-f.htm")
+            or name_lower.endswith("_10k.htm") or name_lower.endswith("_10-k.htm")
+            or name_lower.endswith("_10q.htm") or name_lower.endswith("_10-q.htm")):
+        return True
+    # <ticker>-yyyymmdd.htm 命名（AAPL/GOOG/MSFT 等 10-K/10-Q 主报告）
+    if re.match(r"^[a-z]{2,6}[-_]\d{8}\.htm[l]?$", name_lower):
+        return True
+
+    try:
+        with primary_path.open("rb") as f:
+            raw = f.read(max_bytes)
+        text = raw.decode("utf-8", errors="replace")
+    except Exception:
+        return True
+    if len(text) < 500:
+        return True
+
+    # 归一化：小写 + 删掉所有 HTML 标签 + &nbsp;/&mdash; 之类的实体 + 折叠空白
+    # 这样跨标签跨换行的短语（"Announces<br>March&nbsp;Quarter"）也能被扁平化匹配到。
+    lower = text.lower()
+    lower = re.sub(r"<[^>]+>", " ", lower)      # 去标签
+    lower = re.sub(r"&[a-z]+;|&#\d+;", " ", lower)  # 去实体
+    lower = re.sub(r"\s+", " ", lower)
+
+    # 强负向关键词只在**标题区**（前 2000 字符，覆盖 "Exhibit 99.1 <公司名> <标题>"）
+    # 生效 —— 因为业绩通稿正文里常有"于本公司未来三个 annual general meetings 授权
+    # 回购股份"这类合法出现，如果全文匹配会误杀。
+    head = lower[:2000]
+    for kw in _FINANCIAL_NEGATIVE_MARKERS:
+        if kw in head:
+            return False
+
+    # 命中任一正向 → 保留
+    for kw in _FINANCIAL_POSITIVE_MARKERS:
+        if kw in lower:
+            return True
+
+    # 都没命中：保守拒绝 —— 因为 Futu 6-K 通用标题下能通过 SEC 后缀白名单落地到这里的、
+    # 又没有任何业绩关键词的文件，实际上就是非业绩类公告（治理、章程、上市转换等）。
+    return False
+
+
 def _sec_should_download(name: str, announcement_title: str, ticker: str,
                           entry: CompanyEntry) -> bool:
     """判断 SEC accession folder 里的某个文件是否需要下载。
@@ -696,13 +842,41 @@ def build_sec_target_dir(workspace: Path, ticker: str, seed_url: str) -> tuple[P
 # ---------------------------------------------------------------------------
 
 def _resolve_targets(args, config: Config) -> list[tuple[CompanyEntry, MarketProfile]]:
-    """把 --ticker（可逗号分隔）+ 兼容旧参数 --stock-id/--market-type 解析成待处理列表。"""
+    """把 --ticker（可逗号分隔）+ 兼容旧参数 --stock-id/--market-type 解析成待处理列表。
+
+    未命中 companies.json 时会调 {@link companies_registry.CompaniesRegistry}：
+    走 futunn predict 接口查一个候选、按"美股>港股>A股 / 剔除 ADR/ETF"选中一只、
+    构建 entry 并写回 companies.json。写回后重新加载 config，然后照原逻辑消费。
+    """
     tickers = [t.strip().upper() for t in (args.ticker or "").split(",") if t.strip()]
     targets: list[tuple[CompanyEntry, MarketProfile]] = []
 
-    # 优先走 config
+    # 惰性初始化 registry：只有真的需要联网时才导入并 new
+    registry = None
+    config_path = Path(args.config)
+
     for t in tickers:
         entry = config.companies.get(t)
+        if not entry:
+            # 走 registry 补齐：命中 config 直接返回；未命中调 predict 接口并写回 config
+            if registry is None:
+                # 延迟导入以避免"没写这个 registry"的老代码兼容问题
+                try:
+                    from companies_registry import CompaniesRegistry
+                except ImportError as e:
+                    print(f"[downloader] companies_registry unavailable: {e}",
+                          file=sys.stderr)
+                    CompaniesRegistry = None
+                registry = (CompaniesRegistry(config_path)
+                            if CompaniesRegistry is not None else False)
+            if registry:
+                if registry.resolve(t) is not None:
+                    # 写回后 reload 一次，保证 config.companies 拿到最新
+                    config = load_config(config_path)
+                    if args.page_size:
+                        config.page_size = args.page_size
+                    entry = config.companies.get(t)
+
         if entry:
             profile = config.profiles.get(entry.market)
             if not profile:
@@ -766,8 +940,11 @@ def process_one_ticker(session: requests.Session, cookies: dict, entry: CompanyE
             continue
 
         # 应用过滤 —— 只要有一种分类通过就处理；不通过的分类被丢掉
+        # supportPeriodTypes（配置层）与 --filing-types（CLI 层）都是白名单，AND 关系。
+        period_whitelist = set(entry.support_period_types) if entry.support_period_types else None
         remaining = [c for c in classifieds
                      if (not types_filter or c.form_type in types_filter)
+                     and (period_whitelist is None or c.form_type in period_whitelist)
                      and (not years_filter or c.fiscal_year in years_filter)
                      and (year_start is None or c.fiscal_year >= year_start)
                      and (year_end is None or c.fiscal_year <= year_end)]
@@ -867,6 +1044,30 @@ def _download_one(session, cookies, ann, classified: ClassifiedFiling,
         except Exception:
             pass
         return {"skipped": "SEC folder had no primary file matching filters"}
+
+    # 内容级过滤：美股 6-K 的 ex99-1 附件在这里做二次筛查 ——
+    # Futu news list API 对所有 6-K 都返回同一条通用标题（"6-K：外国私营发行人报告"），
+    # 无法在上游 title/classify 阶段区分业绩发布、股东大会决议、章程修订等；等到
+    # SEC ex99-1 落地后读一次文件正文，用关键词判定是否财报。
+    #
+    # 只对 sec_folder 生效：HK/CN 单 PDF 流已经在 titleKeyWords 阶段用中文标题
+    # ("业绩公告"/"季度报告"等) 精确过滤过；PDF 二进制读为 UTF-8 会全是乱码，
+    # 关键词永远匹配不到，会把合法财报全误杀。
+    if (profile.download_style == "sec_folder"
+            and primary_path is not None
+            and not is_financial_report_content(primary_path)):
+        print(f"[downloader]   skip non-financial content: "
+              f"{primary_path.name}", file=sys.stderr)
+        for p in saved_files:
+            try:
+                p.unlink()
+            except Exception:
+                pass
+        try:
+            target_dir.rmdir()
+        except Exception:
+            pass
+        return {"skipped": "primary content is not a financial report"}
 
     # 写 meta.json
     primary_info = {}

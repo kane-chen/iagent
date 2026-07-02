@@ -28,6 +28,7 @@ workspace/skills/futu-announcements/
 ├── scripts/
 │   ├── login.py                # Playwright 弹窗登录 → cookies.json
 │   ├── download_announcement.py# 主脚本：拉列表 → 分类 → 下载 → 生成 meta.json
+│   ├── companies_registry.py   # 公司注册表：命中 companies.json 直接返回；未命中时调 predict 补齐并写回
 │   └── requirements.txt
 ├── samples/                    # 调试样本落地（.gitignore）
 ├── cookies.json                # login 后落地（.gitignore）
@@ -102,6 +103,36 @@ python workspace/skills/futu-announcements/scripts/download_announcement.py \
 
 ## `config/companies.json` 说明
 
+`companies.json` 里的 `companies[*]` 是**权威数据源**，但**不再是必需前置** ——
+如果传入的 ticker 不在里面，`companies_registry.py` 会自动调 Futu 的
+`https://www.futunn.com/search-stock/predict` 拉候选、按 "美股 > 港股 > A 股 / 剔除
+ADR·ETF·杠杆" 选一只、组装成 entry 并 **写回** `companies.json`，下次直接命中。
+
+新 entry 的字段规则（由 predict 接口的 `marketTypeName` 决定）：
+
+| 字段 | 规则 |
+|---|---|
+| `ticker` | `stockSymbol` |
+| `stockId` | `stockId` |
+| `displayName` | `stockName` |
+| `market` | `US` / `HK` / `CN`（其它市场如 AU/UK 会被跳过） |
+| `supportFileTypes` | US 且是中概股（symbol 含 `BABA/PDD/JD/BIDU/NIO/LI/XPEV/-ADR/-ADS/.US`）→ `["20-F","6-K"]`；US 非中概股 → `["10-K","10-Q"]`；HK/CN → `[]` |
+| `titleKeyWords` | HK → `["季度报告","年度报告","业绩公告","财报公告"]`；CN → `["季度报告","年度报告"]`；US → `[]` |
+| `filingSuffixNames` / `supportPeriodTypes` | 默认 `[]`（用户按需手工加） |
+
+想手动查一下 registry 会怎么解析某个 ticker（或 debug predict 接口）：
+
+```bash
+# 命中配置 → 直接返回；未命中 → 联网查 & 写回 & 返回
+python workspace/skills/futu-announcements/scripts/companies_registry.py PDD
+
+# 仅查配置不联网
+python workspace/skills/futu-announcements/scripts/companies_registry.py PDD --no-network
+
+# 打印 predict 接口全部候选（不写回）
+python workspace/skills/futu-announcements/scripts/companies_registry.py PDD --print-quotes
+```
+
 ### `companies[*]`
 
 每条股票配置：
@@ -116,8 +147,11 @@ python workspace/skills/futu-announcements/scripts/download_announcement.py \
 | `supportFileTypes` | **公告标题**必须包含的关键字集合（OR）。空数组=不过滤。美股常用 `["10-K","10-Q"]` 或 `["6-K","20-F"]` |
 | `titleKeyWords` | **公告标题**必须包含的关键字集合（OR）。空数组=不过滤。港股/A 股常用 `["年报","中期","业绩","季"]` |
 | `filingSuffixNames` | 美股 SEC 目录内**文件名**后缀白名单。空数组时按下面 b2/b3 默认规则筛 |
+| `supportPeriodTypes` | 只保留 `classify()` 归类到这些周期的公告。可选值 `Q1`/`Q2`/`Q3`/`Q4`/`H1`/`H2`/`FY`。空数组=不过滤。**注意**：H1 中期报同时归 `H1` 和 `Q2` —— 想只留 H1 一份，配 `["H1", "FY"]` 就行；配 `["H1", "Q2", "FY"]` 则两份都留 |
 
-`supportFileTypes` 和 `titleKeyWords` 之间是 AND 关系（都命中才通过）。都为空 → 不过滤。
+`supportFileTypes` 和 `titleKeyWords` 是**标题级**过滤（在 `classify()` 之前跑），两者之间是 AND 关系（都命中才通过）。都为空 → 不过滤。
+
+`supportPeriodTypes` 是**周期级**过滤（在 `classify()` 之后跑，看归类结果），与前面两个是 AND 关系。同样为空不检查。
 
 ### SEC 文件过滤规则（`downloadStyle=sec_folder`）
 

@@ -23,6 +23,14 @@ public class CompanyConfig {
      * 需要保留的周期类型，可选值 FY、H1、H2、Q1、Q2、Q3、Q4，为空则不过滤
      */
     private List<String> includePeriodTypes;
+    /**
+     * 可选：HTML 抽取路径的 layout 提示。为空时走 {@code GenericHtmlLayoutHandler}
+     * （BABA/PDD/MSFT/GOOG 等行列式分部表）。当前支持值：
+     * <ul>
+     *   <li>{@code "SEGMENT_CONTRIBUTION_BLOCKS"} —— BEKE 的"每分部 3 行块"格式</li>
+     * </ul>
+     */
+    private String htmlLayout;
     private List<SegmentConfig> segments;
     private List<MetricMappingRule> metricMappingRules;
 
@@ -83,6 +91,7 @@ public class CompanyConfig {
      * 指标映射规则
      */
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class MetricMappingRule {
         private String standardMetricCode;
         private List<String> rawMetricNames;
@@ -114,7 +123,22 @@ public class CompanyConfig {
             /** 每列=分部，每行=指标，单一周期（按 filing context 的当期周期） */
             SEGMENTS_AS_COLUMNS,
             /** 每行=分部，每列=周期，单一指标 */
-            SEGMENTS_AS_ROWS
+            SEGMENTS_AS_ROWS,
+            /**
+             * 每列=L1 分部（可选合计/未分配列），每行=不同指标或不同 L2 子分部的单一指标。
+             * 单一周期。适用于美团这类"分部收入按 L2 拆列出、成本/经营利润在 L1 层汇总"
+             * 的合并披露表。
+             *
+             * 使用字段：
+             * <ul>
+             *   <li>{@link #segmentCodes} —— 列对应的 L1 分部 code，首位空串表示"标签列"，
+             *       "TOTAL" 参与合计校验，空串或 "SKIP" 表示忽略该列（如未分配列）</li>
+             *   <li>{@link #rowDescriptors} —— 每行一个描述符，指定该行属于哪个指标（metricCode），
+             *       以及可选的 L2 子分部 code；缺省 subSegmentCode 表示写到 L1 分部本身</li>
+             *   <li>{@link #periodCode} —— 单一周期占位符 CURRENT_Q / PRIOR_Q / ... 或写死字符串</li>
+             * </ul>
+             */
+            SUBSEGMENT_MATRIX
         }
 
         /**
@@ -176,11 +200,44 @@ public class CompanyConfig {
          */
         private boolean discardValues = false;
 
+        /**
+         * SUBSEGMENT_MATRIX 布局下，每行对应的指标+子分部描述。
+         * 与 {@link #metricCodesByRow} 相比多了 subSegmentCode（可空）字段。
+         */
+        private List<RowDescriptor> rowDescriptors;
+
+        /**
+         * SUBSEGMENT_MATRIX 布局下，整张表对应的单一周期占位符。
+         * 支持 CURRENT_Q / PRIOR_Q / CURRENT_P / PRIOR_P / 写死值。
+         */
+        private String periodCode;
+
         public PdfColumnMapping() {
             this.segmentCodes = new ArrayList<>();
             this.metricCodesByRow = new ArrayList<>();
             this.periodCodesByColumn = new ArrayList<>();
             this.filingPeriods = new ArrayList<>();
+            this.rowDescriptors = new ArrayList<>();
+        }
+
+        /**
+         * SUBSEGMENT_MATRIX 布局下的一行描述：
+         * <ul>
+         *   <li>{@code metricCode}：这一行的指标（如 REVENUE / COST / OPERATING_INCOME）；
+         *       空字符串或 null = 跳过该行（如汇总行"合计"）</li>
+         *   <li>{@code subSegmentCode}：这一行的 L2 子分部 code。
+         *       非空表示每一列（对应某个 L1 父分部）的值写到该 L1 下面这个 L2 里；
+         *       为空表示直接写到 L1 层</li>
+         *   <li>{@code abs}：把该行的每个数值取绝对值再写入。默认 false。
+         *       港股财报里 COST 常以负数形式呈现（"(81,517,876)"），业务侧一般希望以正数记录</li>
+         * </ul>
+         */
+        @Data
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class RowDescriptor {
+            private String metricCode;
+            private String subSegmentCode;
+            private boolean abs = false;
         }
     }
 }

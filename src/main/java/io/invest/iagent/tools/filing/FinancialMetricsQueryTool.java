@@ -8,6 +8,11 @@ import io.invest.iagent.model.FinancialIndexValueDTO;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * 弃用：改用skill futu-financial-report
+ * @author chan
+ */
+@Deprecated
 public class FinancialMetricsQueryTool {
 
     private final FinancialMetricsQueryService service;

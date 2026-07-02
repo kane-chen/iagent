@@ -44,6 +44,7 @@ class FinancialExtractionServiceTest {
         System.out.println(JSON.toJSONString(segments));
         Assertions.assertEquals(5940,locale(segments,"CHINA_COMMERCE_WHOLESALE").getMetric("REVENUE","2026Q1").getValue());
         Assertions.assertEquals(73024,locale(segments,"CUSTOMER_MANAGEMENT").getMetric("REVENUE","2026Q1").getValue());
+        Assertions.assertEquals(-138,locale(segments,"INTERNATIONAL_DIGITAL_COMMERCE").getMetric("ADJUSTED_EBITA","2026Q1").getValue());
     }
 
     public Segment locale(List<Segment> segments,String segmentCode){
@@ -84,6 +85,32 @@ class FinancialExtractionServiceTest {
         Assertions.assertEquals(48722	,locale(segments,"Online_Marketing_Services").getMetric("REVENUE","2025Q1").getValue());
         Assertions.assertEquals(46950	,locale(segments,"Transaction_Services").getMetric("REVENUE","2025Q1").getValue());
     }
+
+    @Test
+    public void extract_beke() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/BEKE/filings/fil_0001104659-26-029843/tm268951d1_ex99-1.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("BEKE",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(5439	,locale(segments,"Existing_Home").getMetric("REVENUE","2025Q4").getValue());
+        Assertions.assertEquals(7263	,locale(segments,"New_Home").getMetric("REVENUE","2025Q4").getValue());
+        Assertions.assertEquals(-3240	,locale(segments,"Existing_Home").getMetric("COST","2025Q4").getValue());
+        Assertions.assertEquals(2198	,locale(segments,"Existing_Home").getMetric("OPERATING_INCOME","2025Q4").getValue());
+        Assertions.assertEquals(8922	,locale(segments,"Existing_Home").getMetric("REVENUE","2024Q4").getValue());
+        Assertions.assertEquals(13076	,locale(segments,"New_Home").getMetric("REVENUE","2024Q4").getValue());
+    }
+
+    @Test
+    public void extract_beke2() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/BEKE/filings/fil_0001104659-25-049798/tm2515232d1_ex99-1.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("BEKE",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+    }
+
+
 
     @Test
     public void extract_microsoft() throws IOException {
@@ -187,6 +214,38 @@ class FinancialExtractionServiceTest {
         Assertions.assertEquals(54379	,locale(segments,"FINTECH").getMetric("REVENUE","2023Q4").getValue());
         Assertions.assertEquals(23860	,locale(segments,"FINTECH").getMetric("GROSS_PROFIT","2023Q4").getValue());
         Assertions.assertEquals(15858	,locale(segments,"FINTECH").getMetric("GROSS_PROFIT","2022Q4").getValue());
+    }
+
+    @Test
+    public void extract_tencent4() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/00700/filings/fil_hk_00700_2025_FY/12056833-0.PDF").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("00700",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(89920	,locale(segments,"VAS").getMetric("REVENUE","2025Q4").getValue());
+        Assertions.assertEquals(53539	,locale(segments,"VAS").getMetric("GROSS_PROFIT","2025Q4").getValue());
+        Assertions.assertEquals(79022	,locale(segments,"VAS").getMetric("REVENUE","2024Q4").getValue());
+        Assertions.assertEquals(44157	,locale(segments,"VAS").getMetric("GROSS_PROFIT","2024Q4").getValue());
+        Assertions.assertEquals(60818	,locale(segments,"FINTECH").getMetric("REVENUE","2025Q4").getValue());
+        Assertions.assertEquals(30857	,locale(segments,"FINTECH").getMetric("GROSS_PROFIT","2025Q4").getValue());
+        Assertions.assertEquals(26460	,locale(segments,"FINTECH").getMetric("GROSS_PROFIT","2024Q4").getValue());
+    }
+
+    @Test
+    public void extract_83690() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/83690/filings/fil_hk_83690_2025_Q3/11931755-0.PDF").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("83690",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        // 美团财报单位是"千元"，PDF 解析已按 HTML 一致的语义归一到 million（floor(千/1000)）。
+        Assertions.assertEquals(23021	,locale(getSubSegments(segments,"LOCAL_SERVICE"),"DELIVERY").getMetric("REVENUE","2025Q3").getValue());
+        Assertions.assertEquals(81517	,locale(segments,"LOCAL_SERVICE").getMetric("COST","2025Q3").getValue());
+        Assertions.assertEquals(14582	,locale(segments,"LOCAL_SERVICE").getMetric("OPERATING_INCOME","2024Q3").getValue());
+        Assertions.assertEquals(25230	,locale(segments,"NEW_SERVICE").getMetric("COST","2024Q3").getValue());
+        Assertions.assertEquals(26375	,locale(getSubSegments(segments,"LOCAL_SERVICE"),"COMMISSION").getMetric("REVENUE","2025Q3").getValue());
+        Assertions.assertEquals(1627	,locale(getSubSegments(segments,"NEW_SERVICE"),"COMMISSION").getMetric("REVENUE","2025Q3").getValue());
     }
 
 }

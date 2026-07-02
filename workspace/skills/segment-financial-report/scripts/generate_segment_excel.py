@@ -178,18 +178,28 @@ def get_level1_segment_code(flat_metrics, segment_code):
 
 
 def build_segment_metric_map(flat_metrics, periods):
-    """构建扁平数据的索引映射
+    """构建扁平数据的索引映射。
+
+    以 (parentSegmentCode, segmentCode) 为节点唯一键 —— 因为部分公司（如美团 83690）
+    多个 L1 下会共用同一个 L2 segmentCode（"佣金"既在核心本地商業下也在新業務下），
+    单靠 segmentCode 会把两个 L1 的 L2 数据合并成一份，还会因 period 冲突互相覆盖。
+
+    L1 节点用 (None, segmentCode) 作 key；每个节点独立存放它的 metrics/periods。
 
     返回: {
-        segment_code: {
+        (parent_code_or_None, segment_code): {
             'segmentName': '...',
+            'segmentCode': '...',
             'level': 1,
             'parentSegmentCode': '...',
             'metrics': {
-                'REVENUE': {period1: value, period2: value, ...},
+                'REVENUE': {period1: value, ...},
                 'REVENUE_YOY': {period1: value, ...},
                 'ADJUSTED_EBITA': {...},
-                'ADJUSTED_EBITA_YOY': {...},
+                'COST': {...},
+                'OPERATING_INCOME': {...},
+                'OPERATING_EXPENSES': {...},
+                ...
             }
         }
     }
@@ -200,13 +210,18 @@ def build_segment_metric_map(flat_metrics, periods):
         seg_code = item.get('segmentCode')
         if not seg_code:
             continue
+        parent_code = item.get('parentSegmentCode')
+        # L1 节点的 parentSegmentCode 应为 None；防御性地把等于自己的 parent 也归为 L1
+        if parent_code == seg_code:
+            parent_code = None
+        node_key = (parent_code, seg_code)
 
-        if seg_code not in seg_metric_map:
-            seg_metric_map[seg_code] = {
+        if node_key not in seg_metric_map:
+            seg_metric_map[node_key] = {
                 'segmentName': item.get('segmentName', 'Unknown'),
                 'segmentCode': seg_code,
                 'level': item.get('level', 1),
-                'parentSegmentCode': item.get('parentSegmentCode'),
+                'parentSegmentCode': parent_code,
                 'metrics': {}
             }
 
@@ -217,15 +232,15 @@ def build_segment_metric_map(flat_metrics, periods):
             yoy = item.get('yoyGrowth')
 
             # 存储指标值
-            if metric_code not in seg_metric_map[seg_code]['metrics']:
-                seg_metric_map[seg_code]['metrics'][metric_code] = {}
-            seg_metric_map[seg_code]['metrics'][metric_code][period] = value
+            if metric_code not in seg_metric_map[node_key]['metrics']:
+                seg_metric_map[node_key]['metrics'][metric_code] = {}
+            seg_metric_map[node_key]['metrics'][metric_code][period] = value
 
             # 存储YoY值
             yoy_key = f"{metric_code}_YOY"
-            if yoy_key not in seg_metric_map[seg_code]['metrics']:
-                seg_metric_map[seg_code]['metrics'][yoy_key] = {}
-            seg_metric_map[seg_code]['metrics'][yoy_key][period] = yoy
+            if yoy_key not in seg_metric_map[node_key]['metrics']:
+                seg_metric_map[node_key]['metrics'][yoy_key] = {}
+            seg_metric_map[node_key]['metrics'][yoy_key][period] = yoy
 
     return seg_metric_map
 
@@ -251,12 +266,16 @@ def build_data_rows_from_flat(flat_metrics, periods, logger=None):
 
     展示逻辑：
     1. 按一级业务分组，组内按层级深度优先遍历
-    2. 每个分部分组展示：收入 → 收入YoY → EBITA → EBITA YoY → EBITA利润率
+    2. 每个分部依次展示：收入 → 成本 → 营业费用 → 营业利润 → EBITA
+       每个数值指标后紧跟对应的 YoY 行；收入/EBITA 后额外附利润率行
     3. 空数据行过滤：指标值全为空则不展示
+    4. L1 分部若没有直接的收入/成本/费用/利润数据，则用子分部同期数据累加填充
+       —— 港股 SUBSEGMENT_MATRIX 布局里 L2 只披露 REVENUE、L1 只披露 COST/OP_INCOME，
+       没有这一步，Excel 上 L1 就看不到收入行。
     """
     rows = []
 
-    # 构建指标映射
+    # 构建指标映射（key = (parentCode, segmentCode)）
     seg_metric_map = build_segment_metric_map(flat_metrics, periods)
 
     # 获取一级业务分部（用于分组和颜色）
@@ -266,136 +285,167 @@ def build_data_rows_from_flat(flat_metrics, periods, logger=None):
         logger.info(f"识别到 {len(level1_codes)} 个一级业务分部: {level1_codes}")
         logger.info(f"共 {len(seg_metric_map)} 个分部数据，{len(periods)} 个周期")
 
-    # 构建父子关系用于深度遍历
-    children_map = {}  # parent_code -> [child_codes]
-    for seg_code, seg_info in seg_metric_map.items():
+    # 构建父子索引：parent_code -> [(parent_code_of_child, child_code)]
+    # 由于 seg_metric_map 已按 (parent, code) 唯一存储，同一 code 挂在不同 parent 下的会各占一个节点
+    children_map = {}
+    for node_key, seg_info in seg_metric_map.items():
         parent_code = seg_info.get('parentSegmentCode')
-        if parent_code and parent_code != seg_code:
-            if parent_code not in children_map:
-                children_map[parent_code] = []
-            children_map[parent_code].append(seg_code)
+        if parent_code:
+            children_map.setdefault(parent_code, []).append(node_key)
+
+    # ---- 汇总辅助：把子节点某指标同期的值累加到 L1（仅当 L1 自己该指标该期为空时才填） ----
+    AGGREGATABLE_METRICS = ('REVENUE', 'COST', 'GROSS_PROFIT', 'OPERATING_EXPENSES',
+                            'OPERATING_INCOME', 'ADJUSTED_EBITA')
+
+    def _sum_child_metric(node_key, metric_code, period):
+        """深度累加：把 node_key 下所有后代该指标该期的值加起来；任一后代无值则跳过它。"""
+        total = None
+        for child_key in children_map.get(node_key[1], []):
+            child_info = seg_metric_map.get(child_key)
+            if not child_info:
+                continue
+            child_metrics = child_info.get('metrics', {}) or {}
+            v = child_metrics.get(metric_code, {}).get(period)
+            if v is None:
+                # 递归看孙辈
+                v = _sum_child_metric(child_key, metric_code, period)
+            if v is not None:
+                total = (total or 0) + v
+        return total
+
+    def _fill_parent_from_children(node_key):
+        """若 L1（或任何有子节点的父节点）的某个可累加指标同期缺数，用后代同期累加值补上。"""
+        seg_info = seg_metric_map.get(node_key)
+        if not seg_info or not children_map.get(node_key[1]):
+            return
+        metrics = seg_info.setdefault('metrics', {})
+        for m in AGGREGATABLE_METRICS:
+            m_map = metrics.setdefault(m, {})
+            for period in periods:
+                if m_map.get(period) is not None:
+                    continue
+                agg = _sum_child_metric(node_key, m, period)
+                if agg is not None:
+                    m_map[period] = agg
 
     # 按一级业务分组深度遍历
     for level1_idx, level1_code in enumerate(level1_codes):
-        level1_info = seg_metric_map.get(level1_code)
+        level1_key = (None, level1_code)
+        level1_info = seg_metric_map.get(level1_key)
         if not level1_info:
             continue
 
+        # 先把 L1 缺的可累加指标从子节点补齐（子节点自己也做一遍，以支持 3+ 层）
+        for node_key in list(seg_metric_map.keys()):
+            # 只处理属于当前 L1 树的节点
+            if node_key == level1_key or _belongs_to_level1(node_key, level1_code, seg_metric_map):
+                _fill_parent_from_children(node_key)
+
         # 深度优先遍历当前一级业务的整棵树
-        def traverse_tree(seg_code):
-            seg_info = seg_metric_map.get(seg_code)
+        def traverse_tree(node_key):
+            seg_info = seg_metric_map.get(node_key)
             if not seg_info:
                 return
 
             level = seg_info.get('level', 1)
             display_name = get_display_name(seg_info, level)
-
-            # ========== 收集数据 ==========
-            revenue_values = []
-            revenue_yoy = []
-            ebita_values = []
-            ebita_yoy = []
-            margin_values = []  # EBITA利润率
-
             metrics = seg_info.get('metrics', {})
 
-            for period in periods:
-                # 收入数据
-                rev_val = metrics.get('REVENUE', {}).get(period)
-                rev_yoy_val = metrics.get('REVENUE_YOY', {}).get(period)
-                revenue_values.append(rev_val)
-                revenue_yoy.append(rev_yoy_val)
-
-                # EBITA数据（优先使用 ADJUSTED_EBITA，降级使用 OPERATING_INCOME）
-                ebit_val = (metrics.get('ADJUSTED_EBITA', {}).get(period) or
-                           metrics.get('OPERATING_INCOME', {}).get(period))
-                ebit_yoy_val = (metrics.get('ADJUSTED_EBITA_YOY', {}).get(period) or
-                              metrics.get('OPERATING_INCOME_YOY', {}).get(period))
-                ebita_values.append(ebit_val)
-                ebita_yoy.append(ebit_yoy_val)
-
-                # 计算EBITA利润率 = EBITA / 收入 * 100
-                if rev_val and rev_val != 0 and ebit_val:
-                    margin = (ebit_val / rev_val) * 100
-                else:
-                    margin = None
-                margin_values.append(margin)
-
-            # ========== 生成行 ==========
-            # 记录当前行属于哪个一级业务（用于颜色映射）
             row_level1_info = {
                 'level1_code': level1_code,
                 'level1_index': level1_idx
             }
 
-            # 1. 收入行
-            if has_any_data(revenue_values):
+            # ---- 按顺序输出：收入、成本、毛利、营业费用、营业利润、EBITA ----
+            # 每个数值指标后跟 YoY 行；毛利/营业利润/EBITA 后各附一个"利润率(%)"行
+            metric_specs = [
+                # (row_type, display_label, metric_code, margin_label_or_None)
+                ('revenue',            '收入',       'REVENUE',            None),
+                ('cost',               '成本',       'COST',               None),
+                ('gross_profit',       '毛利',       'GROSS_PROFIT',       '毛利率(%)'),
+                ('operating_expenses', '营业费用',   'OPERATING_EXPENSES', None),
+                ('operating_income',   '营业利润',   'OPERATING_INCOME',   '营业利润率(%)'),
+                ('ebita',              'EBITA',      'ADJUSTED_EBITA',     'EBITA利润率(%)'),
+            ]
+
+            # 收入值用于计算利润率
+            revenue_values = [metrics.get('REVENUE', {}).get(p) for p in periods]
+
+            for row_type, label, metric_code, margin_label in metric_specs:
+                values = [metrics.get(metric_code, {}).get(p) for p in periods]
+                if not has_any_data(values):
+                    continue
+
                 rows.append({
-                    'type': 'revenue',
+                    'type': row_type,
                     'level': level,
-                    'name': f"{display_name} - 收入",
-                    'values': revenue_values,
+                    'name': f"{display_name} - {label}",
+                    'values': values,
                     'yoy_values': [],
                     'level1': row_level1_info
                 })
 
-                # 2. 收入YoY行（如果有任何YoY数据）
-                if has_any_data(revenue_yoy):
+                yoy_values = [metrics.get(f"{metric_code}_YOY", {}).get(p) for p in periods]
+                if has_any_data(yoy_values):
                     rows.append({
-                        'type': 'revenue_yoy',
+                        'type': f'{row_type}_yoy',
                         'level': level,
-                        'name': f"{display_name} - 收入YoY(%)",
-                        'values': revenue_yoy,
-                        'yoy_values': revenue_yoy,
+                        'name': f"{display_name} - {label}YoY(%)",
+                        'values': yoy_values,
+                        'yoy_values': yoy_values,
                         'level1': row_level1_info
                     })
 
-            # 3. EBITA行
-            if has_any_data(ebita_values):
-                rows.append({
-                    'type': 'ebita',
-                    'level': level,
-                    'name': f"{display_name} - EBITA",
-                    'values': ebita_values,
-                    'yoy_values': [],
-                    'level1': row_level1_info
-                })
-
-                # 4. EBITA YoY行
-                if has_any_data(ebita_yoy):
-                    rows.append({
-                        'type': 'ebita_yoy',
-                        'level': level,
-                        'name': f"{display_name} - EBITA YoY(%)",
-                        'values': ebita_yoy,
-                        'yoy_values': ebita_yoy,
-                        'level1': row_level1_info
-                    })
-
-                # 5. EBITA利润率行
-                if has_any_data(margin_values):
-                    rows.append({
-                        'type': 'ebita_margin',
-                        'level': level,
-                        'name': f"{display_name} - EBITA利润率(%)",
-                        'values': margin_values,
-                        'yoy_values': [],
-                        'level1': row_level1_info
-                    })
+                # 营业利润 / EBITA 后附利润率行
+                if margin_label:
+                    margin_values = _calc_margin(revenue_values, values)
+                    if has_any_data(margin_values):
+                        rows.append({
+                            'type': f'{row_type}_margin',
+                            'level': level,
+                            'name': f"{display_name} - {margin_label}",
+                            'values': margin_values,
+                            'yoy_values': [],
+                            'level1': row_level1_info
+                        })
 
             # 递归处理子分部
-            children = children_map.get(seg_code, [])
-            # 按分部编码排序（保持稳定顺序）
-            for child_code in sorted(children):
-                traverse_tree(child_code)
+            for child_key in sorted(children_map.get(node_key[1], []), key=lambda k: k[1]):
+                traverse_tree(child_key)
 
-        # 开始遍历当前一级业务树
-        traverse_tree(level1_code)
+        traverse_tree(level1_key)
 
     if logger:
         logger.info(f"过滤空数据行后，共生成 {len(rows)} 行数据")
 
     return rows
+
+
+def _calc_margin(revenue_values, numerator_values):
+    """按周期计算 numerator / revenue * 100；分母为 0 或缺任一值时返回 None。"""
+    result = []
+    for rev, num in zip(revenue_values, numerator_values):
+        if rev and rev != 0 and num is not None:
+            result.append((num / rev) * 100)
+        else:
+            result.append(None)
+    return result
+
+
+def _belongs_to_level1(node_key, level1_code, seg_metric_map):
+    """判断某个 node 是否属于指定 L1 的子树（沿 parentSegmentCode 向上查）。"""
+    parent_code = seg_metric_map.get(node_key, {}).get('parentSegmentCode')
+    visited = set()
+    while parent_code and parent_code not in visited:
+        if parent_code == level1_code:
+            return True
+        visited.add(parent_code)
+        # 找该 parent 对应的节点（有多份时任取一份即可，因为 parent 关系向上唯一）
+        parent_key = next((k for k in seg_metric_map.keys() if k[1] == parent_code), None)
+        if not parent_key:
+            break
+        parent_code = seg_metric_map[parent_key].get('parentSegmentCode')
+    return False
 
 
 def format_value(val):
@@ -481,8 +531,11 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
             metric_name = ''
 
         # ========== 确定当前行的背景色 ==========
-        # EBITA利润率行使用特殊的深色背景，其他行使用一级业务颜色
-        if row_type == 'ebita_margin':
+        # 利润率行（*_margin）使用特殊的深色背景，其他行使用一级业务颜色
+        is_margin_row = row_type.endswith('_margin')
+        is_yoy_row = row_type.endswith('_yoy')
+        is_pct_row = is_margin_row or is_yoy_row
+        if is_margin_row:
             row_bg_color = COLORS['margin_bg']
         else:
             row_bg_color = bg_color
@@ -515,10 +568,10 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
 
             # 设置数值和格式
             if val is not None and isinstance(val, (int, float)):
-                val_cell.value = round(val, 2) if row_type.endswith('_yoy') or row_type == 'ebita_margin' else format_value(val)
+                val_cell.value = round(val, 2) if is_pct_row else format_value(val)
 
                 # YoY行的颜色高亮：下跌超过5%或上涨超过30%都高亮红色
-                if row_type.endswith('_yoy'):
+                if is_yoy_row:
                     if val <= YOY_DECLINE_THRESHOLD or val >= YOY_GROWTH_THRESHOLD:
                         val_cell.font = red_font
                     else:
@@ -527,7 +580,7 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
                     val_cell.font = normal_font
 
                 # 数值格式
-                if row_type.endswith('_yoy') or row_type == 'ebita_margin':
+                if is_pct_row:
                     # 百分比类保留2位小数
                     val_cell.number_format = '0.00'
                 elif val == int(val):
@@ -540,27 +593,10 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
                 val_cell.value = '-'
                 val_cell.font = normal_font
 
-            # 背景色继承一级业务的颜色（行类型的特殊颜色可以叠加或覆盖）
-            if row_type == 'revenue':
-                # 收入行使用一级业务颜色（不使用独立颜色，保持同一业务统一）
-                val_cell.fill = PatternFill(start_color=bg_color,
-                                           end_color=bg_color,
-                                           fill_type="solid")
-            elif row_type == 'ebita':
-                # EBITA行使用一级业务颜色
-                val_cell.fill = PatternFill(start_color=bg_color,
-                                           end_color=bg_color,
-                                           fill_type="solid")
-            elif row_type == 'ebita_margin':
-                # 利润率行使用更深的背景色（深橙色），突出显示
-                val_cell.fill = PatternFill(start_color=COLORS['margin_bg'],
-                                           end_color=COLORS['margin_bg'],
-                                           fill_type="solid")
-            else:
-                # YoY行等其他行继承一级业务颜色
-                val_cell.fill = PatternFill(start_color=bg_color,
-                                           end_color=bg_color,
-                                           fill_type="solid")
+            # 背景色：利润率行使用深色突出，其余行继承一级业务颜色
+            val_cell.fill = PatternFill(start_color=row_bg_color,
+                                       end_color=row_bg_color,
+                                       fill_type="solid")
 
         # 移动到下一行
         row_idx += 1

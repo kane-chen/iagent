@@ -50,7 +50,6 @@ import java.util.Set;
 public class AgentConfig {
 
     private Path workspace ;
-    private String userAgent ;
 
     @Autowired
     private ApplicationProperties applicationProperties;
@@ -58,23 +57,12 @@ public class AgentConfig {
     @PostConstruct
     public void init() {
         TracerRegistry.register(new LoggingTracer(102400));
-        userAgent = applicationProperties.getFiling().getSecUserAgent();
         String workSpaceBaseDir = applicationProperties.getWorkspace().getBaseDir() ;
         if(StringUtils.isBlank(workSpaceBaseDir)){
             workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
         }else{
             workspace = Paths.get(workSpaceBaseDir);
         }
-    }
-
-    @Bean
-    public FinancialFilingDownloadService financialFilingDownloadService() {
-        return new FinancialFilingDownloadService(workspace,userAgent);
-    }
-
-    @Bean
-    public FinancialMetricsQueryService financialMetricsQueryService() {
-        return new FinancialMetricsQueryService(workspace,userAgent);
     }
 
     @Bean
@@ -120,13 +108,11 @@ public class AgentConfig {
     }
 
     @Bean("filingAgent")
-    ReActAgent filingAgent(Model model, FilingKnowledgeBaseService filingKnowledgeBaseService,FinancialFilingDownloadService financialFilingDownloadService,FinancialMetricsQueryService financialMetricsQueryService) {
+    ReActAgent filingAgent(Model model, FilingKnowledgeBaseService filingKnowledgeBaseService) {
 
         // tool-kit
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(new StockInfoTool());
-        toolkit.registerTool(new FinancialFilingDownloadTool(financialFilingDownloadService));
-        toolkit.registerTool(new FinancialMetricsQueryTool(financialMetricsQueryService));
         toolkit.registerTool(new FilingKnowledgeBaseTool(filingKnowledgeBaseService));
         // shell-command (use python to call futu_financial skill scripts on Windows)
         // 注意：Windows 环境不要使用 withShell()，避免内部调用不存在的 sh 导致错误
@@ -180,10 +166,9 @@ public class AgentConfig {
     }
 
     @Bean("companyFilingQaAgent")
-    ReActAgent companyFilingQaAgent(Model model, FilingKnowledgeBaseService filingKnowledgeBaseService,FinancialMetricsQueryService financialMetricsQueryService) {
+    ReActAgent companyFilingQaAgent(Model model, FilingKnowledgeBaseService filingKnowledgeBaseService) {
         Toolkit toolkit = new Toolkit();
         toolkit.registerTool(new StockInfoTool());
-        toolkit.registerTool(new FinancialMetricsQueryTool(financialMetricsQueryService));
         toolkit.registerTool(new FilingKnowledgeBaseTool(filingKnowledgeBaseService));
         toolkit.registerTool(new CompanySourceSearchTool());
         AutoContextConfig config = AutoContextConfig.builder()
