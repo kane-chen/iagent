@@ -1,12 +1,10 @@
 package io.invest.iagent.service.kb;
 
-import com.alibaba.fastjson2.JSON;
 import io.invest.iagent.service.kb.embedding.EmbeddingService;
 import io.invest.iagent.service.kb.embedding.ModelEmbeddingService;
 import io.invest.iagent.service.kb.vector.VectorStoreService;
 import io.invest.iagent.service.kb.vector.VectorStoreServiceByMilvus;
 import io.invest.iagent.service.kb.model.KnowledgeBaseOperationResult;
-import io.invest.iagent.model.KnowledgeBaseRetrieveResult;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,11 +50,5 @@ class FilingKnowledgeBaseServiceTest {
         Assertions.assertTrue(result.isSuccess());
     }
 
-    @Test
-    void retrieve() {
-        KnowledgeBaseRetrieveResult result = service.retrieve("Operating margin","LI",10,"2025",null) ;
-        Assertions.assertNotNull(result);
-        System.out.println(JSON.toJSONString(result));
-        Assertions.assertNotNull(result.getResults());
-    }
+    // retrieve 已迁移到 workspace/skills/financial-filing-retrieve；对应的 Java 单测已下线。
 }

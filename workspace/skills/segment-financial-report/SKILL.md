@@ -1,121 +1,165 @@
 ---
 name: segment-financial-report
-description: 生成分部业务财务报表Excel，支持多层级分部展示（如BABA的三层业务结构），包含收入、EBITA等指标及YoY同比高亮。触发词：分部财报、分部数据、业务分部、分部门数据
+description: 生成上市公司分部业务财务报表 Excel，两阶段执行（extract_segments.py → generate_segment_excel.py）：Java 引擎从财报 HTML/PDF 提取分部数据（支持策略模式识别 + 公司配置隔离），Python 渲染多层级 Excel（含 YoY 同比高亮）。触发词：分部财报、分部数据、业务分部、segment metrics、分部收入、分部EBITA
 ---
 
-# 分部业务财务报表生成Skill
+# 分部业务财务报表 Skill
 
-**多层级分部展示 + 收入/EBITA指标 + YoY同比高亮**
+**Java 提取引擎 + Python 渲染层**，两阶段解耦，共享 workspace 文件契约。
 
-## 核心特性
+## 架构
 
-### 📊 支持多层级分部
-- **Level 1** - 一级业务分部（如淘天集团、国际数字商业、云智能）
-- **Level 2** - 二级业务分部
-- **Level 3** - 三级业务分部
-- 通过缩进、颜色编码直观体现层级关系
-
-### 📈 支持的财务指标
-| 指标 | 说明 |
-|-----|------|
-| **收入 (Revenue)** | 各分部营业收入 |
-| **EBITA** | 调整后EBITA或营业利润 |
-
-### 🔴 YoY同比智能高亮
-- 同比**下降超过5%**的数据自动红色高亮
-- 同比**增长超过30%**的数据自动绿色高亮
-
-### 🎨 智能样式着色
-| 层级/类别 | 背景色 | 字体色 |
-|----------|-------|-------|
-| 表头 | 深蓝 | 白色 |
-| 一级分部 | 浅蓝 | 深蓝色 |
-| 二级分部 | 浅绿 | 深绿色 |
-| 三级分部 | 浅黄 | 深黄色 |
-| 收入指标列 | 浅蓝 | |
-| EBITA指标列 | 浅绿 | |
-
-### ⚡ 技术优化
-- **多周期自动识别**：自动提取所有财报周期
-- **层级展平展示**：保持树状结构的同时扁平化展示
-- **数值格式化**：自动处理大数单位（M/K）
-
-## 调用方式
-
-### 🔧 通过 Java Tool 调用（推荐）
-
-本Skill通过 `FinancialSegmentMetricsTool` 类中的 Tool 方法调用：
-
-```java
-// 查询分部数据（返回Java对象）
-List<Segment> segments = tool.queryFinancialMetrics("BABA");
-
-// 导出Excel（调用Python脚本生成）
-String excelPath = tool.exportSegmentExcel("BABA");
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Stage 1: extract_segments.py                                   │
+│    → java -jar iagent-<ver>-cli.jar --ticker BABA               │
+│                                    --workspace ./workspace      │
+│                                    --flat --output <JSON>       │
+│    → 内部走 FinancialExtractionService                          │
+│      ├─ HtmlReportOrchestrator（策略分派）                      │
+│      │  ├─ GenericHtmlLayoutHandler（兜底）                     │
+│      │  ├─ SegmentContributionHandler（BABA/GOOG 类）           │
+│      │  └─ 其它专有 handler                                     │
+│      └─ PdfReportParser（港股 PDF 通道）                        │
+│    → 加载 src/main/resources/extraction/config/<TICKER>.json    │
+│    → 输出扁平 SegmentMetricDTO JSON                             │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 2: generate_segment_excel.py                             │
+│    → 读上一步的 JSON                                            │
+│    → 渲染多层级 Excel，含 YoY 同比高亮                          │
+│    → 输出 workspace/excels/<TICKER>_segments_<ts>.xlsx          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Tool 名称：`export_segment_financial_excel`
+**为什么两阶段？**
+1. **策略模式在 Java 侧保留**：`HtmlLayoutHandler / PdfLayoutHandler / SubsegmentMatrixHandler / SegmentsAsRowsHandler / SegmentsAsColumnsHandler` 等已成熟策略实现无缝复用
+2. **公司隔离**：`src/main/resources/extraction/config/<TICKER>.json` 承担公司差异（segments/aliases/indent hints/period 过滤），一个公司一个 JSON，脚本不改
+3. **渲染独立可换**：如果要出 PDF/HTML 报告，只加新的 stage 2 脚本
+4. **可单独跑**：Stage 1 得到 JSON 后可直接给 LLM/其它下游用；Stage 2 也可以拿一份已有 JSON 单独跑
 
-### 📋 通过命令行调用（需先准备JSON数据）
+## 目录结构
+
+```
+workspace/skills/segment-financial-report/
+├── SKILL.md
+└── scripts/
+    ├── extract_segments.py         # Stage 1：Python 编排 + 调 Java jar
+    ├── generate_segment_excel.py   # Stage 2：JSON → Excel 渲染
+    ├── extract_pdf_tables.py       # 辅助（PDF 表格调试）
+    ├── requirements.txt
+    └── README.md
+```
+
+## 前置准备
 
 ```bash
-# 从JSON文件生成（JSON由Java Tool生成并传入）
-python ${workspace}/skills/segment-financial-report/scripts/generate_segment_excel.py BABA --json ./segments.json
+# 1) 打包 CLI jar（一次即可，pom.xml 已经配置好双 execution）
+cd <PROJECT_ROOT>
+mvn -DskipTests package
+# 会产出：target/iagent-<ver>.jar（主应用）和 target/iagent-<ver>-cli.jar（CLI）
 
-# 指定输出路径
-python ${workspace}/skills/segment-financial-report/scripts/generate_segment_excel.py BABA --json ./segments.json --output ./baba_segments.xlsx
+# 2) Python 依赖
+pip install -r workspace/skills/segment-financial-report/scripts/requirements.txt
 ```
 
-## 参数说明
+## 用法
 
-| 参数 | 说明 | 默认值 |
-|-----|------|-------|
-| `ticker` | 股票代码 | 必填 |
-| `--json` / `-j` | 包含Segment数据的JSON文件路径（**必填**，由Java Tool生成） | - |
-| `--output` / `-o` | 输出Excel路径 | 自动生成 |
-| `--workspace` / `-w` | 项目工作空间路径 | 自动推断 |
+### 常规流程：先提取，再渲染
 
-## 输出路径
+```bash
+# Stage 1：提取分部数据到 JSON
+python workspace/skills/segment-financial-report/scripts/extract_segments.py \
+    --ticker BABA --print-preview
+# → stdout 一行：JSON 文件绝对路径（默认写到 workspace/temp/BABA_segments_<ts>.json）
 
-- Excel文件：`workspace/excels/{代码}_segments_{时间}.xlsx`
-- 日志文件：`workspace/excels/logs/segment_{代码}_{时间}.log`
-
-## stdout 输出规范
-
-```
->>> Processing {ticker} 分部财务数据
-============================================================
-{ JSON格式的结果摘要 }
-============================================================
+# Stage 2：JSON → Excel
+python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py BABA \
+    --json <上一步 stdout 的路径>
+# → 生成 workspace/excels/BABA_segments_<ts>.xlsx
 ```
 
-JSON 摘要示例：
+### 一行式（Agent 场景）
+
+```bash
+python workspace/skills/segment-financial-report/scripts/extract_segments.py \
+    --ticker BABA --auto-build \
+| xargs -I{} python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py BABA --json {}
+```
+
+Windows PowerShell：
+
+```powershell
+$json = python workspace/skills/segment-financial-report/scripts/extract_segments.py --ticker BABA --auto-build
+python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py BABA --json $json
+```
+
+## extract_segments.py 参数
+
+| 参数 | 说明 | 默认 |
+|---|---|---|
+| `--ticker` | 股票代码（BABA / 00700 / PDD 等）；对应 `resources/extraction/config/<TICKER>.json` | 必填 |
+| `--workspace` | workspace 根目录（含 `portfolio/<TICKER>/filings/`） | 从脚本位置推断 |
+| `--output` | JSON 输出路径 | `workspace/temp/<TICKER>_segments_<ts>.json` |
+| `--project-root` | iagent 项目根 | 从脚本位置推断 |
+| `--flat` / `--no-flat` | flat=输出 SegmentMetricDTO 列表（渲染器要这个）；no-flat=输出树状 Segment | `--flat` |
+| `--fiscal-year-start` / `--fiscal-year-end` | 财年闭区间过滤，例如 `--fiscal-year-start 2022 --fiscal-year-end 2025` | 不限 |
+| `--auto-build` | jar 缺失时自动 `mvn -DskipTests package` | 关闭 |
+| `--print-preview` | stderr 打印前 5 条 segment 便于快速核对 | 关闭 |
+
+## 输出格式
+
+Stage 1 输出的 JSON 结构（flat 模式）：
 
 ```json
-{
-  "status": "ok",
-  "ticker": "BABA",
-  "segments_count": 8,
-  "periods": ["2024Q1", "2024Q2", "2024Q3", "2024Q4"],
-  "excel_path": "绝对路径到Excel",
-  "log_path": "绝对路径到日志"
-}
+[
+  {
+    "segmentCode": "TAOBAO_TMALL",
+    "segmentName": "Taobao and Tmall Group",
+    "level": 1,
+    "parentSegmentCode": null,
+    "metricCode": "ADJUSTED_EBITA",
+    "metricName": "调整后EBITA",
+    "value": 45635.0,
+    "yoyGrowth": null,
+    "confidenceScore": 80,
+    "sourceType": "TABLE_EXTRACT",
+    "sourceLocation": "table_28",
+    "currency": null,
+    "unit": "million",
+    "period": "2022Q3"
+  },
+  ...
+]
 ```
 
-## 文件结构
+## CLI jar 退出码
 
-```
-segment-financial-report/
-├── SKILL.md                    # 本文档
-└── scripts/
-    └── generate_segment_excel.py  # 主脚本
-```
+- `0` — 提取成功
+- `1` — 参数错误
+- `2` — 未找到候选财报文件（如 `workspace/portfolio/<TICKER>/filings/` 为空）
+- `3` — 提取内部报错（策略识别失败、HTML/PDF 解析报错等）
 
-## Excel 列结构
+## Excel 渲染层特性（Stage 2 未改动）
 
-| 列名 | 说明 |
-|-----|------|
-| 业务分部 | 带层级缩进的分部名称 |
-| 指标 | 收入 / EBITA |
-| 2024Q1, 2024Q2, ... | 各周期数值 |
-| 2024Q1 YoY(%), ... | 各周期同比增长率 |
+Excel 的多层级配色、YoY 高亮、周期识别等特性完全由 `generate_segment_excel.py` 决定：
+
+- **Level 1 一级分部** — 浅蓝底/深蓝字
+- **Level 2 二级分部** — 浅绿底/深绿字
+- **Level 3 三级分部** — 浅黄底/深黄字
+- **YoY 高亮** — 下降 > 5% 红色，增长 > 30% 绿色
+
+## 添加新公司
+
+1. 在 `src/main/resources/extraction/config/` 下新增 `<TICKER>.json`（参考 `BABA.json` / `GOOG.json`）
+   - 配置 `segments` 列表：`segmentCode / segmentName / level / aliases` 等
+   - 可选 `includePeriodTypes`：限定只保留哪些周期（如 `["Q1","Q2","Q3","Q4"]`）
+2. 把该公司的财报下载到 `workspace/portfolio/<TICKER>/filings/<docId>/`（走 `futu-announcements` skill 即可）
+3. `mvn package` 重新打包（resources 打进 jar）
+4. `python extract_segments.py --ticker <TICKER>` 冒烟
+
+**无需改动 Java 代码或 Python 脚本**——策略分派在 Java 侧按 config + 表格结构自动路由；渲染侧对新 ticker 完全通用。
+
+## 已知限制
+
+- 港股 PDF 依赖 `PdfReportParser` 的位置映射，如果新公司 PDF 有特殊字体，需要在 Java 侧新增 handler
+- CLI jar 首次启动约 1~2 秒（JVM）；批量调用建议改造成常驻服务（未来 M6+）

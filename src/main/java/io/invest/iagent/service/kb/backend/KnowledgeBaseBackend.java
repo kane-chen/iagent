@@ -1,7 +1,6 @@
 package io.invest.iagent.service.kb.backend;
 
-import io.invest.iagent.model.KnowledgeBaseDocumentDTO;
-import io.invest.iagent.model.KnowledgeBaseRetrieveResult;
+import io.invest.iagent.service.kb.model.KnowledgeBaseDocumentDTO;
 import io.invest.iagent.service.kb.model.KnowledgeBaseOperationResult;
 
 import java.util.List;
@@ -9,9 +8,14 @@ import java.util.List;
 /**
  * 财报知识库后端抽象。
  * <p>
- * 该接口把"财报知识库"的核心操作（预处理、构建、检索、删除、列出）抽象出来，
+ * 该接口把"财报知识库"的核心操作（预处理、构建、删除、列出）抽象出来，
  * 便于在本地 Milvus 后端与外部 RAGFlow 后端之间切换。上层 {@code FilingKnowledgeBaseService}
  * 通过该接口做门面，不再直接依赖具体存储/检索实现。
+ * <p>
+ * 检索（retrieve）能力已迁移到 {@code workspace/skills/financial-filing-retrieve}
+ * Python skill，Agent 主流程通过该 skill 拉取原文片段，本接口不再承担 retrieve 语义。
+ * preprocess / build / list / delete 保留下来作为独立服务，可由运维流程、批处理任务
+ * 或后台 API 调用，不嵌入 agent 主流程。
  */
 public interface KnowledgeBaseBackend {
 
@@ -33,13 +37,6 @@ public interface KnowledgeBaseBackend {
      * 构建知识库：预处理 -> 向量化 -> 写入后端存储。
      */
     KnowledgeBaseOperationResult build(String ticker, String documentId, boolean force);
-
-    /**
-     * 检索与问题相关的财报片段。
-     */
-    KnowledgeBaseRetrieveResult retrieve(String query, String ticker, Integer topK,
-                                         String fiscalYear, String formType,
-                                         String category, Boolean useSummaryCandidates);
 
     /**
      * 删除指定公司或指定文档在后端的知识库内容。

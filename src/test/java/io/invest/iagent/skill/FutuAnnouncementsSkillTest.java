@@ -5,6 +5,7 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +13,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.Assert;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @SpringBootTest(classes = AgentConfig4Test.class)
 @TestPropertySource(locations = "classpath:test.properties")
@@ -29,7 +36,7 @@ public class FutuAnnouncementsSkillTest {
 
     @Test
     public void test_tencent() {
-        String responseText = doDownload("腾讯", "2024", "2026");
+        String responseText = doDownload("腾讯控股", "2024", "2026");
         Assert.notNull(responseText, "call response");
     }
 
@@ -91,6 +98,87 @@ public class FutuAnnouncementsSkillTest {
     public void test_nvda() {
         String responseText = doDownload("英伟达", "2023", "2026");
         Assert.notNull(responseText, "call response");
+    }
+
+    /**
+     * 直接按 ticker 触发 futu-announcements skill 的 CLI，不经过大模型分诊。
+     * 命令行等价于：
+     * <pre>
+     *   python workspace/skills/futu-announcements/scripts/download_announcement.py \
+     *          --ticker LI --workspace ./workspace --fiscal-years 2024,2025,2026
+     * </pre>
+     * 用途：验证 WAF cookies 是否有效 / 自动刷新逻辑是否正常，避免每次都要花大模型 token。
+     */
+    @Test
+    public void test_direct_LI() throws Exception {
+        int exitCode = runDownloadSkill("LI", "2024,2025,2026", 300);
+        // exit=0 全部成功；exit=1 表示有 error（但也有 stdout summary）——两种都算跑通了 CLI 层面
+        Assertions.assertTrue(exitCode == 0 || exitCode == 1,
+                "download_announcement.py should exit 0 (success) or 1 (partial), got=" + exitCode);
+    }
+
+    /**
+     * 直接调用 futu-announcements skill 的 CLI，不经过大模型。
+     * <ul>
+     *   <li>ticker：股票代码（支持逗号分隔多股）</li>
+     *   <li>fiscalYears：逗号分隔的财年白名单，例如 {@code "2024,2025,2026"}</li>
+     *   <li>timeoutSeconds：外部进程超时时间</li>
+     * </ul>
+     * 返回子进程 exit code；stdout/stderr 打印到测试日志便于排查。
+     */
+    private int runDownloadSkill(String ticker, String fiscalYears, int timeoutSeconds)
+            throws IOException, InterruptedException {
+        // 项目根目录 = 当前工作目录（Maven test 运行时是 project.basedir）
+        Path projectRoot = Paths.get(System.getProperty("user.dir"));
+        Path script = projectRoot.resolve("workspace/skills/futu-announcements/scripts/download_announcement.py");
+        Assertions.assertTrue(script.toFile().isFile(),
+                "download script missing at " + script);
+
+        List<String> cmd = List.of(
+                "python",
+                script.toString(),
+                "--ticker", ticker,
+                "--workspace", projectRoot.resolve("workspace").toString(),
+                "--fiscal-years", fiscalYears
+        );
+
+        ProcessBuilder pb = new ProcessBuilder(cmd)
+                .directory(projectRoot.toFile())
+                .redirectErrorStream(false);
+        pb.environment().put("PYTHONIOENCODING", "utf-8");
+
+        Process process = pb.start();
+        // 在两个后台线程读 stdout/stderr，避免管道满导致子进程阻塞
+        Thread outReader = drainAsync(process.getInputStream(), "stdout");
+        Thread errReader = drainAsync(process.getErrorStream(), "stderr");
+
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            outReader.join(2000);
+            errReader.join(2000);
+            Assertions.fail("download_announcement.py timed out after " + timeoutSeconds + "s");
+        }
+        outReader.join(2000);
+        errReader.join(2000);
+        return process.exitValue();
+    }
+
+    private Thread drainAsync(java.io.InputStream stream, String label) {
+        Thread t = new Thread(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(stream, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("[" + label + "] " + line);
+                }
+            } catch (IOException e) {
+                System.err.println("[" + label + "] read failed: " + e.getMessage());
+            }
+        }, "download-" + label);
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     private String doDownload( String companyName ,String fiscalYearStart,String fiscalYearEnd){

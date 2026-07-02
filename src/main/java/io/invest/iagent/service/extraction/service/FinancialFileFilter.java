@@ -3,7 +3,7 @@ package io.invest.iagent.service.extraction.service;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import io.invest.iagent.service.filing.util.WorkspacePaths;
+import io.invest.iagent.utils.WorkspacePaths;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
@@ -69,11 +69,10 @@ public class FinancialFileFilter {
             return List.of();
         }
         String market = readField(meta, "market");
-        return switch (StringUtils.upperCase(market)) {
-            case "US" -> usPrimaryFiles(filingDir, meta, ticker);
-            // HK / CN / 其他 —— 兜底走 PDF 路径
-            default -> pdfFiles(filingDir, meta);
-        };
+        if(StringUtils.equalsIgnoreCase("US",market)){
+            return usPrimaryFiles(filingDir, meta, ticker);
+        }
+        return pdfFiles(filingDir, meta);
     }
 
     /** meta.json 里可能出现同一字段的 snake_case / camelCase 两种命名，取任一非空。 */

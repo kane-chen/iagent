@@ -1,0 +1,37 @@
+{
+  "_comment": "financial-metrics-query skill 的路径与格式配置。所有硬编码字符串集中在这里，脚本只做流程编排。",
+
+  "excelsDir": "workspace/excels",
+
+  "income": {
+    "_comment": "整体损益表 excel 命名规则：{MARKET}_{TICKER}_income_{yyyymmdd}_{hhmmss}.xlsx。MARKET 是 US/HK/SH/SZ 之一，脚本会遍历所有市场前缀直到命中最新的文件。",
+    "filenamePattern": "^(?P<market>US|HK|SH|SZ)_(?P<ticker>[A-Z0-9]+)_income_(?P<date>\\d{8})_(?P<time>\\d{6})\\.xlsx$",
+    "sheetName": null,
+    "_comment_sheet": "sheetName=null 表示直接用 workbook.active（每个文件都只有一张 sheet：'利润表' / 'Income Statement'）",
+    "metricColumn": 1,
+    "unitColumn": 2,
+    "firstPeriodColumn": 3,
+    "headerRow": 1,
+    "reportDateRow": 2,
+    "reportDateLabel": "财报日期",
+    "dataStartRow": 3
+  },
+
+  "segments": {
+    "_comment": "分部损益表 excel 命名规则：{TICKER}_segments_{yyyymmdd}_{hhmmss}.xlsx。无市场前缀。",
+    "filenamePattern": "^(?P<ticker>[A-Z0-9]+)_segments_(?P<date>\\d{8})_(?P<time>\\d{6})\\.xlsx$",
+    "sheetName": null,
+    "segmentColumn": 1,
+    "metricColumn": 2,
+    "firstPeriodColumn": 3,
+    "headerRow": 1,
+    "dataStartRow": 2,
+    "hierarchyPrefixes": ["├─", "└─", "│", "├", "└"],
+    "_comment_hierarchy": "分部名开头这些字符表示是子分部，每 2 个空格 + 一个 ├─ 视为一层。层级由前导空格数 / 2 决定。"
+  },
+
+  "periodFilter": {
+    "_comment": "period 过滤器语法：允许 'FY,Q1,Q2,Q3,Q4' 混合；年份 'YYYY-YYYY' 区间过滤；具体 period '2024Q3' 精确匹配。",
+    "periodTypeRegex": "^(?P<year>20\\d{2})(?P<type>FY|Q[1-4]|H[12])$"
+  }
+}

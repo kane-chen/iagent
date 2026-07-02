@@ -2,7 +2,7 @@ package io.invest.iagent.tools.web;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import io.invest.iagent.service.web.WebSearchProviderFactory;
+import io.invest.iagent.service.web.provider.WebSearchProviderFactory;
 import io.invest.iagent.service.web.WebSearchService;
 import io.invest.iagent.model.WebSearchResponseDTO;
 

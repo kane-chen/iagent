@@ -1,0 +1,2 @@
+# openpyxl 读 xlsx；只用只读模式，占用极小
+openpyxl>=3.1.0

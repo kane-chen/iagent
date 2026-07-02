@@ -8,7 +8,8 @@ import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
 import io.invest.iagent.service.extraction.model.Segment;
 import io.invest.iagent.service.extraction.model.SegmentMetricDTO;
-import io.invest.iagent.tools.filing.FinancialSegmentMetricsTool;
+import io.invest.iagent.service.extraction.service.FinancialExtractionService;
+import io.invest.iagent.service.extraction.service.SegmentMetricUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,7 +70,7 @@ public class SegmentFinancialReportSkillTest {
 
     @Test
     public void test_excel_tencent() {
-        String companyName = "腾讯";
+        String companyName = "腾讯控股";
         Msg response = this.doExecute(companyName);
         String responseText = Objects.requireNonNull(response).getTextContent();
         Assert.notNull(responseText, "question response");
@@ -80,7 +81,9 @@ public class SegmentFinancialReportSkillTest {
                 生成公司[%s]所有分部的财务报表，
                 执行流程如下：
                 1、调用技能stock-ticker获取公司的股票代码（python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>）。
-                2、调用工具export_segment_financial_excel生成财务报表。
+                2、调用技能segment-financial-report生成财务报表：
+                   2a. python workspace/skills/segment-financial-report/scripts/extract_segments.py --ticker <TKR> --auto-build 得到 JSON 路径；
+                   2b. python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py <TKR> --json <上一步的 JSON 路径> 得到 Excel。
                 3、检查财务报表文件是否创建成功。
                 特别注意：
                 1、严格禁止只输出执行方式，但不去真正执行。
@@ -98,61 +101,59 @@ public class SegmentFinancialReportSkillTest {
                 .build();
     }
 
-    @Test
-    public void test_tool_baba() {
+    /**
+     * 直接调用 Java 引擎跑 flatten 后的 segments，验证提取逻辑；
+     * 老版本的 {@code FinancialSegmentMetricsTool.queryFinancialMetricsFlatter} 的等价路径。
+     * Excel 渲染现在完全交给 segment-financial-report skill 的 Python 脚本。
+     */
+    private static List<SegmentMetricDTO> extractSegments(String ticker) throws Exception {
         Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        List<SegmentMetricDTO> segments = tool.queryFinancialMetricsFlatter("BABA") ;
+        FinancialExtractionService service = new FinancialExtractionService(ticker, workspace);
+        List<Segment> segments = service.extractFromHtmlFile(ticker, null, null);
+        return SegmentMetricUtil.flattenAndSort(segments);
+    }
+
+    @Test
+    public void test_tool_baba() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("BABA");
         Assertions.assertNotNull(segments);
         System.out.println(JSON.toJSONString(segments));
     }
 
     @Test
-    public void test_tool_baba_extract() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        List<SegmentMetricDTO> segments = tool.queryFinancialMetricsFlatter("BABA") ;
+    public void test_tool_baba_extract() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("BABA");
         Assertions.assertNotNull(segments);
     }
 
     @Test
-    public void test_tool_00700_build() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("00700") ;
-        Assertions.assertNotNull(result);
+    public void test_tool_00700_build() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("00700");
+        Assertions.assertNotNull(segments);
     }
 
     @Test
-    public void test_tool_83690_build() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("83690") ;
-        Assertions.assertNotNull(result);
+    public void test_tool_83690_build() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("83690");
+        Assertions.assertNotNull(segments);
     }
 
     @Test
-    public void test_tool_baba_build() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("BABA") ;
-        Assertions.assertNotNull(result);
+    public void test_tool_baba_build() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("BABA");
+        Assertions.assertNotNull(segments);
     }
 
     @Test
-    public void test_tool_pdd_build() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("PDD") ;
-        Assertions.assertNotNull(result);
+    public void test_tool_pdd_build() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("PDD");
+        Assertions.assertNotNull(segments);
     }
 
     @Test
-    public void test_tool_beke_build() {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-        String result = tool.exportSegmentExcel("BEKE") ;
-        Assertions.assertNotNull(result);
+    public void test_tool_beke_build() throws Exception {
+        List<SegmentMetricDTO> segments = extractSegments("BEKE");
+        Assertions.assertNotNull(segments);
     }
 
 }

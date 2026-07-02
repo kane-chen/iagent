@@ -38,6 +38,7 @@ import hashlib
 import hmac
 import json
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -67,6 +68,16 @@ DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 
 VALID_FORM_TYPES = {"FY", "H1", "H2", "Q1", "Q2", "Q3", "Q4"}
+
+# Futu WAF 会话失效信号 —— 命中任一都需要重新登录：
+#  - HTTP 439：Futu 自定义的"频次/会话已失效"状态码
+#  - code=-12009：WAF 判定 quote-token / cookies 组合无效，触发原因和 439 类似
+_SESSION_EXPIRED_HTTP_STATUS = {439}
+_SESSION_EXPIRED_CODES = {-12009}
+
+
+class SessionExpiredError(RuntimeError):
+    """WAF cookies 已失效，需要跑一次 login.py 才能继续。"""
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +473,76 @@ def load_cookies(path: Path) -> dict[str, str]:
     return {c["name"]: c["value"] for c in payload.get("cookies", []) if c.get("value")}
 
 
+# 判断 cookies.json 是否"至少可用"的核心字段。历史上真正驱动 futu list API 的关键是
+# csrfToken（用于生成 futu-x-csrf-token）—— uid/web_sig 是 WAF 逐步下发的补充字段，
+# headless 拿不到很常见，但只要有 csrfToken 就能先发出请求，再靠 fetch_news_list 的
+# 439 分支触发重试。相当于把"完整会话"分成两级：本级只兜底"必备骨架"。
+_REQUIRED_SESSION_COOKIES = {"csrfToken"}
+
+
+def _cookies_are_valid(path: Path) -> bool:
+    """cookies.json 里 WAF 会话字段齐全且未过期。"""
+    if not path.exists():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    now = int(time.time())
+    alive_names: set[str] = set()
+    for c in payload.get("cookies", []) or []:
+        expires = c.get("expires", -1)
+        if expires > 0 and expires < now:
+            continue
+        if c.get("value"):
+            alive_names.add(c.get("name"))
+    return _REQUIRED_SESSION_COOKIES.issubset(alive_names)
+
+
+def refresh_cookies(cookies_path: Path, wait_seconds: int = 60) -> dict[str, str]:
+    """WAF 会话过期时自动跑一次 login.py 刷新 cookies.json，然后重新加载。
+
+    默认走 login.py 的无头模式（只需 WAF session cookie，无需人工介入）。
+    刷新失败时 sys.exit(4)，让上游看到明确的失败信号；成功返回新的 cookies 字典。
+    """
+    login_script = SCRIPT_DIR / "login.py"
+    if not login_script.exists():
+        raise RuntimeError(f"login.py not found at {login_script}, cannot refresh session")
+
+    print(f"[downloader] WAF session expired, running login.py to refresh cookies…",
+          file=sys.stderr)
+    cmd = [sys.executable, str(login_script),
+           "--output", str(cookies_path),
+           "--wait-seconds", str(wait_seconds)]
+    try:
+        # Windows 下 subprocess 默认按系统 codepage (GBK) 解码 stdout/stderr，
+        # login.py 里包含中文会直接抛 UnicodeDecodeError；强制 UTF-8 + replace 兜底。
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                encoding="utf-8", errors="replace",
+                                timeout=wait_seconds + 60)
+    except subprocess.TimeoutExpired as e:
+        print(f"[downloader] login.py timed out: {e}", file=sys.stderr)
+        sys.exit(4)
+    if result.returncode not in (0, 2):
+        # exit=2 = login.py 软失败（超时未拿到全部会话字段，但通常会把部分 cookie 写回文件）；
+        # 只要下面 _cookies_are_valid 通过（至少能拼出 csrfToken 供 quote-token 签名），就继续尝试。
+        stderr_tail = (result.stderr or "").splitlines()[-10:]
+        stdout_tail = (result.stdout or "").splitlines()[-5:]
+        print(f"[downloader] login.py failed (exit={result.returncode}):", file=sys.stderr)
+        for line in stderr_tail:
+            print(f"[downloader]   stderr: {line}", file=sys.stderr)
+        for line in stdout_tail:
+            print(f"[downloader]   stdout: {line}", file=sys.stderr)
+        sys.exit(4)
+    if not _cookies_are_valid(cookies_path):
+        print("[downloader] login.py returned 0 but cookies still incomplete "
+              f"(required={sorted(_REQUIRED_SESSION_COOKIES)}); "
+              "try: python workspace/skills/futu-announcements/scripts/login.py --interactive",
+              file=sys.stderr)
+        sys.exit(4)
+    return load_cookies(cookies_path)
+
+
 def build_headers(referer: str) -> dict[str, str]:
     return {
         "User-Agent": DEFAULT_UA,
@@ -501,7 +582,11 @@ def _augment_headers_with_signature(headers: dict, cookies: dict, params: dict) 
 
 def fetch_news_list(session: requests.Session, stock_id: str, market_type: int,
                     cookies: dict, referer: str, page_size: int = 50) -> list[dict]:
-    """调 futunn 的 get-news-list 接口，返回原始 list。"""
+    """调 futunn 的 get-news-list 接口，返回原始 list。
+
+    WAF 会话过期时（HTTP 439 或 payload.code == -12009）抛 {@link SessionExpiredError}，
+    调用方捕获后可以跑一次 login.py 刷 cookies 再重试。
+    """
     params = {
         "stock_id": stock_id,
         "market_type": market_type,
@@ -513,11 +598,22 @@ def fetch_news_list(session: requests.Session, stock_id: str, market_type: int,
     headers = _augment_headers_with_signature(build_headers(referer), cookies, params)
     resp = session.get(NEWS_LIST_API, params=params, headers=headers,
                        cookies=cookies, timeout=20)
+    if resp.status_code in _SESSION_EXPIRED_HTTP_STATUS:
+        raise SessionExpiredError(
+            f"list API HTTP {resp.status_code} (WAF session expired): {resp.text[:300]}")
     if resp.status_code != 200:
         raise RuntimeError(f"list API HTTP {resp.status_code}: {resp.text[:300]}")
     payload = resp.json()
-    if payload.get("code") not in (0, "0", None):
-        raise RuntimeError(f"list API code={payload.get('code')} message={payload.get('message')}")
+    code = payload.get("code")
+    try:
+        code_int = int(code) if code is not None else 0
+    except (TypeError, ValueError):
+        code_int = 0
+    if code_int in _SESSION_EXPIRED_CODES:
+        raise SessionExpiredError(
+            f"list API code={code} (WAF session expired): message={payload.get('message')}")
+    if code not in (0, "0", None):
+        raise RuntimeError(f"list API code={code} message={payload.get('message')}")
     return payload.get("data", {}).get("list", []) or []
 
 
@@ -1153,7 +1249,15 @@ def main() -> int:
         print("ERROR: no valid targets", file=sys.stderr)
         return 1
 
-    cookies = load_cookies(Path(args.cookies))
+    cookies_path = Path(args.cookies)
+    # 启动前先检查 cookies 完整性：本地看着完整仍可能被服务端拒（--> 走 fetch_news_list 里 439 重试），
+    # 但如果本地已经明显缺字段/过期，直接先跑一次 login.py，节省一次注定失败的 list 调用。
+    if not _cookies_are_valid(cookies_path):
+        print("[downloader] cookies.json 缺失或核心 WAF 字段过期，先刷新一次…",
+              file=sys.stderr)
+        refresh_cookies(cookies_path)
+
+    cookies = load_cookies(cookies_path)
     session = requests.Session()
     session.cookies.update(cookies)
     warm_up_session(session, cookies)  # 拿全 WAF cookies，让详情页 SSR 内容能返回
@@ -1161,14 +1265,9 @@ def main() -> int:
     all_summaries: list[dict] = []
     total_errors = 0
     for i, (entry, profile) in enumerate(targets):
-        try:
-            summary = process_one_ticker(session, cookies, entry, profile, args, config)
-        except RuntimeError as e:
-            print(f"[downloader] ticker {entry.ticker} failed: {e}", file=sys.stderr)
-            summary = {"ticker": entry.ticker, "market": entry.market,
-                       "stockId": entry.stock_id, "downloaded": [], "skipped": [],
-                       "errors": [{"reason": str(e)}],
-                       "counts": {"downloaded": 0, "skipped": 0, "errors": 1}}
+        summary = _process_ticker_with_refresh(session, cookies_path, cookies,
+                                               entry, profile, args, config)
+        # 若刷新过 cookies，_process_ticker_with_refresh 会把最新值塞回 cookies dict
         all_summaries.append(summary)
         total_errors += summary["counts"]["errors"]
         # 多 ticker 之间也节流一下
@@ -1186,6 +1285,44 @@ def main() -> int:
         Path(args.output_summary).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if total_errors == 0 else 1
+
+
+def _process_ticker_with_refresh(session: requests.Session, cookies_path: Path,
+                                 cookies: dict, entry: CompanyEntry, profile: MarketProfile,
+                                 args, config: Config) -> dict:
+    """一次 ticker 处理；遇到 SessionExpiredError 就跑一次 login.py 重试。
+
+    每个 ticker 最多重试一次 —— 如果新 cookies 还是过期，说明网络/WAF 侧有更深问题，
+    直接把错误记进 summary，不再往下走。
+    """
+    for attempt in (1, 2):
+        try:
+            return process_one_ticker(session, cookies, entry, profile, args, config)
+        except SessionExpiredError as e:
+            if attempt == 2:
+                print(f"[downloader] ticker {entry.ticker} still failing after refresh: {e}",
+                      file=sys.stderr)
+                return {"ticker": entry.ticker, "market": entry.market,
+                        "stockId": entry.stock_id, "downloaded": [], "skipped": [],
+                        "errors": [{"reason": f"session expired after refresh: {e}"}],
+                        "counts": {"downloaded": 0, "skipped": 0, "errors": 1}}
+            fresh = refresh_cookies(cookies_path)
+            cookies.clear()
+            cookies.update(fresh)
+            session.cookies.clear()
+            session.cookies.update(fresh)
+            warm_up_session(session, cookies)
+        except RuntimeError as e:
+            print(f"[downloader] ticker {entry.ticker} failed: {e}", file=sys.stderr)
+            return {"ticker": entry.ticker, "market": entry.market,
+                    "stockId": entry.stock_id, "downloaded": [], "skipped": [],
+                    "errors": [{"reason": str(e)}],
+                    "counts": {"downloaded": 0, "skipped": 0, "errors": 1}}
+    # unreachable
+    return {"ticker": entry.ticker, "market": entry.market, "stockId": entry.stock_id,
+            "downloaded": [], "skipped": [],
+            "errors": [{"reason": "unknown"}],
+            "counts": {"downloaded": 0, "skipped": 0, "errors": 1}}
 
 
 if __name__ == "__main__":

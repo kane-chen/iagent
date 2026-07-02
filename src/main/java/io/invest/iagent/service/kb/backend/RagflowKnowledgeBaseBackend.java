@@ -5,19 +5,15 @@ import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.invest.iagent.config.ApplicationProperties;
 import io.invest.iagent.config.ApplicationProperties.RagflowProperties;
-import io.invest.iagent.model.KnowledgeBaseDocumentDTO;
-import io.invest.iagent.model.KnowledgeBaseRetrieveResult;
-import io.invest.iagent.service.filing.util.WorkspacePaths;
+import io.invest.iagent.service.kb.model.KnowledgeBaseDocumentDTO;
+import io.invest.iagent.utils.WorkspacePaths;
 import io.invest.iagent.service.kb.backend.ragflow.RagflowClient;
 import io.invest.iagent.service.kb.backend.ragflow.RagflowClientException;
-import io.invest.iagent.service.kb.category.FilingContentCategory;
-import io.invest.iagent.service.kb.category.FilingQueryCategoryResolver;
 import io.invest.iagent.service.kb.model.KnowledgeBaseChunkDTO;
 import io.invest.iagent.service.kb.model.KnowledgeBaseOperationResult;
 import io.invest.iagent.service.kb.util.FilingSourceSelector;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,7 +23,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 基于外部 RAGFlow 服务的知识库后端。
@@ -39,8 +34,11 @@ import java.util.Objects;
  *   <li>每份财报作为一个 document 上传（复用 {@link FilingSourceSelector} 挑选主文件），
  *       并把 form_type、fiscal_year、filing_date、category、source_fingerprint 写入文档 meta_fields，
  *       供检索侧过滤</li>
- *   <li>parse 是异步的，本 backend 通过轮询 {@code run == DONE} 完成"build"的同步语义</li>
+ *   <li>parse 由用户手动在 RAGFlow Web UI 触发；本 backend 只负责上传 + meta 写入</li>
  * </ul>
+ * <p>
+ * <b>注意</b>：检索（retrieve）能力已迁移到 {@code workspace/skills/financial-filing-retrieve}
+ * Python skill，本类只保留 preprocess / build / list / delete。
  */
 @Slf4j
 public class RagflowKnowledgeBaseBackend implements KnowledgeBaseBackend {
@@ -51,31 +49,25 @@ public class RagflowKnowledgeBaseBackend implements KnowledgeBaseBackend {
     private static final String META_FISCAL_YEAR = "fiscal_year";
     private static final String META_FISCAL_PERIOD = "fiscal_period";
     private static final String META_FILING_DATE = "filing_date";
-    private static final String META_CATEGORY = "category";
     private static final String META_SOURCE_FINGERPRINT = "source_fingerprint";
 
     private final Path workspace;
     private final RagflowClient client;
     private final RagflowProperties properties;
-    private final ApplicationProperties applicationProperties;
     private final FilingSourceSelector sourceSelector;
-    private final FilingQueryCategoryResolver queryCategoryResolver;
 
     public RagflowKnowledgeBaseBackend(Path workspace, RagflowClient client,
                                        ApplicationProperties applicationProperties) {
-        this(workspace, client, applicationProperties, new FilingSourceSelector(), new FilingQueryCategoryResolver());
+        this(workspace, client, applicationProperties, new FilingSourceSelector());
     }
 
     public RagflowKnowledgeBaseBackend(Path workspace, RagflowClient client,
                                        ApplicationProperties applicationProperties,
-                                       FilingSourceSelector sourceSelector,
-                                       FilingQueryCategoryResolver queryCategoryResolver) {
+                                       FilingSourceSelector sourceSelector) {
         this.workspace = workspace;
         this.client = client;
-        this.applicationProperties = applicationProperties;
         this.properties = applicationProperties.getRagflow();
         this.sourceSelector = sourceSelector;
-        this.queryCategoryResolver = queryCategoryResolver;
     }
 
     @Override
@@ -213,86 +205,6 @@ public class RagflowKnowledgeBaseBackend implements KnowledgeBaseBackend {
                     .build();
         } catch (Exception e) {
             return error("build", normalizedTicker, documentId, e);
-        }
-    }
-
-    @Override
-    public KnowledgeBaseRetrieveResult retrieve(String query, String ticker, Integer topK,
-                                                String fiscalYear, String formType,
-                                                String category, Boolean useSummaryCandidates) {
-        String normalizedTicker = StringUtils.upperCase(ticker);
-        int defaultTopK = applicationProperties != null
-                ? applicationProperties.getKb().getResultTopK()
-                : 5;
-        int limit = Objects.nonNull(topK) && topK > 0 ? topK : defaultTopK;
-
-        String normalizedCategory = FilingContentCategory.normalizeCode(category);
-        String inferredCategory = StringUtils.isBlank(normalizedCategory) ? queryCategoryResolver.resolve(query) : null;
-        String effectiveCategory = StringUtils.firstNonBlank(normalizedCategory, inferredCategory);
-
-        try {
-            String datasetName = datasetName(normalizedTicker);
-            JsonNode datasetNode = client.findDatasetByName(datasetName);
-            if (datasetNode == null || !datasetNode.hasNonNull("id")) {
-                return KnowledgeBaseRetrieveResult.builder()
-                        .query(query)
-                        .ticker(normalizedTicker)
-                        .topK(limit)
-                        .category(effectiveCategory)
-                        .inferredCategory(inferredCategory)
-                        .results(List.of())
-                        .message("知识库尚未建立，请先构建")
-                        .build();
-            }
-            String datasetId = datasetNode.get("id").asText();
-
-            Map<String, String> metaFilter = new LinkedHashMap<>();
-            if (StringUtils.isNotBlank(fiscalYear)) {
-                metaFilter.put(META_FISCAL_YEAR, fiscalYear);
-            }
-            if (StringUtils.isNotBlank(formType)) {
-                metaFilter.put(META_FORM_TYPE, formType);
-            }
-            if (StringUtils.isNotBlank(effectiveCategory)) {
-                metaFilter.put(META_CATEGORY, effectiveCategory);
-            }
-
-            JsonNode data = client.retrieve(datasetId, query, limit, metaFilter);
-            List<KnowledgeBaseChunkDTO> results = new ArrayList<>();
-            JsonNode chunks = data == null ? null : (data.has("chunks") ? data.get("chunks") : data);
-            if (chunks != null && chunks.isArray()) {
-                for (JsonNode c : chunks) {
-                    results.add(toChunkDTO(c, normalizedTicker));
-                    if (results.size() >= limit) {
-                        break;
-                    }
-                }
-            }
-
-            return KnowledgeBaseRetrieveResult.builder()
-                    .query(query)
-                    .ticker(normalizedTicker)
-                    .topK(limit)
-                    .category(effectiveCategory)
-                    .inferredCategory(inferredCategory)
-                    .results(results)
-                    .message(results.isEmpty() ? "未检索到相关内容" : "检索到 " + results.size() + " 条相关内容")
-                    .metadata(Map.of(
-                            "backend", name(),
-                            "dataset_id", datasetId,
-                            "meta_filter", metaFilter))
-                    .build();
-        } catch (Exception e) {
-            log.error("ragflow retrieve failed: {}", e.getMessage(), e);
-            return KnowledgeBaseRetrieveResult.builder()
-                    .query(query)
-                    .ticker(normalizedTicker)
-                    .topK(limit)
-                    .category(effectiveCategory)
-                    .inferredCategory(inferredCategory)
-                    .results(List.of())
-                    .message("检索失败: " + e.getMessage())
-                    .build();
         }
     }
 
@@ -467,45 +379,6 @@ public class RagflowKnowledgeBaseBackend implements KnowledgeBaseBackend {
         } catch (NumberFormatException ignored) {
             return null;
         }
-    }
-
-    private KnowledgeBaseChunkDTO toChunkDTO(JsonNode chunk, String ticker) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        JsonNode metaNode = chunk.get("document_meta_fields");
-        if (metaNode == null || metaNode.isNull()) {
-            metaNode = chunk.get("meta_fields");
-        }
-        if (metaNode != null && metaNode.isObject()) {
-            metaNode.fields().forEachRemaining(e -> metadata.put(e.getKey(), e.getValue().asText()));
-        }
-        metadata.put("similarity", chunk.path("similarity").asDouble(0));
-        metadata.put("vector_similarity", chunk.path("vector_similarity").asDouble(0));
-        metadata.put("term_similarity", chunk.path("term_similarity").asDouble(0));
-        metadata.put("document_id_ragflow", chunk.path("document_id").asText());
-
-        String docId = StringUtils.defaultIfBlank(
-                (String) metadata.get(META_DOCUMENT_ID),
-                chunk.path("document_id").asText());
-        String formType = (String) metadata.get(META_FORM_TYPE);
-        String category = (String) metadata.get(META_CATEGORY);
-
-        return KnowledgeBaseChunkDTO.builder()
-                .chunkId(chunk.path("id").asText())
-                .score(chunk.path("similarity").asDouble(0))
-                .text(chunk.path("content").asText())
-                .ticker(ticker)
-                .documentId(docId)
-                .formType(formType)
-                .fiscalYear(parseFiscalYear((String) metadata.get(META_FISCAL_YEAR)))
-                .fiscalPeriod((String) metadata.get(META_FISCAL_PERIOD))
-                .filingDate((String) metadata.get(META_FILING_DATE))
-                .sourceFileName(chunk.path("document_name").asText(null))
-                .sectionTitle(chunk.path("document_keyword").asText(null))
-                .chunkType("ragflow")
-                .category(category)
-                .citation(chunk.path("document_name").asText(null))
-                .metadata(metadata)
-                .build();
     }
 
     private KnowledgeBaseOperationResult error(String operation, String ticker, String documentId, Exception e) {

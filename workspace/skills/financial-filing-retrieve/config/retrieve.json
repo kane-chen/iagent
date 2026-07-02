@@ -1,0 +1,55 @@
+{
+  "backend": "milvus",
+  "resultTopK": 5,
+  "vectorTopK": 50,
+  "summaryCandidateMultiplier": 4,
+  "ragflow": {
+    "baseUrl": "http://localhost",
+    "apiKey": "ragflow-JFWPpluXcQX3uih2NII7CDxu3ieyadP4fFvRLMVVYm4",
+    "datasetPrefix": "filing_kb_",
+    "similarityThreshold": 0.2,
+    "keywordSimilarityWeight": 0.3,
+    "requestTimeoutSeconds": 60
+  },
+  "milvus": {
+    "endpoint": "http://127.0.0.1:19530",
+    "token": "",
+    "collection": "invest_filing_test",
+    "summaryCollection": "invest_filing_test_summaries",
+    "requestTimeoutSeconds": 60
+  },
+  "embedding": {
+    "baseUrl": "http://localhost:11434/api/embed",
+    "apiKey": "local",
+    "model": "qwen3-embedding:4b",
+    "dimension": 2560,
+    "requestTimeoutSeconds": 60
+  },
+  "categoryKeywords": {
+    "operating_risks": ["risk", "风险", "不确定性"],
+    "financial_statements": [
+      "balance sheet", "cash flow", "income statement", "financial statement",
+      "资产负债", "现金流", "利润表", "财务报表"
+    ],
+    "financial_operations": [
+      "margin", "expense", "profit", "liquidity", "capital", "revenue", "cost",
+      "利润", "费用", "收入", "成本", "毛利", "流动性"
+    ],
+    "business_operations": [
+      "business", "product", "customer", "delivery", "segment", "operation",
+      "业务", "产品", "客户", "交付", "经营"
+    ],
+    "governance_legal": [
+      "legal", "governance", "board", "compensation", "lawsuit",
+      "治理", "董事", "诉讼", "合规"
+    ],
+    "market_strategy": [
+      "strategy", "outlook", "competition", "market",
+      "战略", "展望", "竞争", "市场"
+    ],
+    "esg_human_capital": [
+      "esg", "sustainability", "employee", "human capital",
+      "可持续", "员工", "人力资本"
+    ]
+  }
+}
