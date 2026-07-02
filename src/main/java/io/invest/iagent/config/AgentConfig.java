@@ -23,15 +23,19 @@ import io.invest.iagent.service.filing.FinancialFilingDownloadService;
 import io.invest.iagent.service.filing.FinancialMetricsQueryService;
 import io.invest.iagent.service.kb.FilingKnowledgeBaseService;
 import io.invest.iagent.service.kb.FilingPreprocessService;
+import io.invest.iagent.service.kb.backend.KnowledgeBaseBackend;
+import io.invest.iagent.service.kb.backend.MilvusKnowledgeBaseBackend;
+import io.invest.iagent.service.kb.backend.RagflowKnowledgeBaseBackend;
+import io.invest.iagent.service.kb.backend.ragflow.RagflowClient;
 import io.invest.iagent.service.kb.category.FilingQueryCategoryResolver;
 import io.invest.iagent.service.kb.embedding.EmbeddingService;
 import io.invest.iagent.service.kb.embedding.ModelEmbeddingService;
 import io.invest.iagent.service.kb.vector.VectorStoreService;
 import io.invest.iagent.service.kb.vector.VectorStoreServiceByMilvus;
-import io.invest.iagent.tools.*;
 import io.invest.iagent.tools.filing.FinancialFilingDownloadTool;
 import io.invest.iagent.tools.filing.FinancialMetricsQueryTool;
 import io.invest.iagent.tools.filing.FinancialSegmentMetricsTool;
+import io.invest.iagent.tools.filing.FinancialTrendAnalysisTool;
 import io.invest.iagent.tools.kb.FilingKnowledgeBaseTool;
 import io.invest.iagent.tools.web.CompanySourceSearchTool;
 import io.invest.iagent.tools.web.WebSearchTool;
@@ -67,29 +71,41 @@ public class AgentConfig {
 
     @Bean
     public FilingKnowledgeBaseService filingKnowledgeBaseService() {
+        String backendType = StringUtils.lowerCase(
+                StringUtils.defaultIfBlank(applicationProperties.getKb().getBackend(), "milvus"));
+        KnowledgeBaseBackend backend = "ragflow".equals(backendType)
+                ? buildRagflowBackend()
+                : buildMilvusBackend();
+        return new FilingKnowledgeBaseService(backend);
+    }
+
+    @Bean("milvusKnowledgeBaseBackend")
+    public KnowledgeBaseBackend buildMilvusBackend() {
         ApplicationProperties.EmbeddingProperties embeddingProps = applicationProperties.getEmbedding();
-        String baseUri = embeddingProps.getBaseUrl();
-        String apiKey = embeddingProps.getApiKey();
-        String model = embeddingProps.getModel();
-        EmbeddingService embeddingService = new ModelEmbeddingService(baseUri, apiKey, model, 1024);
+        EmbeddingService embeddingService = new ModelEmbeddingService(
+                embeddingProps.getBaseUrl(),
+                embeddingProps.getApiKey(),
+                embeddingProps.getModel(),
+                1024);
 
-        // vector-store
         ApplicationProperties.MilvusProperties milvusProps = applicationProperties.getMilvus();
-        String endpoint = milvusProps.getEndpoint();
         String token = milvusProps.getToken().isBlank() ? null : milvusProps.getToken();
-        String collectionName = milvusProps.getCollection();
-        VectorStoreService vectorStoreService = new VectorStoreServiceByMilvus(endpoint, token, collectionName);
+        VectorStoreService vectorStoreService = new VectorStoreServiceByMilvus(
+                milvusProps.getEndpoint(), token, milvusProps.getCollection());
 
-        // 创建带有财务报表提取功能的预处理服务
         FilingPreprocessService preprocessService = new FilingPreprocessService(workspace);
-
-        return new FilingKnowledgeBaseService(
+        return new MilvusKnowledgeBaseBackend(
                 preprocessService,
                 embeddingService,
                 vectorStoreService,
                 new FilingQueryCategoryResolver(),
-                applicationProperties
-        );
+                applicationProperties);
+    }
+
+    @Bean("ragflowKnowledgeBaseBackend")
+    public KnowledgeBaseBackend buildRagflowBackend() {
+        RagflowClient client = new RagflowClient(applicationProperties.getRagflow());
+        return new RagflowKnowledgeBaseBackend(workspace, client, applicationProperties);
     }
 
     @Bean
@@ -112,7 +128,6 @@ public class AgentConfig {
 
         // tool-kit
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new StockInfoTool());
         toolkit.registerTool(new FilingKnowledgeBaseTool(filingKnowledgeBaseService));
         // shell-command (use python to call futu_financial skill scripts on Windows)
         // 注意：Windows 环境不要使用 withShell()，避免内部调用不存在的 sh 导致错误
@@ -144,7 +159,7 @@ public class AgentConfig {
                 .sysPrompt("""
                         你是一个财报文件助理，可以回答用户有关公司财报数据的问题。
                         注意：
-                        1、用户如果没有提供公司股票代码，你需要首先调用工具获取股票代码，然后再执行后续的操作。
+                        1、用户如果没有提供公司股票代码，你需要首先运行 stock-ticker skill（python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>）拿到股票代码与市场归属，再执行后续操作。
                         2、不需要检查工作空间的文件，工具接口里自己会检查财报文件，你只需要调用对应的工具即可。
                         3、用户询问财报定性原因、管理层解释、风险因素时，可以使用财报知识库工具检索相关段落；仅在检索结果为空且用户明确需要时才构建知识库。
                         提别提醒：
@@ -168,8 +183,13 @@ public class AgentConfig {
     @Bean("companyFilingQaAgent")
     ReActAgent companyFilingQaAgent(Model model, FilingKnowledgeBaseService filingKnowledgeBaseService) {
         Toolkit toolkit = new Toolkit();
-        toolkit.registerTool(new StockInfoTool());
+        // 结构化"事实"入口：分部指标（读 workspace/excels/*.xlsx 中的提取结果）
+        toolkit.registerTool(new FinancialSegmentMetricsTool(workspace));
+        // 结构化"事实"入口：季度趋势（SEC XBRL + 本地缓存）
+        toolkit.registerTool(new FinancialTrendAnalysisTool(workspace, applicationProperties.getFiling().getSecUserAgent()));
+        // "原因/管理层解释"入口：财报知识库检索（Milvus 或 RAGFlow 由 app.kb.backend 决定）
         toolkit.registerTool(new FilingKnowledgeBaseTool(filingKnowledgeBaseService));
+        // "外部媒体/券商" 入口：白名单域名限定的 web 搜索
         toolkit.registerTool(new CompanySourceSearchTool());
         AutoContextConfig config = AutoContextConfig.builder()
                 .maxToken(applicationProperties.getLlm().getMaxTokens())
@@ -220,8 +240,8 @@ public class AgentConfig {
                 .workDir(workspace.toAbsolutePath().toString());
         // sub-agent
         toolkit.registration()
-                .subAgent(()-> filingAgent, SubAgentConfig.builder().toolName("filingAgent-sub").description("回答有关公司财报数据的问题").build())
-//                .subAgent(()-> companyFilingQaAgent, SubAgentConfig.builder().toolName("companyFilingQaAgent-sub").description("回答公司财报、业绩趋势、变动原因、预测和观点类问题，所有结论必须标注来源类型").build())
+                .subAgent(()-> filingAgent, SubAgentConfig.builder().toolName("filingAgent-sub").description("下载财报文件、维护财报知识库；不做业绩分析与观点判断").build())
+                .subAgent(()-> companyFilingQaAgent, SubAgentConfig.builder().toolName("companyFilingQaAgent-sub").description("公司财报问答与业绩分析：季度趋势、变动原因、管理层解释、外部佐证、推理与前瞻观点；所有结论按 [fact]/[filing-stated cause]/[external media report]/[broker research]/[inference]/[opinion] 分层标注来源").build())
                 .apply();
         // agent
         return HarnessAgent.builder()
@@ -243,9 +263,13 @@ public class AgentConfig {
                         你是一个理智严谨的工作助理，你的特点如下：
                         1、你可以在职责范围内独立自主进行工作，职责范围内不需要用户确认，直接执行即可。
                         2、你的风格是逻辑严谨、语言精炼，仅会就用户提到的问题进行回答，不会做问题的引申和发散。
+
+                        分诊规则（严格遵守，不要试图自己去数字化分析财报）：
+                        3、当用户询问近期事件、新闻、赛程、价格、政策或需要互联网实时信息时，优先调用 web_search 工具。
+                        4、当用户询问公司财报、最近几个季度收入/成本/运营损益、同比趋势、业绩变化原因、管理层解释、未来展望/预测/观点时，必须调用 companyFilingQaAgent-sub，把用户原问题原样转交，等待其结构化答复。
+                        5、当用户要求下载财报或重建财报知识库时，调用 filingAgent-sub。
+                        6、companyFilingQaAgent-sub 返回的分层标注（[fact]/[filing-stated cause]/[external media report]/[broker research]/[inference]/[opinion]）与 Sources 列表必须原样保留，不得改写或合并来源。
                         """)
-//        3、当用户询问近期事件、新闻、赛程、价格、政策或需要互联网实时信息时，优先调用web_search工具。
-//        4、当用户询问公司财报、最近几个季度收入/成本/运营损益、同比趋势、业绩变化原因、管理层解释、未来展望/预测/观点时，优先调用companyFilingQaAgent-sub。
                 .workspace(workspace)
                 .disableMemoryHooks()
                 .disableSessionPersistence()
@@ -264,24 +288,28 @@ public class AgentConfig {
         return """
                 你是公司财报问答与业绩分析助理，负责回答公司财报、经营变化、业绩趋势、原因解释和前瞻观点相关问题。
 
-                执行模式：
-                1、遇到需要多个来源、多个季度或同时包含事实/原因/观点的问题时，先用 create_plan 建立一次性执行计划，按子任务批量收集数据、原因和外部来源，再统一综合回答。
-                2、创建计划后直接执行，不要等待用户确认；每完成一个子任务就更新状态，最后调用 finish_plan 结束计划。
-                3、工具调用前先合并同类需求：季度趋势一次性使用 analyze_financial_trends，财报原因一次性检索 retrieve_filing_kb，外部媒体/券商来源按必要性调用，避免反复问答式试探。
+                可用工具与分工（严格遵守，禁止越权）：
+                - analyze_financial_trends            → 结构化"事实"来源之一：最近 N 季度收入/成本/运营利润/亏损、YoY，用于产出 [fact]。
+                - query_financial_segment_metrics     → 结构化"事实"来源之二：分部（segment）收入、EBITA 等已提取到 Excel 的分部指标，用于产出 [fact]。
+                - retrieve_filing_kb                  → 财报正文片段检索，用于产出 [filing-stated cause]；返回内容作为原因依据，禁止从中回填任何数字。
+                - search_media_reports                → 白名单媒体检索，用于产出 [external media report]。
+                - search_broker_research              → 白名单券商检索，用于产出 [broker research]；未配置白名单时会 fail-closed，视为"未找到"。
+                - build_filing_kb / list_filing_kb    → 仅当 retrieve_filing_kb 因 "知识库尚未建立" 而无结果时，才调用 build_filing_kb 触发一次构建，然后重试检索。
 
-                强制规则：
-                1、所有回答必须基于来源，不得编造数字、原因、新闻、券商观点或预测。
-                2、每个实质性结论必须标注以下标签之一：[fact]、[filing-stated cause]、[external media report]、[broker research]、[inference]、[opinion]。
-                3、[fact] 只能来自财报明确披露的数值或事实，优先使用 analyze_financial_trends 或 query_financial_metrics。
-                4、[filing-stated cause] 只能来自财报文本中明确陈述的原因，必须使用 retrieve_filing_kb 返回的原文片段作为依据。
-                5、[external media report] 只能来自 search_media_reports 返回的可靠媒体报道。
-                6、[broker research] 只能来自 search_broker_research 返回的可识别正规券商研究报告；若没有可靠券商报告来源，必须说明未找到，不得把媒体转载或普通网页当作券商研究。
-                7、[inference] 是你基于已引用事实和来源做出的推理，必须写明依据的 source id。
-                8、[opinion] 是你的前瞻观点或预测，必须写明依据、假设和不确定性，不得表达为确定事实。
-                9、若用户问最近8个季度的收入、成本、营业利润/亏损和同比趋势，必须先使用 analyze_financial_trends 获取结构化数据，并在表格中展示。
-                10、若用户问为什么变化，必须检索财报知识库；只有财报明确写出的原因才能标为 [filing-stated cause]。
-                11、若来源不足，直接说明“不足以判断”，不要猜测。
-                12、输出必须包含 Sources 列表，列出所有使用过的 source id。
+                数据源硬约束（违反等同于编造）：
+                1、[fact] 中的所有数字，只能来自 analyze_financial_trends 或 query_financial_segment_metrics 的返回值；不得从 retrieve_filing_kb 的原文片段中提取数字作为 fact。
+                2、[filing-stated cause] 只能来自 retrieve_filing_kb 返回的原文片段，必须原文引用（可翻译，不得改写数字与因果关系），并携带 chunkId 或 sectionTitle 作为 source id。
+                3、[external media report] 只能来自 search_media_reports；[broker research] 只能来自 search_broker_research。任一 web 搜索返回空或未配置，就写明"未找到"，不得用 retrieve_filing_kb 的结果冒充外部来源。
+                4、[inference] 必须在 source id 列表里显式引用至少一个 [fact] 或 [filing-stated cause] 作为依据；单独引用外部来源做出的推理需说明"未经财报交叉验证"。
+                5、[opinion] 必须写明假设、依据的 source id 和不确定性，不得表达为确定事实。
+                6、若三类来源都不足以支撑用户问题，直接输出"当前证据不足以判断"，不要猜测。
+
+                执行模式：
+                1、遇到需要多个来源、多个季度或同时包含事实/原因/观点的问题时，先用 create_plan 建立一次性执行计划，按子任务批量收集"事实-原因-外部-观点"四类证据，再统一综合回答。
+                2、创建计划后直接执行，不要等待用户确认；每完成一个子任务就更新状态，最后调用 finish_plan 结束计划。
+                3、工具调用前先合并同类需求：季度趋势一次性使用 analyze_financial_trends，分部数据一次性使用 query_financial_segment_metrics，财报原因一次性 retrieve_filing_kb（可按 category 参数分层），媒体/券商仅在需要外部佐证时调用，避免反复问答式试探。
+                4、若用户明确问"最近 N 个季度趋势"，必须先出 analyze_financial_trends 的表格，再解释原因，再补外部佐证，最后给推理和观点，顺序不可颠倒。
+                5、Sources 列表中的每一条必须能追溯到具体工具调用（例如 F1=analyze_financial_trends#Revenue-FY2024，C1=retrieve_filing_kb#chunk_xxx，M1=search_media_reports#reuters.com/xxx）。
 
                 标准输出结构：
                 ## 结论
@@ -314,7 +342,6 @@ public class AgentConfig {
                                         .timeout(Duration.ofSeconds(900))
                                         .build()
                         ).build());
-        toolkit.registerTool(new StockInfoTool());
         toolkit.registerTool(new FinancialSegmentMetricsTool(workspace));
         // shell-command
         ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));

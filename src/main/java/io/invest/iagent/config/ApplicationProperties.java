@@ -37,6 +37,11 @@ public class ApplicationProperties {
      */
     private KnowledgeBaseProperties kb = new KnowledgeBaseProperties();
 
+    /**
+     * RAGFlow 外部服务配置。仅当 {@code app.kb.backend=ragflow} 时启用。
+     */
+    private RagflowProperties ragflow = new RagflowProperties();
+
     private FilingProperties filing = new FilingProperties();
 
     private WorkspaceProperties workspace = new WorkspaceProperties();
@@ -122,6 +127,11 @@ public class ApplicationProperties {
     @Data
     public static class KnowledgeBaseProperties {
         /**
+         * 后端类型：{@code milvus}（本地默认）或 {@code ragflow}（外部服务）。
+         */
+        private String backend = "milvus";
+
+        /**
          * Number of top-k candidates to retrieve from vector search.
          */
         private int vectorTopK = 50;
@@ -145,6 +155,70 @@ public class ApplicationProperties {
          * Ratio of expansion results to keep when exact matches exist.
          */
         private double expansionRatio = 0.3;
+    }
+
+    /**
+     * RAGFlow 外部服务配置。
+     * <p>
+     * RAGFlow 以 dataset 为单位管理文档，本项目按 ticker 建 dataset（命名 {@code filing_kb_<TICKER>}），
+     * 每份财报作为一个 document 上传并附带 metadata（form_type、fiscal_year 等）。
+     */
+    @Data
+    public static class RagflowProperties {
+        /**
+         * RAGFlow 服务基础地址，例如 {@code http://localhost:9380}。
+         */
+        private String baseUrl = "http://localhost:9380";
+
+        /**
+         * RAGFlow API Key。
+         */
+        private String apiKey = "";
+
+        /**
+         * dataset 命名前缀，最终名称 = prefix + ticker，与本地 knowledgeBaseId 语义对齐。
+         */
+        private String datasetPrefix = "filing_kb_";
+
+        /**
+         * 上传文档后使用的 chunk parser 方法，默认 naive。
+         */
+        private String parserMethod = "naive";
+
+        /**
+         * chunk 大小（字符或 token，取决于 RAGFlow 版本）。
+         */
+        private int chunkTokenNum = 512;
+
+        /**
+         * 检索时的相似度阈值（0-1），低于该值的 chunk 会被过滤。
+         */
+        private float similarityThreshold = 0.2f;
+
+        /**
+         * 关键字与向量相似度的加权（0-1，向量占比 = 1 - keywordSimilarityWeight）。
+         */
+        private float keywordSimilarityWeight = 0.3f;
+
+        /**
+         * dataset 使用的 embedding 模型（由 RAGFlow 侧管理），空则用 RAGFlow 默认值。
+         */
+        private String embeddingModel = "";
+
+        /**
+         * 单次 HTTP 请求超时秒数。
+         */
+        private int requestTimeoutSeconds = 60;
+
+        /**
+         * 文档 parse 完成的轮询超时秒数。
+         */
+        private int parsePollTimeoutSeconds = 300;
+
+        /**
+         * 文档 parse 完成的轮询间隔秒数。
+         */
+        private int parsePollIntervalSeconds = 3;
     }
 
     @Data

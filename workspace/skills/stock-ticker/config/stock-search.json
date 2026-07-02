@@ -1,0 +1,111 @@
+{
+  "_comment": "stock-ticker skill 的常量配置。所有映射与过滤规则集中在这里，脚本 search_ticker.py 只做流程编排。",
+
+  "search": {
+    "_comment": "东方财富 suggest 接口。type=14 表示综合搜索；token 为公开接口固定值。",
+    "url": "https://searchapi.eastmoney.com/api/suggest/get",
+    "type": 14,
+    "token": "D43BF722C8E33BDC906FB84D85E326E8",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "referer": "https://quote.eastmoney.com/",
+    "requestTimeoutSeconds": 10,
+    "defaultSearchLimit": 20
+  },
+
+  "marketMap": {
+    "_comment": "东方财富 MktNum → 交易所简称。搜索接口返回的数字市场码由此翻成人类可读名。",
+    "0": "SZSE",
+    "1": "SSE",
+    "2": "SZSE",
+    "105": "NASDAQ",
+    "106": "NYSE",
+    "116": "HKG",
+    "155": "LSE"
+  },
+
+  "filters": {
+    "_comment_securityType":
+      "只保留 SecurityTypeName 中包含以下任一 token 的结果，其余视为非股票（如债券、指数、ETF、REITs）。",
+    "securityTypeTokens": [
+      "A股", "港股", "美股", "科创板", "创业板", "北交所", "沪A", "深A"
+    ],
+    "_comment_derivative":
+      "股票名字中含有以下任一 token 即视为衍生品/ETF/杠杆产品，直接过滤掉。",
+    "derivativeKeywords": [
+      "ETF", "etf", "做多", "做空", "杠杆", "反向", "两倍", "三倍",
+      "二倍", "1倍", "2倍", "3倍", "指数", "基金", "ADRC", "ADRS", "Trust"
+    ],
+    "_comment_chineseAdr":
+      "symbol 中含有以下任一 token 视为中概股，美股走 20-F/6-K 而非 10-K/10-Q。",
+    "chineseAdrTokens": [
+      "BABA", "PDD", "JD", "BIDU", "NIO", "LI", "XPEV",
+      "-ADR", "-ADS", ".US"
+    ]
+  },
+
+  "preferredExchanges": {
+    "_comment":
+      "默认排序偏好（下标越小排越前）。调 skill 时可通过 CLI --preferred-exchanges 覆盖。",
+    "default": ["NASDAQ", "NYSE", "HKG", "SSE", "SZSE"]
+  },
+
+  "exchangeGroups": {
+    "_comment":
+      "把交易所简称归到大区，决定 profile 走哪条分支。fillStockDetail() 里按此匹配。",
+    "CN": ["SSE", "Shanghai", "SZSE", "Shenzhen", "BSE"],
+    "HK": ["HKG", "Hong Kong"],
+    "US": ["NASDAQ", "NYSE", "NYSE Arca", "AMEX"]
+  },
+
+  "profiles": {
+    "_comment":
+      "各市场的公司类型、财报类型、监管机构。US 分本土与中概股（Foreign Private Issuer）两种。",
+    "CN": {
+      "marketRegion": "CN",
+      "companyType": "CN_LISTED",
+      "annualReportType": "年度报告",
+      "quarterlyReportType": "季度报告",
+      "semiAnnualReportType": "半年度报告",
+      "filingAuthority": "中国证监会"
+    },
+    "HK": {
+      "marketRegion": "HK",
+      "companyType": "HK_LISTED",
+      "annualReportType": "年报",
+      "quarterlyReportType": "季度业绩公告（自愿）",
+      "semiAnnualReportType": "中期报告",
+      "filingAuthority": "香港联交所"
+    },
+    "US_DOMESTIC": {
+      "marketRegion": "US",
+      "companyType": "US_DOMESTIC",
+      "annualReportType": "10-K",
+      "quarterlyReportType": "10-Q",
+      "semiAnnualReportType": "N/A",
+      "filingAuthority": "美国SEC"
+    },
+    "US_ADR": {
+      "marketRegion": "US",
+      "companyType": "FOREIGN_PRIVATE_ISSUER",
+      "annualReportType": "20-F",
+      "quarterlyReportType": "6-K",
+      "semiAnnualReportType": "N/A",
+      "filingAuthority": "美国SEC"
+    },
+    "OTHER": {
+      "marketRegion": "OTHER",
+      "companyType": "OTHER",
+      "annualReportType": "年度报告",
+      "quarterlyReportType": "季度报告",
+      "semiAnnualReportType": "N/A",
+      "filingAuthority": "当地监管机构"
+    }
+  },
+
+  "scoring": {
+    "_comment": "搜索接口本身的排序信心：位次越靠前分越高，衰减步长 0.05。",
+    "baseScore": 1.0,
+    "decayPerRank": 0.05,
+    "roundDigits": 4
+  }
+}

@@ -54,10 +54,25 @@ public class FilingSourceSelector {
         if(StringUtils.isNotBlank(primaryDocument)){
             names.add(primaryDocument);
         }
+        // meta.json 中 primaryFile 可能是对象形式（含 name/sha256/size）
+        JSONObject primaryFile = meta.getJSONObject("primaryFile");
+        if(Objects.nonNull(primaryFile)){
+            String name = primaryFile.getString("name");
+            if(StringUtils.isNotBlank(name)){
+                names.add(name);
+            }
+        }
         JSONArray files = meta.getJSONArray("files");
         if(Objects.nonNull(files)){
             for(int i=0;i<files.size();i++){
-                String name = files.getJSONObject(i).getString("name");
+                // files 可能是 [{"name": "xxx"}] 也可能是 ["xxx", ...]（futunn 下载走的是后者）
+                Object element = files.get(i);
+                String name = null;
+                if(element instanceof String){
+                    name = (String) element;
+                }else if(element instanceof JSONObject){
+                    name = ((JSONObject) element).getString("name");
+                }
                 if(StringUtils.isNotBlank(name)){
                     names.add(name);
                 }
@@ -67,6 +82,10 @@ public class FilingSourceSelector {
     }
 
     private boolean skip(String lowerName){
+        // SEC 归档索引页不是财报正文，需排除
+        if(StringUtils.endsWithAny(lowerName, "-index.html", "-index-headers.html", "-index.htm", "-index-headers.htm")){
+            return true;
+        }
         return StringUtils.equalsAny(lowerName, "meta.json", "filing_manifest.json", "filingsummary.xml")
                 || StringUtils.endsWithAny(lowerName,
                 "_htm.xml", "_cal.xml", "_def.xml", "_lab.xml", "_pre.xml", ".xsd",

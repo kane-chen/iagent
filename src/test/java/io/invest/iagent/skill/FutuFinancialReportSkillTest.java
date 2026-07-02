@@ -56,12 +56,12 @@ public class FutuFinancialReportSkillTest {
         String template = """
                 生成公司[%s]最近32个季度的%s报表，
                 执行流程如下：
-                1、调用工具get_stock_ticker获取公司的股票代码。
+                1、调用技能stock-ticker获取公司的股票代码（python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>）。
                 2、调用技能futu-financial-report生成财务报表，注意：直接按照skill.md调用方式执行即可。
                 3、检查财务报表文件是否创建成功。
                 特别注意：
                 1、严格禁止只输出执行方式，但不去真正执行。
-                2、严格禁止不通过get_stock_ticker工具获取股票代码。
+                2、严格禁止不通过stock-ticker技能获取股票代码。
                 3、严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
                 """;
 
