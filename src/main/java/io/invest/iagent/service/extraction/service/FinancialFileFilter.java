@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 /**
  * 从 workspace/portfolio/<TICKER>/filings/... 里过滤出待解析的财报正文文件。
  *
- * 规则（对齐 futu-announcements 的下载脚本）：
+ * 规则（对齐 futu-filing 的下载脚本）：
  * <ul>
  *   <li>HK / CN 市场：单一 PDF —— 目录里 {@code *.pdf} / {@code *.PDF}</li>
  *   <li>US 市场：SEC accession 目录里的两种正文之一：

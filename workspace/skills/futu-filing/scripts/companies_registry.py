@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-futu-announcements 的 company 注册表。
+futu-filing 的 company 注册表。
 
 职责：
-1. 读取 workspace/skills/futu-announcements/config/companies.json，以此为**权威数据源**。
+1. 读取 workspace/skills/futu-filing/config/companies.json，以此为**权威数据源**。
 2. 未命中时调 Futu 的 search-stock/predict 接口拿候选，按"美股>港股>A股"排序、
    剔除 ADR/ETF/杠杆等衍生品，构建满足 downloader 需要的 entry。
 3. 新解析出的 entry 追加回 companies.json 持久化，下次直接命中。
@@ -300,7 +300,7 @@ def _default_config_path() -> Path:
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
-        description="futu-announcements companies.json 注册表：命中直接查配置，"
+        description="futu-filing companies.json 注册表：命中直接查配置，"
                     "未命中调 futunn predict 接口补齐并写回配置。")
     parser.add_argument("ticker", help="股票代码，如 00700 / BABA / PDD")
     parser.add_argument("--config", default=str(_default_config_path()),

@@ -21,7 +21,7 @@ import java.util.Objects;
 
 @SpringBootTest(classes = AgentConfig4Test.class)
 @TestPropertySource(locations = "classpath:test.properties")
-public class FutuAnnouncementsSkillTest {
+public class FutuFilingSkillTest {
 
     @Autowired
     private HarnessAgent baseAgent ;
@@ -119,7 +119,7 @@ public class FutuAnnouncementsSkillTest {
     private int runDownloadSkill(String ticker, String fiscalYears, int timeoutSeconds) throws Exception {
         // workspace
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
-        Path script = projectRoot.resolve("workspace/skills/futu-announcements/scripts/download_announcement.py");
+        Path script = projectRoot.resolve("workspace/skills/futu-filing/scripts/download_announcement.py");
         Assertions.assertTrue(script.toFile().isFile(), "download script missing at " + script);
         // command
         List<String> cmd = List.of(
@@ -137,7 +137,7 @@ public class FutuAnnouncementsSkillTest {
                 下载公司[%s]从%s至%s的财务报表，
                 执行流程如下：
                 1、调用技能stock-ticker获取公司的股票代码。
-                2、调用技能futu-announcements下载财报文件。
+                2、调用技能futu-filing下载财报文件。
                 特别注意：
                 1、严格禁止只输出执行方式，但不去真正执行。
                 2、严格禁止不通过stock-ticker技能获取股票代码。

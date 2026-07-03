@@ -49,7 +49,7 @@ try:
     import requests
 except ImportError:
     print("ERROR: requests not installed. Run:\n"
-          "  pip install -r workspace/skills/futu-announcements/scripts/requirements.txt",
+          "  pip install -r workspace/skills/futu-filing/scripts/requirements.txt",
           file=sys.stderr)
     sys.exit(2)
 
@@ -539,7 +539,7 @@ def refresh_cookies(cookies_path: Path, wait_seconds: int = 60) -> dict[str, str
     if not _cookies_are_valid(cookies_path):
         print("[downloader] login.py returned 0 but cookies still incomplete "
               f"(required={sorted(_REQUIRED_SESSION_COOKIES)}); "
-              "try: python workspace/skills/futu-announcements/scripts/login.py --interactive",
+              "try: python workspace/skills/futu-filing/scripts/login.py --interactive",
               file=sys.stderr)
         sys.exit(4)
     return load_cookies(cookies_path)

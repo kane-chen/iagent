@@ -39,7 +39,7 @@ try:
 except ImportError:
     print(
         "ERROR: playwright not installed. Run:\n"
-        "  pip install -r workspace/skills/futu-announcements/scripts/requirements.txt\n"
+        "  pip install -r workspace/skills/futu-filing/scripts/requirements.txt\n"
         "  python -m playwright install chromium",
         file=sys.stderr,
     )
