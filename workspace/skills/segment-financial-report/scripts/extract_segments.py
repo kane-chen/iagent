@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-从 iagent Java 提取引擎中拉取指定 ticker 的分部财务数据，落地为 JSON。
+从 iagent 纯 Python 引擎中拉取指定 ticker 的分部财务数据，落地为 JSON。
+可选 `--excel` 一步产出 Excel（内部调用 generate_segment_excel 逻辑，不再二次起进程）。
 
 流程：
-  1. 找 iagent CLI jar（target/iagent-<ver>-cli.jar），未找到则调用 mvn 触发一次 package
-  2. java -jar <cli.jar> --ticker <TICKER> --workspace <WS> --flat --output <JSON>
-  3. 打印/回写 JSON 路径，供 generate_segment_excel.py 消费
+  1. 加载 engine/ 下的纯 Python 提取引擎（支持 HTML + PDF）
+  2. 通过 FinancialFileFilter 过滤候选财报文件
+  3. 按文件扩展名分发给 HtmlFileSegmentParser / PdfFileSegmentParser
+  4. 按策略模式（HtmlLayoutHandler / PdfLayoutHandler）+ 公司配置（config/extraction/<TICKER>.json）
+     提取分部数据
+  5. 打印/回写 JSON 路径，供下游消费；--excel 时直接生成 Excel 并打印 xlsx 路径
 
 设计原则：
-  - 编排层：Python，负责路径解析、进程调度、错误映射
-  - 引擎层：Java（`FinancialExtractionService`，含 HtmlLayoutHandler/PdfLayoutHandler 等
-    策略实现），保留公司配置隔离（src/main/resources/extraction/config/<TICKER>.json）
-  - 渲染层：generate_segment_excel.py，只负责 JSON → Excel
-  - 三层独立：换渲染只改 renderer；换公司只加 JSON 配置；换识别策略只碰 Java 侧
-
-前置：项目根目录已经 mvn package 过一次，产出了 iagent-<ver>-cli.jar。
+  - 编排层：本脚本，负责路径解析、CLI 参数、错误映射
+  - 引擎层：engine/ 包（纯 Python），含 Html/Pdf 解析器、策略 handler、公司配置
+  - 渲染层：generate_segment_excel.py 逻辑（同目录），本脚本以 import 方式复用
+  - 三层独立：换渲染只改 renderer；换公司只加 JSON 配置；换识别策略只碰引擎侧
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,203 +34,69 @@ from typing import Any
 # 路径推断
 # ---------------------------------------------------------------------------
 
-# 本 skill 位于 workspace/skills/segment-financial-report/scripts/，
-# 顺着 3 层就是 workspace 根，再上一层是 iagent 项目根。
-SCRIPT_DIR = Path(__file__).parent
-SKILL_DIR = SCRIPT_DIR.parent
-WORKSPACE_DIR = SKILL_DIR.parent.parent            # workspace/
-PROJECT_ROOT = WORKSPACE_DIR.parent                # iagent 项目根
-
-CLI_MAIN_CLASS = "io.invest.iagent.cli.SegmentExtractionCli"
+# 本脚本位于 workspace/skills/segment-financial-report/scripts/
+SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_DIR = SCRIPT_DIR.parent            # segment-financial-report/
+WORKSPACE_DIR = SKILL_DIR.parent.parent  # workspace/
 
 
-def find_cli_jar(project_root: Path) -> Path | None:
-    """在 target/ 目录里查找 iagent-*-cli.jar；找不到返回 None。"""
-    candidates = sorted((project_root / "target").glob("iagent-*-cli.jar"))
-    return candidates[-1] if candidates else None
+# ---------------------------------------------------------------------------
+# 噪声抑制：pdfminer 在处理港股嵌入字体（FlateDecode 损坏流）时会打大量
+# "Error -5 while decompressing data: incomplete or truncated stream" 到 stderr。
+# 这些流是中文字体子集，表格抽取不依赖字体渲染，因此对结果无影响。
+# 把 pdfminer / pdfplumber / PIL 等模块的日志级别抬到 WARNING 以上，避免污染 stderr。
+# ---------------------------------------------------------------------------
+def _silence_pdf_noise() -> None:
+    # 港股 PDF 的嵌入中文字体子集经常有损坏的 FlateDecode 流，
+    # pdfminer/playa(camelot 后端) 会打 "Error -5 while decompressing data" 到 stderr。
+    # 这些字体流不影响表格文本/数字提取，抬到 CRITICAL 以上屏蔽。
+    for noisy in (
+        "pdfminer", "pdfminer.psparser", "pdfminer.pdfparser",
+        "pdfminer.pdfinterp", "pdfminer.converter", "pdfminer.cmapdb",
+        "pdfplumber", "PIL", "camelot",
+        "playa", "playa.document", "playa.page", "playa.ccitt",
+        "playa.filter", "playa.pdftypes",
+    ):
+        logging.getLogger(noisy).setLevel(logging.CRITICAL + 1)
 
 
-def ensure_cli_jar(project_root: Path, auto_build: bool) -> Path:
-    """定位 cli jar；若无且 auto_build=True 则触发一次 mvn package。"""
-    jar = find_cli_jar(project_root)
-    if jar is not None:
-        return jar
-
-    if not auto_build:
-        raise FileNotFoundError(
-            f"未找到 iagent CLI jar（{project_root/'target'}/iagent-*-cli.jar）。"
-            f"请先在项目根执行 `mvn -DskipTests package`，或加 --auto-build 让本脚本自动执行。"
-        )
-
-    print(f"[extract] 未找到 CLI jar，触发 mvn -DskipTests package ...", file=sys.stderr)
-    result = subprocess.run(
-        ["mvn", "-q", "-DskipTests", "package"],
-        cwd=project_root,
-    )
-    if result.returncode != 0:
-        raise RuntimeError("mvn package 失败，请手动执行看具体错误")
-
-    jar = find_cli_jar(project_root)
-    if jar is None:
-        raise FileNotFoundError("mvn package 后仍未找到 CLI jar，请检查 pom.xml 配置")
-    return jar
+_silence_pdf_noise()
 
 
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
 
-def extract_segments(ticker: str,
-                     workspace: Path,
-                     output_json: Path,
-                     project_root: Path,
-                     flat: bool,
-                     fiscal_year_start: str | None,
-                     fiscal_year_end: str | None,
-                     auto_build: bool) -> Path:
-    jar = ensure_cli_jar(project_root, auto_build=auto_build)
-    output_json.parent.mkdir(parents=True, exist_ok=True)
+def run_python_engine(ticker: str,
+                      workspace: Path,
+                      output_json: Path,
+                      flat: bool,
+                      fiscal_year_start: str | None,
+                      fiscal_year_end: str | None) -> Path:
+    """纯 Python 引擎：HTML + PDF。
 
-    cmd = [
-        "java", "-jar", str(jar),
-        "--ticker", ticker,
-        "--workspace", str(workspace),
-        "--output", str(output_json),
-    ]
-    if flat:
-        cmd.append("--flat")
-    if fiscal_year_start:
-        cmd += ["--fiscal-year-start", fiscal_year_start]
-    if fiscal_year_end:
-        cmd += ["--fiscal-year-end", fiscal_year_end]
-
-    print(f"[extract] 执行：{' '.join(cmd)}", file=sys.stderr)
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"CLI 提取失败，退出码 {result.returncode}。"
-            f"退出码含义：1=参数错、2=无候选财报文件、3=提取失败。"
-        )
-
-    if not output_json.exists() or output_json.stat().st_size == 0:
-        raise RuntimeError(f"CLI 声称成功但输出文件为空：{output_json}")
-
-    return output_json
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="按 ticker 从 iagent Java 引擎提取分部财务数据到 JSON",
-    )
-    parser.add_argument("--ticker", required=True, help="股票代码，例如 BABA / 00700 / PDD")
-    parser.add_argument(
-        "--engine",
-        choices=["java", "python"],
-        default="java",
-        help="提取引擎：java=旧的 Java CLI 子进程；python=本地 Python 端口（HTML only, Stage 1）。默认 java 保持零回归。",
-    )
-    parser.add_argument(
-        "--workspace",
-        type=Path,
-        default=WORKSPACE_DIR,
-        help="workspace 根目录（含 portfolio/<TICKER>/filings/）",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="输出 JSON 路径。默认写到 workspace/temp/<TICKER>_segments_<ts>.json",
-    )
-    parser.add_argument(
-        "--project-root",
-        type=Path,
-        default=PROJECT_ROOT,
-        help="iagent 项目根（含 target/、pom.xml）",
-    )
-    parser.add_argument(
-        "--flat",
-        action="store_true",
-        default=True,
-        help="输出扁平 SegmentMetricDTO 列表（renderer 需要该格式）；默认开启",
-    )
-    parser.add_argument(
-        "--no-flat",
-        dest="flat",
-        action="store_false",
-        help="输出树状 Segment 结构（含子分部嵌套）",
-    )
-    parser.add_argument("--fiscal-year-start", default=None, help="起始财年，例如 2022")
-    parser.add_argument("--fiscal-year-end", default=None, help="结束财年，例如 2025")
-    parser.add_argument(
-        "--auto-build",
-        action="store_true",
-        help="jar 缺失时自动 mvn -DskipTests package 补上",
-    )
-    parser.add_argument(
-        "--print-preview",
-        action="store_true",
-        help="额外在 stderr 打印前 5 条 segment 便于快速核对",
-    )
-    return parser.parse_args()
-
-
-def default_output(workspace: Path, ticker: str) -> Path:
-    from datetime import datetime
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return workspace / "temp" / f"{ticker}_segments_{ts}.json"
-
-
-def _run_python_engine(ticker: str,
-                       workspace: Path,
-                       output_json: Path,
-                       flat: bool,
-                       fiscal_year_start: str | None,
-                       fiscal_year_end: str | None) -> Path:
-    """Stage 1 Python engine: HTML only. Mirrors the Java CLI outputs."""
-    # Import locally so java-only invocations don't pay the bs4 import cost.
+    使用 FinancialExtractionService.extractSegments() 批量提取，
+    内部按文件扩展名自动路由到 HtmlFileSegmentParser / PdfFileSegmentParser。
+    """
+    # Make sibling engine package importable.
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
     from engine.extraction_service import FinancialExtractionService  # type: ignore
-    from engine.model import Segment, SegmentMetric  # noqa: F401
-
-    # Best-effort file discovery — mirror the Java FinancialFileFilter behaviour
-    # for HTML-only US filings under portfolio/<TICKER>/filings/*/.
-    import json as _json
-
-    filings_dir = workspace / "portfolio" / ticker.upper() / "filings"
-    if not filings_dir.is_dir():
-        raise FileNotFoundError(f"No filings dir for {ticker}: {filings_dir}")
 
     svc = FinancialExtractionService(companyCode=ticker, workspace=workspace)
+    all_segments = svc.extractSegments(ticker, fiscal_year_start, fiscal_year_end)
 
-    all_segments = []
-    for filing_dir in sorted(p for p in filings_dir.iterdir() if p.is_dir()):
-        meta_file = filing_dir / "meta.json"
-        if not meta_file.exists():
-            continue
-        try:
-            meta = _json.loads(meta_file.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
-            continue
-        fiscal_year = str(meta.get("fiscalYear") or meta.get("fiscal_year") or "")
-        if fiscal_year_start and fiscal_year and fiscal_year_start > fiscal_year:
-            continue
-        if fiscal_year_end and fiscal_year and fiscal_year_end < fiscal_year:
-            continue
-        # gather candidate HTML files
-        for candidate in filing_dir.glob("*.htm*"):
-            name = candidate.name.lower()
-            if name.endswith(("-index.html", "-index-headers.html")):
-                continue
-            try:
-                all_segments.extend(svc.extractFromHtmlFile(candidate))
-            except NotImplementedError:
-                continue  # skip PDF
+    if not all_segments:
+        print(f"[extract] 未找到 {ticker} 的分部财务数据（workspace={workspace}）", file=sys.stderr)
+        sys.exit(2)
 
-    def _seg_to_dict(seg):
+    def _seg_to_dict(seg, parent_code=None):
+        """Convert a Segment to a JSON-serializable dict (tree form)."""
         return {
             "segmentCode": seg.segmentCode,
             "segmentName": seg.segmentName,
             "level": seg.level,
-            "sortOrder": seg.sortOrder,
+            "sortOrder": getattr(seg, "sortOrder", 0),
             "metrics": [
                 {
                     "metricCode": m.metricCode,
@@ -243,12 +111,12 @@ def _run_python_engine(ticker: str,
                 }
                 for m in seg.metrics
             ],
-            "children": [_seg_to_dict(c) for c in seg.children],
+            "children": [_seg_to_dict(c, seg.segmentCode) for c in seg.children],
         }
 
     if flat:
-        # Flatten depth-first, one entry per (segment, metric)
         payload = []
+
         def _walk(seg, parent_code):
             for m in seg.metrics:
                 payload.append({
@@ -270,68 +138,169 @@ def _run_python_engine(ticker: str,
                 _walk(c, seg.segmentCode)
         for s in all_segments:
             _walk(s, None)
-        output_json.parent.mkdir(parents=True, exist_ok=True)
-        output_json.write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     else:
-        output_json.parent.mkdir(parents=True, exist_ok=True)
-        output_json.write_text(
-            _json.dumps([_seg_to_dict(s) for s in all_segments], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        payload = [_seg_to_dict(s) for s in all_segments]
+
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_json.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
     return output_json
+
+
+def generate_excel(ticker: str, workspace: Path, json_path: Path,
+                   output_xlsx: Path | None = None) -> Path:
+    """一步到位渲染 Excel：同进程 import generate_segment_excel 逻辑，不再起子进程。
+
+    让 extract_segments.py --excel 成为单次 bash 调用即可拿到 .xlsx 路径，
+    省去 Agent 两次 bash + xargs/PowerShell 管道的开销。
+    """
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    import generate_segment_excel as gx  # type: ignore
+
+    # 读入 flat JSON（--excel 强制 flat 模式）
+    segments = json.loads(json_path.read_text(encoding="utf-8"))
+    if not segments:
+        print(f"[extract] 分部数据为空，跳过 Excel 生成", file=sys.stderr)
+        sys.exit(2)
+
+    periods = gx.get_all_periods(segments)
+    if not periods:
+        periods = ["Latest"]
+
+    excels_dir = workspace / "excels"
+    logs_dir = excels_dir / "logs"
+    for d in (excels_dir, logs_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if output_xlsx is None:
+        output_xlsx = excels_dir / f"{ticker}_segments_{timestamp}.xlsx"
+    log_file = logs_dir / f"segment_{ticker}_{timestamp}.log"
+    logger = gx.setup_logging(str(log_file))
+    gx.generate_excel_with_styling(segments, periods, str(output_xlsx), ticker, logger)
+    print(f"[extract] Excel written to {output_xlsx}", file=sys.stderr)
+    return output_xlsx
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="按 ticker 从 iagent 纯 Python 引擎提取分部财务数据到 JSON（可选直接生成 Excel）",
+    )
+    parser.add_argument("--ticker", required=True, help="股票代码，例如 BABA / 00700 / PDD")
+    parser.add_argument(
+        "--workspace",
+        type=Path,
+        default=WORKSPACE_DIR,
+        help="workspace 根目录（含 portfolio/<TICKER>/filings/）",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="输出 JSON 路径。默认写到 workspace/temp/<TICKER>_segments_<ts>.json",
+    )
+    parser.add_argument(
+        "--flat",
+        action="store_true",
+        default=True,
+        help="输出扁平 SegmentMetricDTO 列表（renderer 需要该格式）；默认开启",
+    )
+    parser.add_argument(
+        "--no-flat",
+        dest="flat",
+        action="store_false",
+        help="输出树状 Segment 结构（含子分部嵌套）",
+    )
+    parser.add_argument("--fiscal-year-start", default=None, help="起始财年，例如 2022")
+    parser.add_argument("--fiscal-year-end", default=None, help="结束财年，例如 2025")
+    parser.add_argument(
+        "--excel",
+        action="store_true",
+        help="提取后直接生成 Excel（一步到位，无需再调用 generate_segment_excel.py）。"
+             "输出 xlsx 路径到 stdout。",
+    )
+    parser.add_argument(
+        "--excel-output",
+        type=Path,
+        default=None,
+        help="--excel 时自定义 xlsx 输出路径（默认 workspace/excels/<TICKER>_segments_<ts>.xlsx）",
+    )
+    parser.add_argument(
+        "--print-preview",
+        action="store_true",
+        help="额外在 stderr 打印前 5 条 segment 便于快速核对",
+    )
+    return parser.parse_args()
+
+
+def default_output(workspace: Path, ticker: str) -> Path:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return workspace / "temp" / f"{ticker}_segments_{ts}.json"
 
 
 def main() -> int:
     args = parse_args()
-    output = args.output or default_output(args.workspace, args.ticker)
+    workspace: Path = args.workspace.resolve()
+    output = args.output or default_output(workspace, args.ticker)
+
+    # --excel 强制 flat（generate_excel 需要扁平 DTO）
+    flat = args.flat
+    if args.excel:
+        flat = True
 
     try:
-        if args.engine == "python":
-            # Make sibling engine package importable.
-            if str(SCRIPT_DIR) not in sys.path:
-                sys.path.insert(0, str(SCRIPT_DIR))
-            path = _run_python_engine(
-                ticker=args.ticker,
-                workspace=args.workspace,
-                output_json=output,
-                flat=args.flat,
-                fiscal_year_start=args.fiscal_year_start,
-                fiscal_year_end=args.fiscal_year_end,
-            )
-        else:
-            path = extract_segments(
-                ticker=args.ticker,
-                workspace=args.workspace,
-                output_json=output,
-                project_root=args.project_root,
-                flat=args.flat,
-                fiscal_year_start=args.fiscal_year_start,
-                fiscal_year_end=args.fiscal_year_end,
-                auto_build=args.auto_build,
-            )
+        json_path = run_python_engine(
+            ticker=args.ticker,
+            workspace=workspace,
+            output_json=output,
+            flat=flat,
+            fiscal_year_start=args.fiscal_year_start,
+            fiscal_year_end=args.fiscal_year_end,
+        )
+    except SystemExit:
+        raise  # let explicit sys.exit pass through (e.g. exit code 2 for no files)
     except Exception as e:  # noqa: BLE001
         print(f"[extract] 失败：{e.__class__.__name__}: {e}", file=sys.stderr)
         return 1
 
-    if args.print_preview:
+    if args.print_preview or args.excel:
         try:
-            data: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
-            preview = data[:5] if isinstance(data, list) else []
-            print("[extract] preview:", file=sys.stderr)
-            for row in preview:
-                print(
-                    f"  {row.get('segmentName','?')}"
-                    f" | {row.get('metricName','?')}"
-                    f" | {row.get('period','?')}"
-                    f" | {row.get('value','?')} {row.get('unit','')}",
-                    file=sys.stderr,
-                )
-            print(f"[extract] total records: {len(data) if isinstance(data, list) else '?'}", file=sys.stderr)
+            data: list[dict[str, Any]] = json.loads(json_path.read_text(encoding="utf-8"))
+            if args.print_preview:
+                preview = data[:5] if isinstance(data, list) else []
+                print("[extract] preview:", file=sys.stderr)
+                for row in preview:
+                    print(
+                        f"  {row.get('segmentName','?')}"
+                        f" | {row.get('metricName','?')}"
+                        f" | {row.get('period','?')}"
+                        f" | {row.get('value','?')} {row.get('unit','')}",
+                        file=sys.stderr,
+                    )
+                print(f"[extract] total records: {len(data) if isinstance(data, list) else '?'}",
+                      file=sys.stderr)
         except Exception:  # noqa: BLE001
             pass
 
-    # 最终把 JSON 路径写到 stdout，方便调用方（generate_segment_excel.py 或 Agent）读取
-    print(str(path))
+    if args.excel:
+        try:
+            xlsx_path = generate_excel(
+                ticker=args.ticker,
+                workspace=workspace,
+                json_path=json_path,
+                output_xlsx=args.excel_output,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[extract] Excel 生成失败：{e.__class__.__name__}: {e}", file=sys.stderr)
+            return 1
+        # --excel 模式：stdout 输出 xlsx 路径（与原先 JSON 路径协议保持一致，只是后缀变了）
+        print(str(xlsx_path))
+    else:
+        # 默认模式：stdout 输出 JSON 路径
+        print(str(json_path))
     return 0
 
 

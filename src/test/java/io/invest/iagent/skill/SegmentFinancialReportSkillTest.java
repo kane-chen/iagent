@@ -10,6 +10,7 @@ import io.invest.iagent.service.extraction.model.Segment;
 import io.invest.iagent.service.extraction.model.SegmentMetricDTO;
 import io.invest.iagent.service.extraction.service.FinancialExtractionService;
 import io.invest.iagent.service.extraction.service.SegmentMetricUtil;
+import io.invest.iagent.utils.ProcessRunner;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -116,7 +117,7 @@ public class SegmentFinancialReportSkillTest {
     private static List<SegmentMetricDTO> extractSegments(String ticker) throws Exception {
         Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
         FinancialExtractionService service = new FinancialExtractionService(ticker, workspace);
-        List<Segment> segments = service.extractFromHtmlFile(ticker, null, null);
+        List<Segment> segments = service.extractSegments(ticker, null, null);
         return SegmentMetricUtil.flattenAndSort(segments);
     }
 
@@ -161,6 +162,33 @@ public class SegmentFinancialReportSkillTest {
     public void test_tool_beke_build() throws Exception {
         List<SegmentMetricDTO> segments = extractSegments("BEKE");
         Assertions.assertNotNull(segments);
+    }
+
+    @Test
+    public void test_skill_direct_baba() throws Exception {
+        int result = this.runSkill("BABA", 100) ;
+        Assert.isTrue(result == 0, "call failed");
+    }
+
+    @Test
+    public void test_skill_direct_00700() throws Exception {
+        int result = this.runSkill("00700", 360) ;
+        Assert.isTrue(result == 0, "call failed");
+    }
+
+    private int runSkill(String ticker, int timeoutSeconds) throws Exception {
+        // workspace
+        Path projectRoot = Paths.get(System.getProperty("user.dir"));
+        Path script = projectRoot.resolve("workspace/skills/segment-financial-report/scripts/extract_segments.py");
+        Assertions.assertTrue(script.toFile().isFile(), "generate script missing at " + script);
+        // command
+        List<String> cmd = List.of(
+                "python", script.toString(),
+                "--ticker", ticker,
+                "--excel"
+        );
+        ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
+        return result.getExitCode();
     }
 
 }

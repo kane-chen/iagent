@@ -68,7 +68,7 @@ public final class SegmentExtractionCli {
 
     private static int run(Args args) throws IOException {
         FinancialExtractionService service = new FinancialExtractionService(args.ticker, args.workspace);
-        List<Segment> segments = service.extractFromHtmlFile(args.ticker, args.fiscalYearStart, args.fiscalYearEnd);
+        List<Segment> segments = service.extractSegments(args.ticker, args.fiscalYearStart, args.fiscalYearEnd);
 
         if (segments == null || segments.isEmpty()) {
             System.err.println("[cli] 未找到 " + args.ticker + " 的分部财务数据（workspace=" + args.workspace + "）");

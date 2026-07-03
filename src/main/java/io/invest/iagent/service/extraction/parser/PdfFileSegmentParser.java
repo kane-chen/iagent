@@ -3,7 +3,6 @@ package io.invest.iagent.service.extraction.parser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.invest.iagent.service.extraction.model.CompanyConfig;
-import io.invest.iagent.service.extraction.model.FinancialTable;
 import io.invest.iagent.service.extraction.model.Segment;
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,7 +47,7 @@ import java.util.regex.Pattern;
  * {@code IAGENT_PYTHON_BIN} 覆盖，默认使用 PATH 中的 {@code python}。</p>
  */
 @Slf4j
-public class PdfReportParser extends ReportParser {
+public class PdfFileSegmentParser implements FileSegmentParser {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -64,13 +63,17 @@ public class PdfReportParser extends ReportParser {
     /**
      * 工作区目录，用于定位 Python 脚本。
      */
-    private Path workspace;
+    private final Path workspace;
 
     /**
      * 当前 companyConfig 对应的 handler 池；按 layout 分发。
      * 每次 setCompanyConfig 后重建。
      */
     private Map<CompanyConfig.PdfColumnMapping.Layout, PdfLayoutHandler> handlers = new EnumMap<>(CompanyConfig.PdfColumnMapping.Layout.class);
+
+    public PdfFileSegmentParser(Path workspace) {
+        this.workspace = workspace;
+    }
 
     public void setCompanyConfig(CompanyConfig companyConfig) {
         this.companyConfig = companyConfig;
@@ -85,8 +88,19 @@ public class PdfReportParser extends ReportParser {
         this.handlers = map;
     }
 
-    public void setWorkspace(Path workspace) {
-        this.workspace = workspace;
+    @Override
+    public List<Segment> parse(File file, CompanyConfig config) throws IOException {
+        // 允许调用方传入最新 config；若与已设置的不同则重建 handler
+        if (config != null && config != this.companyConfig) {
+            setCompanyConfig(config);
+        }
+        return parseSegments(file);
+    }
+
+    @Override
+    public boolean supports(File file) {
+        if (file == null) return false;
+        return file.getName().toLowerCase().endsWith(".pdf");
     }
 
     /**
@@ -122,9 +136,6 @@ public class PdfReportParser extends ReportParser {
 
         // 表消费策略：每张表只被"一条 mapping"独占使用 —— 避免同一 (page, shape)
         // 的分部数字块被 REVENUE 和 GROSS_PROFIT 两个映射同时写入导致值互相覆盖。
-        //
-        // 遍历顺序：mapping 外 × table 内。第一条能命中该 mapping 的 table 就消费掉，
-        // 下一条 mapping 只在剩下的未消费 table 里挑选。
         Set<Integer> consumedTables = new HashSet<>();
         int totalMatched = 0;
         if (companyConfig != null && companyConfig.getPdfColumnMappings() != null) {
@@ -155,9 +166,6 @@ public class PdfReportParser extends ReportParser {
 
     /**
      * 用单条 mapping 尝试消费单张表：命中即把数据写入 segmentsByCode，返回本次产生的指标条数。
-     *
-     * 若 mapping 上开了 {@code discardValues=true}，仍然做完整的匹配和一致性校验，
-     * 但把数据写到一个丢弃桶（不返回给上层）—— 用于"占位消费掉重复同型表"的场景。
      */
     private int applySingleMapping(CompanyConfig.PdfColumnMapping mapping,
                                    JsonNode tableJson, FilingContext context,
@@ -190,7 +198,7 @@ public class PdfReportParser extends ReportParser {
             return String.join("+", mapping.getMetricCodesByRow());
         }
         if (mapping.getRowDescriptors() != null && !mapping.getRowDescriptors().isEmpty()) {
-            java.util.List<String> codes = new java.util.ArrayList<>();
+            List<String> codes = new ArrayList<>();
             for (CompanyConfig.PdfColumnMapping.RowDescriptor rd : mapping.getRowDescriptors()) {
                 if (rd.getMetricCode() != null && !rd.getMetricCode().isEmpty()) {
                     codes.add(rd.getMetricCode());
@@ -199,24 +207,6 @@ public class PdfReportParser extends ReportParser {
             return String.join("+", codes);
         }
         return "?";
-    }
-
-    /**
-     * 兼容旧接口：返回空表列表 —— PDF 路径现在直接走 {@link #parseSegments(File)}。
-     */
-    @Override
-    public List<FinancialTable> parse(File file) throws IOException {
-        return new ArrayList<>();
-    }
-
-    @Override
-    public List<FinancialTable> parseHtml(String htmlContent) {
-        return new ArrayList<>();
-    }
-
-    @Override
-    public boolean supports(String format) {
-        return "pdf".equalsIgnoreCase(format);
     }
 
     /**
@@ -355,11 +345,11 @@ public class PdfReportParser extends ReportParser {
      * 用来把 PdfColumnMapping 里的占位符（CURRENT_Q/PRIOR_Q/CURRENT_P/PRIOR_P）
      * 解析为实际的 period 字符串如 "2025Q2"。
      */
-    static final class FilingContext {
+    public static final class FilingContext {
         final int year;        // 0 表示未知
         final String period;   // H1/FY/Q1/Q2/Q3/Q4，"" 表示未知
 
-        FilingContext(int year, String period) {
+        public FilingContext(int year, String period) {
             this.year = year;
             this.period = period == null ? "" : period;
         }
@@ -369,7 +359,7 @@ public class PdfReportParser extends ReportParser {
         }
 
         /** 当期"季度"：H1 报 → Q2，FY 报 → Q4，其他保持原样 */
-        String currentQuarter() {
+        public String currentQuarter() {
             if (year <= 0) return "";
             switch (period) {
                 case "H1": return year + "Q2";
@@ -385,7 +375,7 @@ public class PdfReportParser extends ReportParser {
         }
 
         /** 上年同季 */
-        String priorQuarter() {
+        public String priorQuarter() {
             if (year <= 0) return "";
             String cur = currentQuarter();
             if (cur.length() >= 6) {
@@ -396,23 +386,21 @@ public class PdfReportParser extends ReportParser {
         }
 
         /** 当期周期（保留 H1/FY 等） */
-        String currentPeriod() {
+        public String currentPeriod() {
             if (year <= 0 || period.isEmpty()) return "";
             return year + period;
         }
 
         /** 上年同期 */
-        String priorPeriod() {
+        public String priorPeriod() {
             if (year <= 0 || period.isEmpty()) return "";
             return (year - 1) + period;
         }
 
         /**
          * 把 mapping 里的 period code 解析为具体 period 字符串。
-         * 支持占位符 CURRENT_Q / PRIOR_Q / CURRENT_P / PRIOR_P，
-         * 也支持写死的字符串如 "2025Q2"。
          */
-        String resolvePeriod(String code) {
+        public String resolvePeriod(String code) {
             if (code == null || code.isEmpty()) return "";
             switch (code) {
                 case "CURRENT_Q": return currentQuarter();

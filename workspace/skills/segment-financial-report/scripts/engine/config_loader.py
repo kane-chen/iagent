@@ -7,7 +7,14 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .model import CompanyConfig, MetricMappingRule, SegmentConfig
+from .model import (
+    CompanyConfig,
+    Layout,
+    MetricMappingRule,
+    PdfColumnMapping,
+    RowDescriptor,
+    SegmentConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,4 +67,34 @@ class CompanyConfigLoader:
                 rawMetricNames=list(rule.get("rawMetricNames") or []),
                 formula=rule.get("formula"),
             ))
+        for m in data.get("pdfColumnMappings") or []:
+            cfg.pdfColumnMappings.append(self._pdf_mapping_from_dict(m))
         return cfg
+
+    @staticmethod
+    def _pdf_mapping_from_dict(m: dict) -> PdfColumnMapping:
+        layout_str = m.get("layout", "SEGMENTS_AS_COLUMNS")
+        try:
+            layout = Layout(layout_str)
+        except ValueError:
+            layout = Layout.SEGMENTS_AS_COLUMNS
+        row_descs = []
+        for rd in m.get("rowDescriptors") or []:
+            row_descs.append(RowDescriptor(
+                metricCode=rd.get("metricCode"),
+                subSegmentCode=rd.get("subSegmentCode"),
+                abs=bool(rd.get("abs", False)),
+            ))
+        return PdfColumnMapping(
+            layout=layout,
+            columnCount=int(m.get("columnCount") or 0),
+            segmentCodes=list(m.get("segmentCodes") or []),
+            metricCodesByRow=list(m.get("metricCodesByRow") or []),
+            periodCodesByColumn=list(m.get("periodCodesByColumn") or []),
+            metricCode=m.get("metricCode"),
+            rowCount=int(m.get("rowCount") or 0),
+            filingPeriods=list(m.get("filingPeriods") or []),
+            discardValues=bool(m.get("discardValues", False)),
+            rowDescriptors=row_descs,
+            periodCode=m.get("periodCode"),
+        )

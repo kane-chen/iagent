@@ -1,8 +1,10 @@
-# 财报业务线财务数据提取系统 - MVP版本
+# 财报业务线财务数据提取系统
 
 ## 项目简介
 
-本项目用于从财报文件（HTML格式）中自动提取分业务线的财务数据，包括收入、成本、费用、经营利润、EBIT等指标。
+本项目用于从财报文件（HTML 格式的 SEC 公告 / PDF 格式的港股业绩公告）中自动提取分业务线的财务数据，包括收入、成本、费用、经营利润、EBIT 等指标。
+
+核心入口为 `FileSegmentParser` 接口：`HtmlFileSegmentParser` 处理 SEC HTML 文件，`PdfFileSegmentParser` 处理港股 PDF 文件（通过 `extract_pdf_tables.py` 多引擎表格抽取 + `PdfLayoutHandler` 策略链），上层 `FinancialExtractionService` 通过 `supports(File)` 自动分发。
 
 ## 技术栈
 
@@ -20,13 +22,13 @@ iagent/
 │   ├── main/
 │   │   ├── java/io/iagent/service/extraction/
 │   │   │   ├── model/          # 模型类
-│   │   │   ├── parser/         # 财报解析器
+│   │   │   ├── parser/         # FileSegmentParser 接口 + PDF parser + layout handlers + HtmlReportParser
 │   │   │   ├── recognizer/     # 业务线识别
 │   │   │   ├── mapper/         # 指标映射
-│   │   │   ├── extractor/      # 数据提取
+│   │   │   ├── extractor/      # HTML 策略 handler 链 + HtmlFileSegmentParser + orchestrator
 │   │   │   ├── validator/      # 质量校验
 │   │   │   ├── config/         # 配置加载
-│   │   │   └── service/        # 主服务
+│   │   │   └── service/        # FinancialExtractionService 主服务 + 文件过滤
 │   │   └── resources/
 │   │       └── extraction/config/      # 公司配置文件
 │   └── test/
@@ -88,18 +90,22 @@ java -cp "target/classes:lib/*:test-classes" org.junit.platform.console.ConsoleL
 ### 使用示例
 
 ```java
-// 1. 创建服务实例（指定公司代码）
-FinancialExtractionService service = new FinancialExtractionService("alibaba");
+// 1. 创建服务实例（指定公司代码，workspace 路径用于定位 filings 与 Python 脚本）
+Path workspace = Path.of("workspace");
+FinancialExtractionService service = new FinancialExtractionService("BABA", workspace);
 
-// 2. 从HTML文件提取数据
-File htmlFile = new File("path/to/report.html");
-List<Segment> segments = service.extractFromHtmlFile(htmlFile);
+// 2. 从单个文件提取数据（自动按扩展名分发给 HTML/PDF parser）
+File file = new File("path/to/report.html");  // 或 .pdf
+List<Segment> segments = service.extractFromFile(file);
 
-// 3. 打印结果
-service.printResults(segments);
+// 3. 批量提取（按 ticker + 财年范围过滤 workspace/portfolio/<TICKER>/filings/ 下所有文件）
+List<Segment> allSegments = service.extractSegments("BABA", "2022", "2025");
 
-// 4. 提取并校验
-FinancialExtractionService.ExtractionResult result = service.extractAndValidate(htmlFile);
+// 4. 从HTML内容字符串提取
+List<Segment> segments = service.extractFromHtmlContent(htmlContent);
+
+// 5. 提取并校验
+FinancialExtractionService.ExtractionResult result = service.extractAndValidate(file);
 ValidationResult validation = result.getValidationResult();
 System.out.println("质量评分: " + validation.getOverallScore());
 ```
@@ -165,10 +171,15 @@ System.out.println("质量评分: " + validation.getOverallScore());
 - 每个数据点附带0-100分置信度
 - 基于数据来源、解析方式、单位明确度等因素计算
 
+### 6. PDF 港股财报解析
+- 通过 `extract_pdf_tables.py` 多引擎抽取（camelot-lattice → camelot-stream → pdfplumber），最大保留列结构
+- 因港股中文字体编码乱码，采用"位置映射"策略：基于 `PdfColumnMapping` 预定义的列位置与 layout（SEGMENTS_AS_COLUMNS / SEGMENTS_AS_ROWS / SUBSEGMENT_MATRIX）把表格数据写入 Segment
+- 支持 H1/H2/FY/Q1–Q4 多种报告周期，自动解析 CURRENT_Q/PRIOR_Q/CURRENT_P/PRIOR_P 占位符
+- 单位自动归一化到 million（支持 thousand/千、billion/十亿）
+
 ## 演进路线
 
-- **MVP（当前）**：HTML财报解析，规则匹配，核心指标提取
-- **V1.0**：PDF支持，更多公司，完整质量校验
+- **V1.0（当前）**：HTML + PDF 解析，规则匹配，核心指标提取，多策略 handler 链
 - **V2.0**：LLM语义识别，自学习优化，自定义指标
 - **企业级**：分布式架构，多租户，审计日志，高可用
 

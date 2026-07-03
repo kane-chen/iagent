@@ -59,7 +59,7 @@ final class SubsegmentMatrixHandler implements PdfLayoutHandler {
     public int apply(CompanyConfig.PdfColumnMapping mapping,
                      List<List<String>> dataRows,
                      String tableId, String currency, String unit,
-                     PdfReportParser.FilingContext context,
+                     PdfFileSegmentParser.FilingContext context,
                      Map<String, Segment> sink) {
         List<String> segmentCodes = mapping.getSegmentCodes(); // 列对应的 L1 分部 code
         List<CompanyConfig.PdfColumnMapping.RowDescriptor> rowDescs = mapping.getRowDescriptors();
@@ -109,7 +109,6 @@ final class SubsegmentMatrixHandler implements PdfLayoutHandler {
                     String code = segmentCodes.get(col);
                     if (support.isSkipColumn(code)) {
                         // "SKIP"（未分配列）仍要计入合计，因为报表里未分配值也参与到 TOTAL
-                        // —— 只是我们不写入 segment 里
                     }
                     Double v = support.parseNumber(row.get(col + 1));
                     if (v == null) continue;
@@ -132,8 +131,7 @@ final class SubsegmentMatrixHandler implements PdfLayoutHandler {
             return 0;
         }
 
-        // 建立 L1 分部（segmentsByCode 用于 metric 去重去覆盖）。
-        // 对于 L2 行，我们要把数据写到 L1.children 下的 L2 分部里，且每个 L1 各有一份自己的 L2 子树。
+        // 建立 L1 分部（l1Buckets 用于本次 mapping 的 L2 子树构建，sink 是全局合并去重）。
         Map<String, Segment> l1Buckets = new LinkedHashMap<>();
 
         int produced = 0;
@@ -154,28 +152,25 @@ final class SubsegmentMatrixHandler implements PdfLayoutHandler {
 
                 Double value = support.parseNumber(rowCells.get(colIdx + 1));
                 if (value == null) continue;
-                if (desc.isAbs()) {
-                    value = Math.abs(value);
-                }
 
                 Segment l1 = l1Buckets.computeIfAbsent(l1Code,
                         code -> createSegment(code, sink));
 
                 if (subCode == null || subCode.isEmpty()) {
                     // 直接落到 L1
-                    writeMetricIfAbsent(l1, metricCode, period, value, tableId, currency, unit);
+                    support.addMetricToSegment(l1, metricCode, period, value,
+                            tableId, currency, unit, desc.isAbs());
                 } else {
                     // 落到该 L1 下的 L2 子分部
                     Segment l2 = findOrCreateChild(l1, subCode);
-                    writeMetricIfAbsent(l2, metricCode, period, value, tableId, currency, unit);
+                    support.addMetricToSegment(l2, metricCode, period, value,
+                            tableId, currency, unit, desc.isAbs());
                 }
                 produced++;
             }
         }
 
-        // 合并进 sink：sink 用于跨"多张 SUBSEGMENT_MATRIX 表"（当前 mapping 和 prior mapping）的
-        // metric/period 合并去重，也用于让 SegmentMetricUtil.merge 后续处理。
-        // 对于同一个 L1，如果 sink 已有则合并 metrics 和 children；否则放入。
+        // 合并进 sink：跨 mapping 的合并去重
         for (Map.Entry<String, Segment> e : l1Buckets.entrySet()) {
             Segment fresh = e.getValue();
             Segment existing = sink.get(e.getKey());
@@ -222,25 +217,6 @@ final class SubsegmentMatrixHandler implements PdfLayoutHandler {
         }
         parent.addChild(child);
         return child;
-    }
-
-    private void writeMetricIfAbsent(Segment segment, String metricCode, String period,
-                                     double value, String tableId, String currency, String unit) {
-        if (segment.getMetric(metricCode, period) != null) return;
-        io.invest.iagent.service.extraction.model.SegmentMetric metric =
-                new io.invest.iagent.service.extraction.model.SegmentMetric();
-        metric.setMetricCode(metricCode);
-        metric.setMetricName(metricCode);
-        // 单位归一到 million —— 与 PdfExtractionSupport.addMetric / HTML 路径 DataExtractor 一致，
-        // 避免"千元"表出来的原值（如美团分部披露的 81,517,876）与其它表 million 单位混用。
-        metric.setValue(PdfExtractionSupport.normalizeToMillion(value, unit));
-        metric.setPeriod(period);
-        metric.setSourceType("TABLE_EXTRACT");
-        metric.setSourceLocation(tableId);
-        metric.setCurrency(currency);
-        metric.setUnit("million");
-        metric.setConfidenceScore(80);
-        segment.addMetric(metric);
     }
 
     /** 把 src 的 metrics/children 并入 dst；已有 (metric,period) 或 childCode 保留 dst 的。 */

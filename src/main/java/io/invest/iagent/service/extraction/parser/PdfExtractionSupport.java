@@ -10,7 +10,7 @@ import java.util.Map;
 /**
  * PDF 分部表提取的公共工具。
  *
- * 从早期实现（{@link PdfReportParser} 单文件）里抽离出来的"与 layout 无关"的部分：
+ * 从早期实现（{@link PdfFileSegmentParser} 单文件）里抽离出来的"与 layout 无关"的部分：
  * <ul>
  *   <li>数值解析、空占位符判定</li>
  *   <li>分部表的合计行/合计列一致性校验</li>
@@ -167,10 +167,15 @@ final class PdfExtractionSupport {
      * <p>单位归一：与 HTML 抽取路径一致，所有指标最终写入前统一换算成 million。
      * 港股财报常见"千元 / thousand"表述（如美团业绩公告 page 2 的分部披露），
      * 若不做归一化，Excel/DTO 会混着 million 和 thousand，下游对比、聚合都会出错。
+     *
+     * @param abs 若为 true，写入前对 value 取绝对值（COST 类负值列常用）
      */
     void addMetric(Map<String, Segment> segmentsByCode,
                    String segCode, String metricCode, String period, double value,
-                   String tableId, String currency, String unit) {
+                   String tableId, String currency, String unit, boolean abs) {
+        if (abs) {
+            value = Math.abs(value);
+        }
         Segment segment = segmentsByCode.computeIfAbsent(segCode, code -> {
             Segment s = new Segment();
             s.setSegmentCode(code);
@@ -202,12 +207,42 @@ final class PdfExtractionSupport {
         segment.addMetric(metric);
     }
 
+    /** 无 abs 重载，默认不取绝对值。 */
+    void addMetric(Map<String, Segment> segmentsByCode,
+                   String segCode, String metricCode, String period, double value,
+                   String tableId, String currency, String unit) {
+        addMetric(segmentsByCode, segCode, metricCode, period, value, tableId, currency, unit, false);
+    }
+
     /**
-     * 数值单位归一到 million：与 {@code DataExtractor.normalizeToMillion} 语义一致。
+     * 直接往一个已存在的 Segment 写入 metric（不经过 segmentsByCode 查找/创建），
+     * 适用于 SubsegmentMatrixHandler 这种 L1/L2 分段桶场景。已有 (metricCode, period) 跳过。
+     */
+    void addMetricToSegment(Segment segment, String metricCode, String period, double value,
+                            String tableId, String currency, String unit, boolean abs) {
+        if (segment == null) return;
+        if (segment.getMetric(metricCode, period) != null) return;
+        double v = abs ? Math.abs(value) : value;
+        SegmentMetric metric = new SegmentMetric();
+        metric.setMetricCode(metricCode);
+        metric.setMetricName(metricCode);
+        metric.setValue(normalizeToMillion(v, unit));
+        metric.setPeriod(period);
+        metric.setSourceType("TABLE_EXTRACT");
+        metric.setSourceLocation(tableId);
+        metric.setCurrency(currency);
+        metric.setUnit("million");
+        metric.setConfidenceScore(80);
+        segment.addMetric(metric);
+    }
+
+    /**
+     * 数值单位归一到 million：与 {@link io.invest.iagent.service.extraction.extractor.HtmlExtractionSupport#normalizeToMillion(double, String)}
+     * 语义一致，使用 trunc-toward-zero 避免 thousand→million 在负数时 floor 偏差。
      * <ul>
      *   <li>{@code null/空/million/百万} → 保持原值</li>
-     *   <li>{@code thousand/千} → 除以 1000 后 floor</li>
-     *   <li>{@code billion/十亿} → 乘以 1000 后 floor</li>
+     *   <li>{@code thousand/千} → 除以 1000 后向零截断</li>
+     *   <li>{@code billion/十亿} → 乘以 1000 后向零截断</li>
      *   <li>其它未知 → 保持原值（假设已经是 million）</li>
      * </ul>
      */
@@ -220,12 +255,16 @@ final class PdfExtractionSupport {
             return value;
         }
         if (lower.contains("thousand") || lower.contains("千")) {
-            return Math.floor(value / 1000.0);
+            return truncTowardZero(value / 1000.0);
         }
         if (lower.contains("billion") || lower.contains("十亿") || lower.contains("十億")) {
-            return Math.floor(value * 1000.0);
+            return truncTowardZero(value * 1000.0);
         }
         return value;
+    }
+
+    private static double truncTowardZero(double v) {
+        return v < 0 ? Math.ceil(v) : Math.floor(v);
     }
 
     CompanyConfig.SegmentConfig findSegmentConfig(String segmentCode) {

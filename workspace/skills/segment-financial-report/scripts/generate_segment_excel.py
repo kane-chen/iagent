@@ -627,13 +627,14 @@ def main():
     parser.add_argument('--workspace', '-w', help='项目工作空间路径')
     args = parser.parse_args()
 
-    # 确定项目根目录
+    # 确定 workspace 根目录：
+    #   本脚本位于 workspace/skills/segment-financial-report/scripts/
+    #   → ../.. = workspace/skills/   → ../../.. = workspace/
     if args.workspace:
-        # workspace已经是workspace目录了，不需要再加一层workspace
         project_root = args.workspace
     else:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+        project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
 
     # 确保日志和输出目录存在
     logs_dir = os.path.join(project_root, 'excels', 'logs')

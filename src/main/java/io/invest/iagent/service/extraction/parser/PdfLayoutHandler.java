@@ -19,7 +19,7 @@ import java.util.Map;
  *       （SUBSEGMENT_MATRIX）</li>
  * </ul>
  *
- * 为避免 {@link PdfReportParser} 里堆积特化逻辑，把每种 layout 抽成一个 handler，
+ * 为避免 {@link PdfFileSegmentParser} 里堆积特化逻辑，把每种 layout 抽成一个 handler，
  * 公共的数值/校验/组装逻辑放在 {@link PdfExtractionSupport}。
  * 新增公司只需要：
  * <ol>
@@ -47,7 +47,7 @@ interface PdfLayoutHandler {
     int apply(CompanyConfig.PdfColumnMapping mapping,
               List<List<String>> dataRows,
               String tableId, String currency, String unit,
-              PdfReportParser.FilingContext context,
+              PdfFileSegmentParser.FilingContext context,
               Map<String, Segment> sink);
 
     /**

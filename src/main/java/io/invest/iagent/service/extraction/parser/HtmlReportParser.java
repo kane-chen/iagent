@@ -16,28 +16,23 @@ import java.util.List;
 
 /**
  * HTML财报解析器
- * 基于Jsoup解析HTML格式的财报文件
+ * 基于Jsoup解析HTML格式的财报文件，产出 {@link FinancialTable} 列表。
+ * 由 {@link io.invest.iagent.service.extraction.extractor.HtmlFileSegmentParser} 组合调用：
+ * 先 {@link #parse(File)} 得到 tables，再交给 {@code HtmlReportOrchestrator} 做策略分派。
  */
 @Slf4j
-public class HtmlReportParser extends ReportParser {
+public class HtmlReportParser {
 
-    @Override
     public List<FinancialTable> parse(File file) throws IOException {
         log.info("Parsing HTML report file: {}", file.getName());
         Document doc = Jsoup.parse(file, "UTF-8");
         return extractTables(doc);
     }
 
-    @Override
     public List<FinancialTable> parseHtml(String htmlContent) {
         log.info("Parsing HTML content, length: {}", htmlContent.length());
         Document doc = Jsoup.parse(htmlContent);
         return extractTables(doc);
-    }
-
-    @Override
-    public boolean supports(String format) {
-        return "html".equalsIgnoreCase(format) || "htm".equalsIgnoreCase(format);
     }
 
     /**

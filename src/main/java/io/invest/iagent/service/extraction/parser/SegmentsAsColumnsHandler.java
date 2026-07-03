@@ -35,7 +35,7 @@ final class SegmentsAsColumnsHandler implements PdfLayoutHandler {
     public int apply(CompanyConfig.PdfColumnMapping mapping,
                      List<List<String>> dataRows,
                      String tableId, String currency, String unit,
-                     PdfReportParser.FilingContext context,
+                     PdfFileSegmentParser.FilingContext context,
                      Map<String, Segment> sink) {
         List<String> segmentCodes = mapping.getSegmentCodes();
         List<String> metricCodes = mapping.getMetricCodesByRow();

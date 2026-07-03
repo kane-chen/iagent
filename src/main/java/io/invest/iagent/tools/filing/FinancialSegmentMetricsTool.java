@@ -46,7 +46,7 @@ public class FinancialSegmentMetricsTool {
         try {
             // 1. 获取分部数据
             service = new FinancialExtractionService(ticker,workspace);
-            List<Segment> items = service.extractFromHtmlFile(ticker, null, null);
+            List<Segment> items = service.extractSegments(ticker, null, null);
             List<SegmentMetricDTO> segments = SegmentMetricUtil.flattenAndSort(items);
             if (segments.isEmpty()) {
                 throw new RuntimeException("未找到 " + ticker + " 的分部财务数据");

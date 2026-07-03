@@ -41,8 +41,19 @@
 import sys
 import json
 import argparse
+import logging
 import re
 from pathlib import Path
+
+# ---- 噪声抑制 ----------------------------------------------------------------
+# pdfminer/playa 在处理港股嵌入字体（FlateDecode 损坏流）时会打大量
+# "Error -5 while decompressing data: incomplete or truncated stream" 到 stderr。
+# 这些是中文字体子集损坏，不影响表格文本/数字提取，把相关 logger 抬到 CRITICAL 以上。
+for _noisy in ("pdfminer", "pdfminer.psparser", "pdfminer.pdfparser",
+               "pdfminer.pdfinterp", "pdfminer.converter", "pdfminer.cmapdb",
+               "pdfplumber", "PIL", "camelot", "playa", "playa.document",
+               "playa.page", "playa.ccitt", "playa.filter", "playa.pdftypes"):
+    logging.getLogger(_noisy).setLevel(logging.CRITICAL + 1)
 
 # ---- 可选依赖 ----------------------------------------------------------------
 # 任一引擎可用即可工作，全部缺失才会报错退出。

@@ -7,6 +7,7 @@ and to keep JSON configs cross-compatible.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import List, Optional
 
 
@@ -225,6 +226,39 @@ class MetricDict:
 
 
 # ---------------------------------------------------------------------------
+# PDF column mapping — ported from CompanyConfig.PdfColumnMapping
+# ---------------------------------------------------------------------------
+class Layout(Enum):
+    SEGMENTS_AS_COLUMNS = "SEGMENTS_AS_COLUMNS"
+    SEGMENTS_AS_ROWS = "SEGMENTS_AS_ROWS"
+    SUBSEGMENT_MATRIX = "SUBSEGMENT_MATRIX"
+
+
+@dataclass
+class RowDescriptor:
+    """Port of CompanyConfig.PdfColumnMapping.RowDescriptor."""
+    metricCode: Optional[str] = None
+    subSegmentCode: Optional[str] = None
+    abs: bool = False
+
+
+@dataclass
+class PdfColumnMapping:
+    """Port of CompanyConfig.PdfColumnMapping."""
+    layout: Layout = Layout.SEGMENTS_AS_COLUMNS
+    columnCount: int = 0
+    segmentCodes: List[str] = field(default_factory=list)
+    metricCodesByRow: List[str] = field(default_factory=list)
+    periodCodesByColumn: List[str] = field(default_factory=list)
+    metricCode: Optional[str] = None
+    rowCount: int = 0
+    filingPeriods: List[str] = field(default_factory=list)
+    discardValues: bool = False
+    rowDescriptors: List[RowDescriptor] = field(default_factory=list)
+    periodCode: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
 # CompanyConfig — ported from CompanyConfig.java (nested SegmentConfig / MetricMappingRule)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -268,3 +302,4 @@ class CompanyConfig:
     htmlLayout: Optional[str] = None
     segments: List[SegmentConfig] = field(default_factory=list)
     metricMappingRules: List[MetricMappingRule] = field(default_factory=list)
+    pdfColumnMappings: List[PdfColumnMapping] = field(default_factory=list)

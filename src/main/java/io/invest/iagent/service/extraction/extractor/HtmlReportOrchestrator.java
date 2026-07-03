@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * HTML 抽取的分派入口。参照 {@code PdfReportParser.parseSegments} 的
+ * HTML 抽取的分派入口。参照 {@code PdfFileSegmentParser.parseSegments} 的
  * "table × handler" 双层循环 —— 每张表按 handler 优先级依次尝试，
  * 命中的 handler 独占该表（返回 &gt; 0 hits），其余 handler 不再看它。
  *
