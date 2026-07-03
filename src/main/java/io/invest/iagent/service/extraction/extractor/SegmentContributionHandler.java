@@ -206,73 +206,12 @@ public final class SegmentContributionHandler implements HtmlLayoutHandler {
     }
 
     /**
-     * 从表头前几行构建周期序列（复用与 DataExtractor 完全一致的语义：
-     * "For the Three Months Ended" / "For the Year Ended" + 年份列 → [year+Q?, year+FY, ...]）。
-     * 这里做一个精简版：识别 "For the Three Months Ended" → 每列一个 Q4/Q3 等；
-     * "For the Year Ended" → FY；缺省 Q4（因贝壳 Q4 press release 是最主要的目标）。
+     * 从表头前几行构建周期序列。委托给 {@link PeriodSequenceBuilder}（与
+     * {@link DataExtractor} 共用同一份 header 识别规则），只在这里指定"贝壳 Q4
+     * press release 为主要目标"这一 layout 特定的兜底后缀。
      */
     private List<String> buildPeriodSequence(FinancialTable table) {
-        List<String> out = new ArrayList<>();
-        List<TableRow> rows = table.getRows();
-        if (rows.isEmpty()) return out;
-
-        // 扫描前 3 行找 "Three Months" / "Year Ended" 分组
-        List<int[]> groups = new ArrayList<>(); // [列, suffix index]
-        List<String> suffixes = new ArrayList<>();
-        List<int[]> yearCols = new ArrayList<>(); // [列, year]
-
-        int headerEnd = Math.min(3, rows.size());
-        for (int r = 0; r < headerEnd; r++) {
-            TableRow row = rows.get(r);
-            for (int c = 0; c < row.getCells().size(); c++) {
-                String txt = row.getCells().get(c).getText();
-                if (txt == null || txt.isBlank()) continue;
-                String lo = txt.toLowerCase();
-                if (lo.contains("three month") || lo.contains("3 month")) {
-                    groups.add(new int[]{c, suffixes.size()});
-                    suffixes.add("Q4"); // 贝壳 Q4 报表默认 Q4；后续可按 filing period 精细化
-                } else if (lo.contains("year ended") || lo.contains("twelve months")
-                        || lo.contains("full year")) {
-                    groups.add(new int[]{c, suffixes.size()});
-                    suffixes.add("FY");
-                }
-                // 提取年份
-                java.util.regex.Matcher m = java.util.regex.Pattern
-                        .compile("\\b(20\\d{2})\\b").matcher(txt);
-                if (m.find()) {
-                    yearCols.add(new int[]{c, Integer.parseInt(m.group(1))});
-                }
-            }
-        }
-
-        // 没识别到分组标记：所有年份都按 Q4 处理
-        if (suffixes.isEmpty()) {
-            for (int[] yc : yearCols) out.add(yc[1] + "Q4");
-            return out;
-        }
-        // 均分：假设 (三个月列数 / 分组数) 均匀分布年份
-        int numGroups = suffixes.size();
-        int numYears = yearCols.size();
-        if (numYears == 0) return out;
-        if (numYears % numGroups == 0) {
-            int yearsPerGroup = numYears / numGroups;
-            for (int g = 0; g < numGroups; g++) {
-                String sfx = suffixes.get(g);
-                for (int y = 0; y < yearsPerGroup; y++) {
-                    out.add(yearCols.get(g * yearsPerGroup + y)[1] + sfx);
-                }
-            }
-        } else {
-            // 不均匀：按列位置就近映射
-            for (int[] yc : yearCols) {
-                String sfx = "Q4";
-                for (int[] gc : groups) {
-                    if (gc[0] <= yc[0]) sfx = suffixes.get(gc[1]);
-                    else break;
-                }
-                out.add(yc[1] + sfx);
-            }
-        }
-        return out;
+        // BEKE 的 4Q press release 为主要目标 —— 表头没识别到分组标记 / 未匹配到列时兜底 Q4。
+        return PeriodSequenceBuilder.build(table, "Q4");
     }
 }

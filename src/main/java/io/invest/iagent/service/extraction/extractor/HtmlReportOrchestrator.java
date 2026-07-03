@@ -34,13 +34,19 @@ public final class HtmlReportOrchestrator {
 
     /**
      * 便捷构造：把 support/recognizer/dataExtractor 灌给标准 handler 组合。
-     * 目前的组合：<b>SegmentContributionHandler → GenericHtmlLayoutHandler</b>。
+     * 目前的组合（按优先级）：
+     * <ol>
+     *   <li>{@link SegmentContributionHandler}（100） —— BEKE Q4 press release 三行块结构</li>
+     *   <li>{@link SegmentRowPeriodColumnHandler}（200） —— TCOM 类每行分部 × 多周期列结构</li>
+     *   <li>{@link GenericHtmlLayoutHandler}（999） —— BABA/PDD/MSFT/GOOG 等行列表兜底</li>
+     * </ol>
      */
     public static HtmlReportOrchestrator standard(HtmlExtractionSupport support,
                                                   SegmentRecognizer recognizer,
                                                   DataExtractor dataExtractor) {
         return new HtmlReportOrchestrator(List.of(
                 new SegmentContributionHandler(support, recognizer),
+                new SegmentRowPeriodColumnHandler(support),
                 new GenericHtmlLayoutHandler(dataExtractor)));
     }
 

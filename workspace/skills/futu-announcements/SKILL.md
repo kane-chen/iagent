@@ -158,7 +158,7 @@ python workspace/skills/futu-announcements/scripts/companies_registry.py PDD --p
 按优先级：
 - **b1** `filingSuffixNames` 非空 → 文件名以任一后缀（不区分大小写）结尾即接受
 - **b2** `filingSuffixNames` 为空 + 公告标题含 `10-K` / `10-Q` → 只接受 `<ticker>_<yyyymmdd>.htm`
-- **b3** `filingSuffixNames` 为空 + 公告标题含 `6-K` / `20-F` → 只接受 `*20f.htm` 或文件名含 `ex99-1`
+- **b3** `filingSuffixNames` 为空 + 公告标题含 `6-K` / `20-F` → 只接受 `*20f.htm` 或文件名匹配 `ex99[-_]?1`（覆盖 `ex99-1.htm` 和 `d<accession>dex991.htm` 两种命名）
 
 保留 `-index.htm[l]` / `-index-headers.html` 作为溯源。
 

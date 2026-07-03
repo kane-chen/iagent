@@ -196,6 +196,19 @@
       "titleKeyWords": [],
       "filingSuffixNames": [],
       "supportPeriodTypes": []
+    },
+    {
+      "ticker": "TCOM",
+      "market": "US",
+      "stockId": "78185584873871",
+      "displayName": "Trip.com",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     }
   ],
   "marketProfiles": {

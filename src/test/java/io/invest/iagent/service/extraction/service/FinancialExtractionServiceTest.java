@@ -110,7 +110,20 @@ class FinancialExtractionServiceTest {
         System.out.println(JSON.toJSONString(segments));
     }
 
-
+    @Test
+    public void extract_tcom() throws IOException {
+        File file = Paths.get(System.getProperty("user.dir")).resolve("workspace/portfolio/TCOM/filings/fil_0001193125-25-285260/d17038dex991.htm").toFile() ;
+        FinancialExtractionService service = new FinancialExtractionService("TCOM",workspace);
+        List<Segment> segments = service.extractFromHtmlFile(file) ;
+        Assertions.assertNotNull(segments);
+        System.out.println(JSON.toJSONString(segments));
+        Assertions.assertEquals(8047	,locale(segments,"Hotel").getMetric("REVENUE","2025Q3").getValue());
+        Assertions.assertEquals(6225	,locale(segments,"Hotel").getMetric("REVENUE","2025Q2").getValue());
+        Assertions.assertEquals(6802	,locale(segments,"Hotel").getMetric("REVENUE","2024Q3").getValue());
+        Assertions.assertEquals(6306	,locale(segments,"Ticket").getMetric("REVENUE","2025Q3").getValue());
+        Assertions.assertEquals(5650	,locale(segments,"Ticket").getMetric("REVENUE","2024Q3").getValue());
+        Assertions.assertEquals(1606	,locale(segments,"Tour").getMetric("REVENUE","2025Q3").getValue());
+    }
 
     @Test
     public void extract_microsoft() throws IOException {

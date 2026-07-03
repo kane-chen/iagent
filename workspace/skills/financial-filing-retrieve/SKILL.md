@@ -126,7 +126,7 @@ python workspace/skills/financial-filing-retrieve/scripts/retrieve.py \
 
 ## Agent 集成建议
 
-`companyFilingQaAgent` sysPrompt 里的 `[filing-stated cause]` 数据源改为本 skill：
+`[filing-stated cause]` 数据源统一由本 skill 提供：
 
 ```
 - financial-filing-retrieve skill (retrieve.py) → [filing-stated cause] 原文片段

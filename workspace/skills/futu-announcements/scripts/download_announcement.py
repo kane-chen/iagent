@@ -449,7 +449,9 @@ def sec_file_passes_filters(file_name: str, announcement_title: str,
     if _title_contains_any(announcement_title, ["6-K", "20-F"]):
         if fn.endswith("20f.htm") or fn.endswith("20f.html"):
             return True
-        if "ex99-1" in fn:
+        # SEC 里的 Exhibit 99.1 命名不统一：BABA/PDD/LI 用带连字符的 "ex99-1"，
+        # 但 TCOM/CTRP 之类走 "d<accession>dex991.htm"（无连字符）；两种都要覆盖。
+        if re.search(r"ex99[-_]?1(?![0-9])", fn):
             return True
 
     return False
@@ -1191,7 +1193,7 @@ def _download_one(session, cookies, ann, classified: ClassifiedFiling,
         "filingDate": ann.release_date,
         "source": "futunn",
         "sourceNoticeUrl": ann.detail_url,
-        "downloadTimestamp": dt.datetime.utcnow().isoformat() + "Z",
+        "downloadTimestamp": dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).isoformat() + "Z",
         "primaryFile": primary_info,
         "files": [p.name for p in saved_files],
     }

@@ -76,14 +76,20 @@ public class SegmentFinancialReportSkillTest {
         Assert.notNull(responseText, "question response");
     }
 
+    @Test
+    public void test_excel_tcom() {
+        String companyName = "携程";
+        Msg response = this.doExecute(companyName);
+        String responseText = Objects.requireNonNull(response).getTextContent();
+        Assert.notNull(responseText, "question response");
+    }
+
     private Msg doExecute(String ticker) {
         String template = """
                 生成公司[%s]所有分部的财务报表，
                 执行流程如下：
-                1、调用技能stock-ticker获取公司的股票代码（python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>）。
-                2、调用技能segment-financial-report生成财务报表：
-                   2a. python workspace/skills/segment-financial-report/scripts/extract_segments.py --ticker <TKR> --auto-build 得到 JSON 路径；
-                   2b. python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py <TKR> --json <上一步的 JSON 路径> 得到 Excel。
+                1、调用技能stock-ticker获取公司的股票代码。
+                2、调用技能segment-financial-report生成财务报表。
                 3、检查财务报表文件是否创建成功。
                 特别注意：
                 1、严格禁止只输出执行方式，但不去真正执行。

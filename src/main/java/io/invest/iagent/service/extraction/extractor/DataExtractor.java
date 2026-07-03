@@ -196,109 +196,13 @@ public class DataExtractor {
      *   行2: 2023 | 2024 | 2023 | 2024
      * 则返回: [2023Q3, 2024Q3, 2023QTD9, 2024QTD9]
      *
-     * 默认周期类型为传入的 defaultQuarter（如Q3）
+     * <p>算法已迁移到 {@link PeriodSequenceBuilder} 公共类；这里保留私有薄封装，
+     * 减少调用点变更 —— {@code SegmentContributionHandler} / {@code SegmentRowPeriodColumnHandler}
+     * 等 HTML layout handler 直接调 {@link PeriodSequenceBuilder#build} 复用同一份识别规则，
+     * 避免行为漂移。</p>
      */
     private List<String> buildPeriodSequence(FinancialTable table, String defaultQuarter) {
-        List<String> periodSequence = new java.util.ArrayList<>();
-
-        // 1) 扫描表头前5行，按出现顺序收集"周期分组标记"列表和"年份"列表
-        //    周期分组列表按出现位置排序 [{列, 后缀index}]
-        //    年份列表按出现位置排序 [{列, 年份}
-
-        List<int[]> groupColumns = new java.util.ArrayList<>(); // [列, 后缀index]
-        List<String> groupSuffixes = new java.util.ArrayList<>(); // suffix序列
-        List<int[]> yearColumns = new java.util.ArrayList<>(); // [列, 年份]
-
-        int headerRowEnd = Math.min(5, table.getRows().size());
-        for (int r = 0; r < headerRowEnd; r++) {
-            TableRow headerRow = table.getRows().get(r);
-            for (int c = 0; c < headerRow.getCells().size(); c++) {
-                String cellText = headerRow.getCells().get(c).getText();
-                if (cellText == null || cellText.trim().isEmpty()) {
-                    continue;
-                }
-                String lowerText = cellText.toLowerCase();
-
-                // 识别累计/季度分组标记
-                String suffix = null;
-                if (lowerText.contains("nine month") || lowerText.contains("9 month") ||
-                    lowerText.contains("nine-month") || lowerText.contains("year to date") ||
-                    lowerText.contains("ytd")) {
-                    suffix = "QTD9";
-                } else if (lowerText.contains("six month") || lowerText.contains("6 month") ||
-                           lowerText.contains("six-month")) {
-                    suffix = "QTD6";
-                } else if (lowerText.contains("year ended") || lowerText.contains("twelve months") ||
-                           lowerText.contains("12 months") || lowerText.contains("full year") ||
-                           lowerText.contains("fiscal year")) {
-                    suffix = "FY";
-                } else if (lowerText.contains("three month") || lowerText.contains("3 month") ||
-                           lowerText.contains("quarter")) {
-                    suffix = defaultQuarter;
-                }
-                if (suffix != null) {
-                    groupColumns.add(new int[]{c, groupSuffixes.size()});
-                    groupSuffixes.add(suffix);
-                }
-
-                // 提取年份
-                int year = extractYearFromText(cellText);
-                if (year > 0) {
-                    yearColumns.add(new int[]{c, year});
-                }
-            }
-        }
-
-        // 按列号升序排序
-        yearColumns.sort((a, b) -> Integer.compare(a[0], b[0]));
-        groupColumns.sort((a, b) -> Integer.compare(a[0], b[0]));
-
-        // 2) 关键算法：按出现顺序分组年份
-        //    将年份序列按顺序分组，每组的大小等于该分组下的年份数量
-        //    例如：分组数=2 (Three Months, Nine Months)，年份数=4 (2023,2024,2023,2024)
-        //    则每组有 4/2 = 2 个年份：第1组 [2023,2024]→Three Months，第2组 [2023,2024]→Nine Months
-
-        if (groupSuffixes.isEmpty()) {
-            // 没有分组标记，全部使用默认季度
-            for (int[] yc : yearColumns) {
-                periodSequence.add(yc[1] + defaultQuarter);
-            }
-            return periodSequence;
-        }
-
-        int numGroups = groupSuffixes.size();
-        int numYears = yearColumns.size();
-
-        if (numYears % numGroups == 0) {
-            // 均匀分组
-            int yearsPerGroup = numYears / numGroups;
-            for (int g = 0; g < numGroups; g++) {
-                String suffix = groupSuffixes.get(g);
-                for (int y = 0; y < yearsPerGroup; y++) {
-                    int year = yearColumns.get(g * yearsPerGroup + y)[1];
-                    periodSequence.add(year + suffix);
-                }
-            }
-        } else {
-            // 不均匀分组：按列号位置匹配（落在哪个分组列之后）
-            // 用 floorEntry 风格的匹配
-            for (int[] yc : yearColumns) {
-                int col = yc[0];
-                int year = yc[1];
-                String suffix = defaultQuarter;
-                // 找到 col 之前最近的分组标记
-                for (int[] gc : groupColumns) {
-                    if (gc[0] <= col) {
-                        suffix = groupSuffixes.get(gc[1]);
-                    } else {
-                        break;
-                    }
-                }
-                periodSequence.add(year + suffix);
-            }
-        }
-
-        return periodSequence;
+        return PeriodSequenceBuilder.build(table, defaultQuarter);
     }
 
     /**
