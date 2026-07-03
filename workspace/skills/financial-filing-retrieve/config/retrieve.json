@@ -1,10 +1,10 @@
 {
-  "backend": "milvus",
+  "backend": "ragflow",
   "resultTopK": 5,
   "vectorTopK": 50,
   "summaryCandidateMultiplier": 4,
   "ragflow": {
-    "baseUrl": "http://localhost",
+    "baseUrl": "http://localhost:9380",
     "apiKey": "ragflow-JFWPpluXcQX3uih2NII7CDxu3ieyadP4fFvRLMVVYm4",
     "datasetPrefix": "filing_kb_",
     "similarityThreshold": 0.2,
@@ -21,7 +21,7 @@
   "embedding": {
     "baseUrl": "http://localhost:11434/api/embed",
     "apiKey": "local",
-    "model": "qwen3-embedding:4b",
+    "model": "embeddinggemma:300m",
     "dimension": 2560,
     "requestTimeoutSeconds": 60
   },

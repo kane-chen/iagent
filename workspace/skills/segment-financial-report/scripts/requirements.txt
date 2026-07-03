@@ -1,4 +1,7 @@
 openpyxl>=3.1.0
+# HTML segment extraction (Stage 1 Python engine)
+beautifulsoup4>=4.12
+lxml
 # PDF 提取后端 —— 至少装一个（推荐两个都装，让脚本自动取最优结果并去重）
 pdfplumber>=0.11.0
 # camelot-py 需要 Ghostscript 作为外部依赖（lattice 模式渲染表格用），

@@ -19,16 +19,6 @@ import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.hook.AgentTraceHook;
 import io.invest.iagent.hook.DetailedTracingHook;
 import io.invest.iagent.hook.LoggingTracer;
-import io.invest.iagent.service.kb.FilingKnowledgeBaseService;
-import io.invest.iagent.service.kb.FilingPreprocessService;
-import io.invest.iagent.service.kb.backend.KnowledgeBaseBackend;
-import io.invest.iagent.service.kb.backend.MilvusKnowledgeBaseBackend;
-import io.invest.iagent.service.kb.backend.RagflowKnowledgeBaseBackend;
-import io.invest.iagent.service.kb.backend.ragflow.RagflowClient;
-import io.invest.iagent.service.kb.embedding.EmbeddingService;
-import io.invest.iagent.service.kb.embedding.ModelEmbeddingService;
-import io.invest.iagent.service.kb.vector.VectorStoreService;
-import io.invest.iagent.service.kb.vector.VectorStoreServiceByMilvus;
 import io.invest.iagent.tools.web.WebSearchTool;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,44 +51,6 @@ public class AgentConfig {
     }
 
     @Bean
-    public FilingKnowledgeBaseService filingKnowledgeBaseService() {
-        String backendType = StringUtils.lowerCase(
-                StringUtils.defaultIfBlank(applicationProperties.getKb().getBackend(), "milvus"));
-        KnowledgeBaseBackend backend = "ragflow".equals(backendType)
-                ? buildRagflowBackend()
-                : buildMilvusBackend();
-        return new FilingKnowledgeBaseService(backend);
-    }
-
-    @Bean("milvusKnowledgeBaseBackend")
-    public KnowledgeBaseBackend buildMilvusBackend() {
-        ApplicationProperties.EmbeddingProperties embeddingProps = applicationProperties.getEmbedding();
-        EmbeddingService embeddingService = new ModelEmbeddingService(
-                embeddingProps.getBaseUrl(),
-                embeddingProps.getApiKey(),
-                embeddingProps.getModel(),
-                1024);
-
-        ApplicationProperties.MilvusProperties milvusProps = applicationProperties.getMilvus();
-        String token = milvusProps.getToken().isBlank() ? null : milvusProps.getToken();
-        VectorStoreService vectorStoreService = new VectorStoreServiceByMilvus(
-                milvusProps.getEndpoint(), token, milvusProps.getCollection());
-
-        FilingPreprocessService preprocessService = new FilingPreprocessService(workspace);
-        return new MilvusKnowledgeBaseBackend(
-                preprocessService,
-                embeddingService,
-                vectorStoreService,
-                applicationProperties);
-    }
-
-    @Bean("ragflowKnowledgeBaseBackend")
-    public KnowledgeBaseBackend buildRagflowBackend() {
-        RagflowClient client = new RagflowClient(applicationProperties.getRagflow());
-        return new RagflowKnowledgeBaseBackend(workspace, client, applicationProperties);
-    }
-
-    @Bean
     public Model model() {
         return OpenAIChatModel.builder()
                 .baseUrl(applicationProperties.getLlm().getBaseUrl())
@@ -118,8 +70,6 @@ public class AgentConfig {
 
         // tool-kit
         Toolkit toolkit = new Toolkit();
-        // 财报知识库的检索走 financial-filing-retrieve skill；预处理/构建/列表/删除已从 Agent 主流程中剥离，
-        // 由 FilingKnowledgeBaseService 作为独立运维服务承担，不在此挂载。
         ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
         toolkit.registerTool(shellCommandTool);
         // skill-box
@@ -250,9 +200,8 @@ public class AgentConfig {
                                         .timeout(Duration.ofSeconds(900))
                                         .build()
                         ).build());
-        // 分部数据现在完全走 segment-financial-report skill（extract_segments.py → generate_segment_excel.py）
         // shell-command
-        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
+        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3","sh","dir"));
         toolkit.registerTool(shellCommandTool);
         SkillBox skillBox = new SkillBox(toolkit) ;
         skillBox.codeExecution()

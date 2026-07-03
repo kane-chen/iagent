@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.invest.iagent.config.ApplicationProperties.RagflowProperties;
+import io.invest.iagent.service.kb.config.KnowledgeBaseConfig.Ragflow;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -36,15 +36,15 @@ import java.util.UUID;
 @Slf4j
 public class RagflowClient {
 
-    private final RagflowProperties properties;
+    private final Ragflow properties;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public RagflowClient(RagflowProperties properties) {
+    public RagflowClient(Ragflow properties) {
         this.properties = properties;
         if (StringUtils.isBlank(properties.getApiKey())) {
-            throw new IllegalStateException("app.ragflow.api-key 未配置：请在 application.properties 里设置，"
-                    + "或用环境变量 APP_RAGFLOW_API_KEY=<你的 key> 注入");
+            throw new IllegalStateException("app.kb.ragflow.api-key 未配置：请在 application.properties 里设置，"
+                    + "或用环境变量 APP_KB_RAGFLOW_API_KEY=<你的 key> 注入");
         }
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Math.min(properties.getRequestTimeoutSeconds(), 30)))

@@ -127,7 +127,7 @@ public class FinancialFileFilter {
 
     /** SEC 6-K / 20-F 业绩发布：{@code *ex99-1.htm[l]}。 */
     private static final Pattern EX99_1_PATTERN =
-            Pattern.compile(".*ex[-_]?99[-_]1\\.htm[l]?$", Pattern.CASE_INSENSITIVE);
+            Pattern.compile(".*ex[-_]?99[-_]?1\\.htm[l]?$", Pattern.CASE_INSENSITIVE);
 
     /** US：优先取 10-K/10-Q 主文件，其次取 ex99-1 附件。两者都可能同时存在，但 10-K/10-Q 主文件即可覆盖财报正文。 */
     private List<Path> usPrimaryFiles(Path filingDir, JSONObject meta, String ticker) {

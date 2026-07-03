@@ -1,6 +1,5 @@
 package io.invest.iagent.service.kb.backend;
 
-import io.invest.iagent.config.ApplicationProperties;
 import io.invest.iagent.service.kb.model.KnowledgeBaseDocumentDTO;
 import io.invest.iagent.service.kb.FilingPreprocessService;
 import io.invest.iagent.service.kb.embedding.EmbeddingService;
@@ -36,20 +35,9 @@ public class MilvusKnowledgeBaseBackend implements KnowledgeBaseBackend {
     public MilvusKnowledgeBaseBackend(FilingPreprocessService preprocessService,
                                       EmbeddingService embeddingService,
                                       VectorStoreService vectorStoreService) {
-        this(preprocessService, embeddingService, vectorStoreService, null);
-    }
-
-    public MilvusKnowledgeBaseBackend(FilingPreprocessService preprocessService,
-                                      EmbeddingService embeddingService,
-                                      VectorStoreService vectorStoreService,
-                                      ApplicationProperties applicationProperties) {
         this.preprocessService = preprocessService;
         this.embeddingService = embeddingService;
         this.vectorStoreService = vectorStoreService;
-        // applicationProperties 目前仅在 retrieve 链路使用，本类已移除该链路；保留构造签名以便调用方不改。
-        // 若后续 build / preprocess 需要读取配置，可复用该字段。
-        @SuppressWarnings("unused")
-        ApplicationProperties unused = applicationProperties;
     }
 
     @Override

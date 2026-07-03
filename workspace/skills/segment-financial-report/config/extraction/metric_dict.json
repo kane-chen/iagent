@@ -1,0 +1,72 @@
+[
+  {
+    "metricCode": "REVENUE",
+    "metricName": "营业收入",
+    "metricCategory": "REVENUE",
+    "isStandard": true,
+    "synonyms": ["Revenue", "Revenues", "收入", "营业收入", "营收", "营业额", "销售收入"]
+  },
+  {
+    "metricCode": "COST_OF_REVENUE",
+    "metricName": "营业成本",
+    "metricCategory": "COST",
+    "isStandard": true,
+    "synonyms": ["Cost of revenue", "Cost of revenues", "营业成本", "销售成本", "成本"]
+  },
+  {
+    "metricCode": "GROSS_PROFIT",
+    "metricName": "毛利润",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["Gross profit", "Gross Profit", "毛利", "毛利润"]
+  },
+  {
+    "metricCode": "OPERATING_EXPENSES",
+    "metricName": "运营费用",
+    "metricCategory": "EXPENSE",
+    "isStandard": true,
+    "synonyms": ["Operating expenses", "Operating Expenses", "运营费用", "营业费用", "经营费用", "运营开支"]
+  },
+  {
+    "metricCode": "RD_EXPENSES",
+    "metricName": "研发费用",
+    "metricCategory": "EXPENSE",
+    "isStandard": true,
+    "synonyms": ["Research and development", "R&D expenses", "研发费用", "研究与开发费用"]
+  },
+  {
+    "metricCode": "OPERATING_INCOME",
+    "metricName": "经营利润",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["Operating income", "Operating Income", "Income from operations", "经营利润", "营业利润", "经营收益", "营业收益"]
+  },
+  {
+    "metricCode": "EBIT",
+    "metricName": "息税前利润",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["EBIT", "Earnings Before Interest and Tax", "息税前利润"]
+  },
+  {
+    "metricCode": "EBITDA",
+    "metricName": "息税折旧摊销前利润",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["EBITDA", "Earnings Before Interest, Taxes, Depreciation and Amortization", "息税折旧摊销前利润"]
+  },
+  {
+    "metricCode": "ADJUSTED_EBITA",
+    "metricName": "调整后EBITA",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["Adjusted EBITA", "adjusted EBITA", "调整后EBITA", "经调整EBITA"]
+  },
+  {
+    "metricCode": "NET_INCOME",
+    "metricName": "净利润",
+    "metricCategory": "PROFIT",
+    "isStandard": true,
+    "synonyms": ["Net income", "Net Income", "Net profit", "净利润", "净收益"]
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "companyCode": "NVDA",
+  "companyName": "NVDA Inc.",
+  "market": "NASDAQ",
+  "defaultCurrency": "USD",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4","FY"],
+  "segments": [
+    {
+      "segmentCode": "Compute_Networking",
+      "segmentName": "Compute & Networking",
+      "aliases": ["Compute & Networking", "计算及网络"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "Graphics",
+      "segmentName": "Graphics",
+      "aliases": ["Graphics", "图形显卡"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenues", "Revenue", "收入"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating Income","Operating income (loss):", "经营利润", "营业利润"]
+    }
+  ]
+}

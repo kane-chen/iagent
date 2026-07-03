@@ -122,6 +122,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--ticker", required=True, help="股票代码，例如 BABA / 00700 / PDD")
     parser.add_argument(
+        "--engine",
+        choices=["java", "python"],
+        default="java",
+        help="提取引擎：java=旧的 Java CLI 子进程；python=本地 Python 端口（HTML only, Stage 1）。默认 java 保持零回归。",
+    )
+    parser.add_argument(
         "--workspace",
         type=Path,
         default=WORKSPACE_DIR,
@@ -172,21 +178,137 @@ def default_output(workspace: Path, ticker: str) -> Path:
     return workspace / "temp" / f"{ticker}_segments_{ts}.json"
 
 
+def _run_python_engine(ticker: str,
+                       workspace: Path,
+                       output_json: Path,
+                       flat: bool,
+                       fiscal_year_start: str | None,
+                       fiscal_year_end: str | None) -> Path:
+    """Stage 1 Python engine: HTML only. Mirrors the Java CLI outputs."""
+    # Import locally so java-only invocations don't pay the bs4 import cost.
+    from engine.extraction_service import FinancialExtractionService  # type: ignore
+    from engine.model import Segment, SegmentMetric  # noqa: F401
+
+    # Best-effort file discovery — mirror the Java FinancialFileFilter behaviour
+    # for HTML-only US filings under portfolio/<TICKER>/filings/*/.
+    import json as _json
+
+    filings_dir = workspace / "portfolio" / ticker.upper() / "filings"
+    if not filings_dir.is_dir():
+        raise FileNotFoundError(f"No filings dir for {ticker}: {filings_dir}")
+
+    svc = FinancialExtractionService(companyCode=ticker, workspace=workspace)
+
+    all_segments = []
+    for filing_dir in sorted(p for p in filings_dir.iterdir() if p.is_dir()):
+        meta_file = filing_dir / "meta.json"
+        if not meta_file.exists():
+            continue
+        try:
+            meta = _json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        fiscal_year = str(meta.get("fiscalYear") or meta.get("fiscal_year") or "")
+        if fiscal_year_start and fiscal_year and fiscal_year_start > fiscal_year:
+            continue
+        if fiscal_year_end and fiscal_year and fiscal_year_end < fiscal_year:
+            continue
+        # gather candidate HTML files
+        for candidate in filing_dir.glob("*.htm*"):
+            name = candidate.name.lower()
+            if name.endswith(("-index.html", "-index-headers.html")):
+                continue
+            try:
+                all_segments.extend(svc.extractFromHtmlFile(candidate))
+            except NotImplementedError:
+                continue  # skip PDF
+
+    def _seg_to_dict(seg):
+        return {
+            "segmentCode": seg.segmentCode,
+            "segmentName": seg.segmentName,
+            "level": seg.level,
+            "sortOrder": seg.sortOrder,
+            "metrics": [
+                {
+                    "metricCode": m.metricCode,
+                    "metricName": m.metricName,
+                    "value": m.value,
+                    "period": m.period,
+                    "currency": m.currency,
+                    "unit": m.unit,
+                    "sourceType": m.sourceType,
+                    "sourceLocation": m.sourceLocation,
+                    "confidenceScore": m.confidenceScore,
+                }
+                for m in seg.metrics
+            ],
+            "children": [_seg_to_dict(c) for c in seg.children],
+        }
+
+    if flat:
+        # Flatten depth-first, one entry per (segment, metric)
+        payload = []
+        def _walk(seg, parent_code):
+            for m in seg.metrics:
+                payload.append({
+                    "segmentCode": seg.segmentCode,
+                    "segmentName": seg.segmentName,
+                    "level": seg.level,
+                    "parentSegmentCode": parent_code,
+                    "metricCode": m.metricCode,
+                    "metricName": m.metricName,
+                    "value": m.value,
+                    "period": m.period,
+                    "currency": m.currency,
+                    "unit": m.unit,
+                    "sourceType": m.sourceType,
+                    "sourceLocation": m.sourceLocation,
+                    "confidenceScore": m.confidenceScore,
+                })
+            for c in seg.children:
+                _walk(c, seg.segmentCode)
+        for s in all_segments:
+            _walk(s, None)
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(_json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        output_json.parent.mkdir(parents=True, exist_ok=True)
+        output_json.write_text(
+            _json.dumps([_seg_to_dict(s) for s in all_segments], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    return output_json
+
+
 def main() -> int:
     args = parse_args()
     output = args.output or default_output(args.workspace, args.ticker)
 
     try:
-        path = extract_segments(
-            ticker=args.ticker,
-            workspace=args.workspace,
-            output_json=output,
-            project_root=args.project_root,
-            flat=args.flat,
-            fiscal_year_start=args.fiscal_year_start,
-            fiscal_year_end=args.fiscal_year_end,
-            auto_build=args.auto_build,
-        )
+        if args.engine == "python":
+            # Make sibling engine package importable.
+            if str(SCRIPT_DIR) not in sys.path:
+                sys.path.insert(0, str(SCRIPT_DIR))
+            path = _run_python_engine(
+                ticker=args.ticker,
+                workspace=args.workspace,
+                output_json=output,
+                flat=args.flat,
+                fiscal_year_start=args.fiscal_year_start,
+                fiscal_year_end=args.fiscal_year_end,
+            )
+        else:
+            path = extract_segments(
+                ticker=args.ticker,
+                workspace=args.workspace,
+                output_json=output,
+                project_root=args.project_root,
+                flat=args.flat,
+                fiscal_year_start=args.fiscal_year_start,
+                fiscal_year_end=args.fiscal_year_end,
+                auto_build=args.auto_build,
+            )
     except Exception as e:  # noqa: BLE001
         print(f"[extract] 失败：{e.__class__.__name__}: {e}", file=sys.stderr)
         return 1

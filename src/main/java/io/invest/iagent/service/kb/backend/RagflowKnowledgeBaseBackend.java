@@ -3,13 +3,11 @@ package io.invest.iagent.service.kb.backend;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.invest.iagent.config.ApplicationProperties;
-import io.invest.iagent.config.ApplicationProperties.RagflowProperties;
+import io.invest.iagent.service.kb.config.KnowledgeBaseConfig.Ragflow;
 import io.invest.iagent.service.kb.model.KnowledgeBaseDocumentDTO;
 import io.invest.iagent.utils.WorkspacePaths;
 import io.invest.iagent.service.kb.backend.ragflow.RagflowClient;
 import io.invest.iagent.service.kb.backend.ragflow.RagflowClientException;
-import io.invest.iagent.service.kb.model.KnowledgeBaseChunkDTO;
 import io.invest.iagent.service.kb.model.KnowledgeBaseOperationResult;
 import io.invest.iagent.service.kb.util.FilingSourceSelector;
 import lombok.extern.slf4j.Slf4j;
@@ -30,7 +28,7 @@ import java.util.Map;
  * 与 {@link MilvusKnowledgeBaseBackend} 的关键差异：
  * <ul>
  *   <li>Chunk 与 Embedding 由 RAGFlow 侧完成，本项目不再走 {@code FilingPreprocessService} 的切分/向量化流程</li>
- *   <li>Dataset 按 ticker 隔离：{@code app.ragflow.dataset-prefix + ticker}</li>
+ *   <li>Dataset 按 ticker 隔离：{@code app.kb.ragflow.dataset-prefix + ticker}</li>
  *   <li>每份财报作为一个 document 上传（复用 {@link FilingSourceSelector} 挑选主文件），
  *       并把 form_type、fiscal_year、filing_date、category、source_fingerprint 写入文档 meta_fields，
  *       供检索侧过滤</li>
@@ -53,20 +51,20 @@ public class RagflowKnowledgeBaseBackend implements KnowledgeBaseBackend {
 
     private final Path workspace;
     private final RagflowClient client;
-    private final RagflowProperties properties;
+    private final Ragflow properties;
     private final FilingSourceSelector sourceSelector;
 
     public RagflowKnowledgeBaseBackend(Path workspace, RagflowClient client,
-                                       ApplicationProperties applicationProperties) {
-        this(workspace, client, applicationProperties, new FilingSourceSelector());
+                                       Ragflow ragflowProperties) {
+        this(workspace, client, ragflowProperties, new FilingSourceSelector());
     }
 
     public RagflowKnowledgeBaseBackend(Path workspace, RagflowClient client,
-                                       ApplicationProperties applicationProperties,
+                                       Ragflow ragflowProperties,
                                        FilingSourceSelector sourceSelector) {
         this.workspace = workspace;
         this.client = client;
-        this.properties = applicationProperties.getRagflow();
+        this.properties = ragflowProperties;
         this.sourceSelector = sourceSelector;
     }
 

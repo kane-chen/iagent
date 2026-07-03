@@ -1,0 +1,90 @@
+{
+  "companyCode": "BABA",
+  "companyName": "Alibaba Group",
+  "market": "NYSE",
+  "defaultCurrency": "RMB",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4"],
+  "segments": [
+    {
+      "segmentCode": "TAOBAO_TMALL",
+      "segmentName": "Taobao and Tmall Group",
+      "aliases": ["淘宝天猫", "淘天集团", "Taobao & Tmall", "Taobao and Tmall","Alibaba China E-commerce Group","China commerce"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "CHINA_COMMERCE_RETAIL",
+      "segmentName": "China commerce retail",
+      "aliases": ["中国商业零售","E-commerce","China commerce retail"],
+      "level": 2,
+      "parentCode": "TAOBAO_TMALL"
+    },
+    {
+      "segmentCode": "CUSTOMER_MANAGEMENT",
+      "segmentName": "Customer management",
+      "aliases": ["客户管理","Customer management","Customer management"],
+      "level": 3,
+      "parentCode": "CHINA_COMMERCE_RETAIL"
+    },
+    {
+      "segmentCode": "QUICK_COMMERCE",
+      "segmentName": "Quick commerce",
+      "aliases": ["即时零售","Quick commerce"],
+      "level": 3,
+      "parentCode": "CHINA_COMMERCE_RETAIL"
+    },
+    {
+      "segmentCode": "DIRECT_SALES",
+      "segmentName": "Direct sales and others",
+      "aliases": ["直销及其他"," Direct sales, logistics and others"," Direct sales and others"],
+      "level": 3,
+      "parentCode": "CHINA_COMMERCE_RETAIL"
+    },
+    {
+      "segmentCode": "CHINA_COMMERCE_WHOLESALE",
+      "segmentName": "China commerce wholesale",
+      "aliases": ["中国商业批发","China commerce wholesale"],
+      "level": 2,
+      "parentCode": "TAOBAO_TMALL"
+    },
+    {
+      "segmentCode": "INTERNATIONAL_DIGITAL_COMMERCE",
+      "segmentName": "International Digital Commerce Group",
+      "aliases": ["国际数字商业", "国际电商", "AIDC","Alibaba International Digital Commerce Group","International commerce"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "INTERNATIONAL_COMMERCE_RETAIL",
+      "segmentName": "International commerce retail",
+      "aliases": ["国际商业零售","International commerce retail"],
+      "level": 2,
+      "parentCode": "INTERNATIONAL_DIGITAL_COMMERCE"
+    },
+    {
+      "segmentCode": "INTERNATIONAL_COMMERCE_WHOLESALE",
+      "segmentName": "International commerce wholesale",
+      "aliases": ["国际商业批发","International commerce wholesale"],
+      "level": 2,
+      "parentCode": "INTERNATIONAL_DIGITAL_COMMERCE"
+    },
+    {
+      "segmentCode": "CLOUD_INTELLIGENCE",
+      "segmentName": "Cloud Intelligence Group",
+      "aliases": ["云智能", "阿里云", "Alibaba Cloud", "Cloud"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenue", "Revenues", "收入", "营业收入", "营收"]
+    },
+    {
+      "standardMetricCode": "ADJUSTED_EBITA",
+      "rawMetricNames": ["Adjusted EBITA", "调整后EBITA", "经调整EBITA"]
+    }
+  ]
+}

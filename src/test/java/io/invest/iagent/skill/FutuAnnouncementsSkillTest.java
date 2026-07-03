@@ -112,26 +112,16 @@ public class FutuAnnouncementsSkillTest {
 
     @Test
     public void test_direct_tcom() throws Exception {
-        int result = runDownloadSkill("TCOM", "2025,2026", 200);
+        int result = runDownloadSkill("TCOM", "2023,2024,2025", 200);
         Assertions.assertEquals(0,result);
     }
 
-    /**
-     * 直接调用 futu-announcements skill 的 CLI，不经过大模型。
-     * <ul>
-     *   <li>ticker：股票代码（支持逗号分隔多股）</li>
-     *   <li>fiscalYears：逗号分隔的财年白名单，例如 {@code "2024,2025,2026"}</li>
-     *   <li>timeoutSeconds：外部进程超时时间</li>
-     * </ul>
-     * 返回 {@link ProcessRunner.Result}（exitCode + 完整 stdout/stderr）；stdout/stderr 已经透传到测试日志。
-     */
-    private int runDownloadSkill(String ticker, String fiscalYears, int timeoutSeconds)
-            throws Exception {
-        // 项目根目录 = 当前工作目录（Maven test 运行时是 project.basedir）
+    private int runDownloadSkill(String ticker, String fiscalYears, int timeoutSeconds) throws Exception {
+        // workspace
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/futu-announcements/scripts/download_announcement.py");
         Assertions.assertTrue(script.toFile().isFile(), "download script missing at " + script);
-
+        // command
         List<String> cmd = List.of(
                 "python", script.toString(),
                 "--ticker", ticker,
@@ -146,12 +136,12 @@ public class FutuAnnouncementsSkillTest {
         String template = """
                 下载公司[%s]从%s至%s的财务报表，
                 执行流程如下：
-                1、调用技能stock-ticker获取公司的股票代码（python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>）。
-                2、调用技能futu-announcements下载财报文件，注意：直接按照skill.md调用方式执行即可。
+                1、调用技能stock-ticker获取公司的股票代码。
+                2、调用技能futu-announcements下载财报文件。
                 特别注意：
                 1、严格禁止只输出执行方式，但不去真正执行。
                 2、严格禁止不通过stock-ticker技能获取股票代码。
-                3、严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
+                3、调用技能时，直接按照skill.md调用方式执行即可。严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
                 """;
 
         Msg qaMsg = this.buildUserMsg(String.format(template, companyName, fiscalYearStart,fiscalYearEnd));
