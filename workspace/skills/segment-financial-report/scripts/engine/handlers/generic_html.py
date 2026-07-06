@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GenericHtmlLayoutHandler — fallback that delegates to DataExtractor.
-
-Ported from io.invest.iagent.service.extraction.extractor.GenericHtmlLayoutHandler.
-"""
+"""GenericHtmlLayoutHandler：通用兜底 handler，委托给 DataExtractor。"""
 from __future__ import annotations
 
 from typing import Dict, List, Optional

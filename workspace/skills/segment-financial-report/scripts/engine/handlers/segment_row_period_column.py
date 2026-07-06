@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SegmentRowPeriodColumnHandler — TCOM row=segment × col=period layout.
-
-Ported from io.invest.iagent.service.extraction.extractor.SegmentRowPeriodColumnHandler.
-"""
+"""SegmentRowPeriodColumnHandler：TCOM 行=segment × 列=period 布局。"""
 from __future__ import annotations
 
 import logging

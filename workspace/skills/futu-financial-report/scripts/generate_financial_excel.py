@@ -521,6 +521,53 @@ def get_unit_config(reports):
     return unit_name, divisor, currency_code, currency_info
 
 
+# ─────────────────────────────────────────────────────────────
+# 错误类型
+# ─────────────────────────────────────────────────────────────
+
+class FetchError(Exception):
+    """获取财务数据失败，带用户可读的错误信息和修复建议。"""
+    def __init__(self, message, hint=None, log_detail=None):
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+        self.log_detail = log_detail
+
+    def user_message(self):
+        parts = [f"ERROR: {self.message}"]
+        if self.hint:
+            parts.append(f"提示: {self.hint}")
+        return "\n".join(parts)
+
+
+def validate_stock_code(stock_code):
+    """校验股票代码格式，返回 (ok, error_message)。"""
+    if not stock_code or not stock_code.strip():
+        return False, "股票代码不能为空"
+    code = stock_code.strip()
+    if '.' not in code:
+        return False, (
+            f"股票代码格式错误: '{code}'。必须包含市场前缀和代码，用点号分隔。\n"
+            f"正确格式示例：US.BABA（美股）、HK.00700（港股）、SH.600519（沪市A股）、SZ.000001（深市A股）\n"
+            f"提示: 可用 stock-ticker skill 按公司名查股票代码，如 "
+            f"`python workspace/skills/stock-ticker/scripts/search_ticker.py --company 腾讯`"
+        )
+    prefix, suffix = code.split('.', 1)
+    prefix_upper = prefix.upper()
+    if prefix_upper not in ('US', 'HK', 'SH', 'SZ'):
+        return False, (
+            f"不支持的市场前缀: '{prefix}'。支持的市场：US（美股）、HK（港股）、SH（沪市）、SZ（深市）。\n"
+            f"正确格式示例：US.BABA / HK.00700 / SH.600519 / SZ.000001"
+        )
+    if not suffix or not suffix.strip():
+        return False, f"股票代码缺失: '{code}'。点号后必须是股票代码，如 US.BABA 而非 US."
+    if prefix_upper in ('HK',) and not suffix.isdigit():
+        return False, f"港股代码必须是纯数字，如 HK.00700，收到 '{suffix}'"
+    if prefix_upper in ('SH', 'SZ') and not suffix.isdigit():
+        return False, f"A股代码必须是纯数字，如 SH.600519，收到 '{suffix}'"
+    return True, None
+
+
 def get_financial_data_with_structure(stock_code, statement_type, num=16, logger=None):
     """从富途API获取财务数据及字段结构
 
@@ -532,6 +579,9 @@ def get_financial_data_with_structure(stock_code, statement_type, num=16, logger
           因此用 11 才能拿到 Q6（半年报）与 Q9（三季报）；若继续用 10 会导致 Q2/Q3 全空、
           Excel 只剩 Q1 和 FY。
     - 资产负债表/现金流量表：7 = 年报（时点/年度快照）
+
+    Raises:
+        FetchError: 带用户可读信息的错误
     """
     st_code = STATEMENT_TYPES[statement_type][0]
 
@@ -546,13 +596,20 @@ def get_financial_data_with_structure(stock_code, statement_type, num=16, logger
         msg = {7: '年报', 9: '单季报组合', 10: '单季报+年报', 11: '累计季报（Q1/Q6/Q9/年报）'}
         logger.info(f"使用 financial_type={financial_type} ({msg.get(financial_type, '未知')})")
 
-    try:
-        # 设置 PYTHONPATH 以找到 common 模块（在 futuapi/scripts 目录下）
-        skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        futuapi_scripts_dir = os.path.normpath(os.path.join(skill_dir, "..", "futuapi", "scripts"))
-        env = os.environ.copy()
-        env['PYTHONPATH'] = futuapi_scripts_dir
+    # 设置 PYTHONPATH 以找到 common 模块（在 futuapi/scripts 目录下）
+    skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    futuapi_scripts_dir = os.path.normpath(os.path.join(skill_dir, "..", "futuapi", "scripts"))
+    env = os.environ.copy()
+    env['PYTHONPATH'] = futuapi_scripts_dir
 
+    # 检查 futuapi 脚本是否存在
+    if not os.path.isfile(FUTUAPI_SCRIPT):
+        raise FetchError(
+            f"futuapi 脚本不存在: {FUTUAPI_SCRIPT}",
+            hint="请确认 workspace/skills/futuapi/scripts/quote/get_financials_statements.py 文件完整"
+        )
+
+    try:
         result = subprocess.run(
             [PYTHON_EXE, FUTUAPI_SCRIPT, stock_code,
              "--statement-type", str(st_code),
@@ -563,34 +620,123 @@ def get_financial_data_with_structure(stock_code, statement_type, num=16, logger
             timeout=120,
             env=env
         )
+    except subprocess.TimeoutExpired:
+        raise FetchError(
+            f"获取 {stock_code} 财务数据超时（120秒）",
+            hint="可能是 Futu OpenD 无响应或网络问题，请检查 OpenD 是否正常运行，或稍后重试",
+        )
+    except FileNotFoundError as e:
+        raise FetchError(
+            f"Python 解释器不存在或 futuapi 脚本无法执行",
+            hint=f"错误详情: {e}"
+        )
 
-        # 用bytes模式读取，避免Windows编码问题
-        content = result.stdout.decode('utf-8', errors='ignore')
+    stdout_text = result.stdout.decode('utf-8', errors='ignore')
+    stderr_text = result.stderr.decode('utf-8', errors='ignore') if result.stderr else ""
 
-        json_start = content.find('{"code"')
-        if json_start == -1:
-            return None, None
+    if logger:
+        if stderr_text:
+            logger.info(f"futuapi stderr: {stderr_text[:2000]}")
+        logger.info(f"futuapi returncode={result.returncode}")
 
-        json_end = content.rfind('}')
-        if json_end == -1:
-            return None, None
+    # 检查子进程返回码
+    if result.returncode != 0:
+        # 尝试从 stderr 中提取关键信息
+        stderr_lower = stderr_text.lower()
+        if 'connect' in stderr_lower or 'refused' in stderr_lower or '11111' in stderr_text or 'opend' in stderr_lower:
+            raise FetchError(
+                f"无法连接 Futu OpenD（获取 {stock_code} 数据失败）",
+                hint="请确认 Futu OpenD 已启动并登录，默认监听 127.0.0.1:11111。"
+                     "可运行 `python workspace/skills/futuapi/check_env.py` 检查环境"
+            )
+        if 'no data' in stderr_lower or 'retcode' in stderr_lower and '0,' not in stderr_text:
+            raise FetchError(
+                f"股票 {stock_code} 无财务数据返回",
+                hint=f"请检查代码是否正确，或该股票在富途是否有对应报表数据。stderr: {stderr_text[:500]}"
+            )
+        raise FetchError(
+            f"获取 {stock_code} 财务数据失败（exit code {result.returncode}）",
+            hint=f"错误详情见日志文件。stderr: {stderr_text[:300]}" if stderr_text else "可能是代码格式错误或 OpenD 未登录",
+            log_detail=stderr_text
+        )
 
-        json_str = content[json_start:json_end + 1]
-        try:
-            data = json.loads(json_str)
-        except json.JSONDecodeError:
-            return None, None
+    # 用bytes模式读取，避免Windows编码问题
+    content = stdout_text
 
-        structure_list = data['data']['structure_list']
-        report_list = data['data']['report_list']
+    # 如果 stdout 中包含错误信息但没有 JSON，给出具体提示
+    json_start = content.find('{"code"')
+    if json_start == -1:
+        # 尝试从内容中识别错误
+        content_lower = content.lower()
+        if 'error' in content_lower or 'traceback' in content_lower:
+            raise FetchError(
+                f"获取 {stock_code} 财务数据返回异常",
+                hint=f"API 返回了错误信息。stdout 摘要: {content[:500]}",
+                log_detail=content
+            )
+        if not content.strip():
+            raise FetchError(
+                f"获取 {stock_code} 财务数据返回为空",
+                hint="请检查 OpenD 是否正常运行、股票代码是否正确"
+            )
+        raise FetchError(
+            f"无法解析 {stock_code} 的 API 返回数据（未找到 JSON 响应）",
+            hint=f"返回内容前200字符: {content[:200]}"
+        )
 
-        # 构建 field_id -> 显示名 的映射
-        name_map = {e['field_id']: e['display_name'] or f"字段{e['field_id']}" for e in structure_list}
+    json_end = content.rfind('}')
+    if json_end == -1:
+        raise FetchError(f"API 返回 JSON 不完整", hint="可能是网络中断或接口异常，请重试")
 
-        return report_list, name_map
+    json_str = content[json_start:json_end + 1]
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise FetchError(
+            f"API 返回 JSON 解析失败: {e}",
+            hint=f"JSON 片段: {json_str[:200]}"
+        )
 
-    except Exception as e:
-        return None, None
+    # 检查返回码
+    ret_code = data.get('code', -1)
+    ret_msg = data.get('msg', '')
+    if ret_code != 0:
+        if 'no permission' in ret_msg.lower() or 'permission' in ret_msg.lower():
+            raise FetchError(
+                f"无权限获取 {stock_code} 的财务数据（富途返回: {ret_msg}）",
+                hint="请确认富途账号已登录且有该市场行情权限（港股/A股/美股可能需要相应权限包）"
+            )
+        raise FetchError(
+            f"API 返回错误 (code={ret_code}): {ret_msg}",
+            hint="可能是代码错误、停牌、或接口限流，请检查代码格式后重试"
+        )
+
+    data_section = data.get('data', {})
+    structure_list = data_section.get('structure_list')
+    report_list = data_section.get('report_list')
+
+    if not report_list:
+        raise FetchError(
+            f"股票 {stock_code} 无财报数据返回",
+            hint=(
+                "可能原因：\n"
+                "  1. 股票代码错误或市场前缀错误（如把美股 BABA 写成 HK.BABA）\n"
+                "  2. 该股票尚未发布任何财报（如新股/SPAC）\n"
+                "  3. 请用 stock-ticker skill 确认代码："
+                " `python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>`"
+            )
+        )
+
+    if not structure_list:
+        raise FetchError(
+            f"股票 {stock_code} 的财报无字段结构信息",
+            hint="该股票可能使用了不支持的报表格式，请检查是否为标准上市公司财报"
+        )
+
+    # 构建 field_id -> 显示名 的映射
+    name_map = {e['field_id']: e['display_name'] or f"字段{e['field_id']}" for e in structure_list}
+
+    return report_list, name_map
 
 
 def convert_quarter_label(raw_label):
@@ -1002,85 +1148,139 @@ def main():
     logger = setup_logging(log_file)
 
     # ── Start processing ──
-    if original_code != normalized_code:
-        log_stdout(f">>> Stock code normalized: {original_code} → {normalized_code}")
-    log_stdout(f">>> Processing {normalized_code} ({statement_name})")
+    try:
+        if original_code != normalized_code:
+            log_stdout(f">>> Stock code normalized: {original_code} → {normalized_code}")
+        log_stdout(f">>> Processing {normalized_code} ({statement_name})")
 
-    # 1. 确定市场和字段配置
-    market_type = get_market_type(normalized_code)
-    logger.info(f"市场类型: {market_type}, 报表类型: {statement_name}")
+        # 0. 前置校验：股票代码格式
+        ok, err = validate_stock_code(normalized_code)
+        if not ok:
+            log_stdout(f"ERROR: {err}")
+            return 1
 
-    # 根据市场类型选择字段配置
-    if market_type == 'a_share':
-        base_fields = A_SHARE_FIELDS.get(args.type, [])
-        expense_items = EXPENSE_ITEMS_MAP['a_share'] if args.type == 'income' else None
-        ratio_config = A_SHARE_RATIO_CONFIG
-    elif market_type == 'hk':
-        base_fields = HK_FIELDS.get(args.type, [])
-        expense_items = EXPENSE_ITEMS_MAP['hk'] if args.type == 'income' else None
-        ratio_config = HK_RATIO_CONFIG
-    else:  # US
-        base_fields = US_FIELDS.get(args.type, [])
-        expense_items = EXPENSE_ITEMS_MAP['us'] if args.type == 'income' else None
-        ratio_config = US_RATIO_CONFIG
+        # 检查 openpyxl 依赖（提前报错，不要等数据拉完才说）
+        if not HAS_OPENPYXL:
+            log_stdout(
+                "ERROR: 缺少 openpyxl 依赖，无法生成 Excel。\n"
+                "提示: 请运行 `pip install openpyxl>=3.1.0` 安装，"
+                "完整依赖: `pip install -r workspace/skills/futu-financial-report/scripts/requirements.txt`"
+            )
+            return 1
 
-    # 2. 获取数据（带字段结构）
-    reports, name_map = get_financial_data_with_structure(normalized_code, args.type, args.num, logger)
+        # 1. 确定市场和字段配置
+        market_type = get_market_type(normalized_code)
+        logger.info(f"市场类型: {market_type}, 报表类型: {statement_name}")
 
-    if not reports or not name_map:
-        log_stdout(f"ERROR: Failed to get data reports={reports} name_map={name_map}")
+        if market_type == 'hk_us':
+            log_stdout(
+                f"ERROR: 无法识别股票代码 '{normalized_code}' 所属市场。\n"
+                f"提示: 代码必须以 US./HK./SH./SZ. 开头，例如 US.BABA、HK.00700、SH.600519。\n"
+                f"可用 stock-ticker 查代码: `python workspace/skills/stock-ticker/scripts/search_ticker.py --company <公司名>`"
+            )
+            return 1
+
+        # 根据市场类型选择字段配置
+        if market_type == 'a_share':
+            base_fields = A_SHARE_FIELDS.get(args.type, [])
+            expense_items = EXPENSE_ITEMS_MAP['a_share'] if args.type == 'income' else None
+            ratio_config = A_SHARE_RATIO_CONFIG
+        elif market_type == 'hk':
+            base_fields = HK_FIELDS.get(args.type, [])
+            expense_items = EXPENSE_ITEMS_MAP['hk'] if args.type == 'income' else None
+            ratio_config = HK_RATIO_CONFIG
+        else:  # US
+            base_fields = US_FIELDS.get(args.type, [])
+            expense_items = EXPENSE_ITEMS_MAP['us'] if args.type == 'income' else None
+            ratio_config = US_RATIO_CONFIG
+
+        # 2. 获取数据（带字段结构）
+        try:
+            reports, name_map = get_financial_data_with_structure(normalized_code, args.type, args.num, logger)
+        except FetchError as fe:
+            logger.error(f"FetchError: {fe.message}\nhint={fe.hint}\ndetail={fe.log_detail}")
+            log_stdout(fe.user_message())
+            log_stdout(f"详细日志: {os.path.abspath(log_file)}")
+            return 1
+
+        # 从财报数据中获取真实的币种单位配置
+        unit_name, divisor, currency_code, currency_info = get_unit_config(reports)
+        logger.info(f"币种信息: code={currency_code}, info={currency_info}, unit={unit_name}")
+
+        log_stdout(f"OK: Got {len(reports)} quarters data, {len(name_map)} fields")
+        log_stdout(f"OK: Currency: {currency_code or currency_info or 'N/A'}, Unit: {unit_name}")
+
+        # 3. 构建数据行（含财务比率计算和YoY跟踪）
+        rows, quarters, yoy_tracking = build_rows_with_ratios(
+            reports, name_map, base_fields, expense_items,
+            divisor, unit_name, args.type, market_type, ratio_config, logger
+        )
+
+        log_stdout(f"OK: Built {len(rows)} data rows with {len(yoy_tracking)} YoY comparison rows")
+
+        if len(rows) <= 2:  # 只有表头 + 日期行，无数据行
+            log_stdout(
+                f"ERROR: 构建后无有效数据行（可能是字段映射不匹配）\n"
+                f"提示: 该公司的报表字段可能与默认映射不一致，检查日志查看 name_map。\n"
+                f"详细日志: {os.path.abspath(log_file)}"
+            )
+            return 1
+
+        # 4. 确定输出路径（相对于项目根目录）
+        if args.output:
+            output_file = args.output
+        else:
+            excels_dir = os.path.join(project_root, 'workspace', 'excels')
+            if not os.path.exists(excels_dir):
+                os.makedirs(excels_dir)
+            safe_code = normalized_code.replace('.', '_')
+            # 文件名格式：{代码}_{报表类型}_{时间}.xlsx
+            output_file = os.path.join(excels_dir, f"{safe_code}_{args.type}_{timestamp}.xlsx")
+
+        output_file = os.path.abspath(output_file)
+
+        # 5. 生成 Excel（含YoY下降红色高亮）
+        try:
+            generate_excel_with_styling(rows, quarters, yoy_tracking, output_file, statement_name, logger)
+        except PermissionError:
+            log_stdout(
+                f"ERROR: 无法写入 Excel 文件（文件可能被占用）: {output_file}\n"
+                f"提示: 请关闭已打开的同名 Excel 文件后重试"
+            )
+            return 1
+        except Exception as e:
+            logger.exception("Excel 生成失败")
+            log_stdout(f"ERROR: Excel 生成失败: {e}\n详细日志: {os.path.abspath(log_file)}")
+            return 1
+
+        # ── 最终输出 ──
+        result = {
+            "status": "ok",
+            "stock_code": normalized_code,
+            "statement_type": args.type,
+            "statement_name": statement_name,
+            "quarters": len(reports),
+            "rows": len(rows),
+            "yoy_highlight_threshold": f"decline {YOY_DECLINE_THRESHOLD}% (red), growth {YOY_GROWTH_THRESHOLD}% (green)",
+            "excel_path": output_file,
+            "log_path": os.path.abspath(log_file),
+            "period_range": f"{quarters[0]} - {quarters[-1]}" if quarters else "",
+        }
+
+        log_stdout("=" * 60)
+        log_stdout(json.dumps(result, ensure_ascii=False))
+        log_stdout("=" * 60)
+
+        return 0
+
+    except KeyboardInterrupt:
+        log_stdout("\nInterrupted by user")
+        return 130
+    except Exception as e:
+        logger.exception("Unexpected error")
+        log_stdout(f"ERROR: 未预期的错误: {e}")
+        log_stdout(f"详细日志: {os.path.abspath(log_file)}")
         return 1
-
-    # 从财报数据中获取真实的币种单位配置
-    unit_name, divisor, currency_code, currency_info = get_unit_config(reports)
-    logger.info(f"币种信息: code={currency_code}, info={currency_info}, unit={unit_name}")
-
-    log_stdout(f"OK: Got {len(reports)} quarters data, {len(name_map)} fields")
-    log_stdout(f"OK: Currency: {currency_code or currency_info or 'N/A'}, Unit: {unit_name}")
-
-    # 3. 构建数据行（含财务比率计算和YoY跟踪）
-    rows, quarters, yoy_tracking = build_rows_with_ratios(
-        reports, name_map, base_fields, expense_items,
-        divisor, unit_name, args.type, market_type, ratio_config, logger
-    )
-
-    log_stdout(f"OK: Built {len(rows)} data rows with {len(yoy_tracking)} YoY comparison rows")
-
-    # 4. 确定输出路径（相对于项目根目录）
-    if args.output:
-        output_file = args.output
-    else:
-        excels_dir = os.path.join(project_root, 'workspace', 'excels')
-        if not os.path.exists(excels_dir):
-            os.makedirs(excels_dir)
-        safe_code = normalized_code.replace('.', '_')
-        # 文件名格式：{代码}_{报表类型}_{时间}.xlsx
-        output_file = os.path.join(excels_dir, f"{safe_code}_{args.type}_{timestamp}.xlsx")
-
-    output_file = os.path.abspath(output_file)
-
-    # 5. 生成 Excel（含YoY下降红色高亮）
-    generate_excel_with_styling(rows, quarters, yoy_tracking, output_file, statement_name, logger)
-
-    # ── 最终输出 ──
-    result = {
-        "status": "ok",
-        "stock_code": normalized_code,
-        "statement_type": args.type,
-        "statement_name": statement_name,
-        "quarters": len(reports),
-        "rows": len(rows),
-        "yoy_highlight_threshold": f"decline {YOY_DECLINE_THRESHOLD}% (red), growth {YOY_GROWTH_THRESHOLD}% (green)",
-        "excel_path": output_file,
-        "log_path": os.path.abspath(log_file),
-        "period_range": f"{quarters[0]} - {quarters[-1]}" if quarters else "",
-    }
-
-    log_stdout("=" * 60)
-    log_stdout(json.dumps(result, ensure_ascii=False))
-    log_stdout("=" * 60)
-
-    return 0
 
 
 if __name__ == "__main__":

@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SubsegmentMatrixHandler — columns=L1 segments, rows=heterogeneous (L2 revenue / L1 cost/OP_INCOME).
-
-Ported from io.invest.iagent.service.extraction.parser.SubsegmentMatrixHandler.
-"""
+"""SubsegmentMatrixHandler：列=L1 segments、行=混合（L2 收入 / L1 成本/OP_INCOME），美团布局。"""
 from __future__ import annotations
 
 from typing import Dict, List

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SectionTitleDetector — ported from io.invest.iagent.service.extraction.extractor.SectionTitleDetector."""
+"""Section 标题检测器：启发式识别冒号/加粗/空行等 section 标题行。"""
 from __future__ import annotations
 
 from .model import TableRow

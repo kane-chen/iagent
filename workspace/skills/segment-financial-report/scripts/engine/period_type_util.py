@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PeriodTypeUtil — ported from io.invest.iagent.service.extraction.extractor.PeriodTypeUtil."""
+"""表格级周期分类器：判断 FinancialTable 属于 FY/H1/Q1..Q4。"""
 from __future__ import annotations
 
 from typing import Optional

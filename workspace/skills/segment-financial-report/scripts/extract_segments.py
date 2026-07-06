@@ -25,6 +25,7 @@ import argparse
 import json
 import logging
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,18 @@ _silence_pdf_noise()
 # 主流程
 # ---------------------------------------------------------------------------
 
+def _validate_ticker(ticker: str) -> None:
+    """基本的 ticker 格式校验，避免空值/含路径分隔符等低级错误。"""
+    if not ticker or not ticker.strip():
+        raise ValueError("ticker 不能为空")
+    t = ticker.strip()
+    if '/' in t or '\\' in t or '..' in t:
+        raise ValueError(f"ticker 含非法字符: {ticker}（不要传路径）")
+    # 允许纯代码（BABA/00700）或 market.code 形式（US.BABA/HK.00700）
+    if len(t) > 16:
+        raise ValueError(f"ticker 过长: {ticker}")
+
+
 def run_python_engine(ticker: str,
                       workspace: Path,
                       output_json: Path,
@@ -78,6 +91,12 @@ def run_python_engine(ticker: str,
     使用 FinancialExtractionService.extractSegments() 批量提取，
     内部按文件扩展名自动路由到 HtmlFileSegmentParser / PdfFileSegmentParser。
     """
+    _validate_ticker(ticker)
+    if not workspace.exists():
+        raise FileNotFoundError(
+            f"workspace 目录不存在: {workspace}。"
+            f"请确认 workspace 路径正确，或先在该目录下准备好 portfolio/{ticker}/filings/。"
+        )
     # Make sibling engine package importable.
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
@@ -261,9 +280,22 @@ def main() -> int:
             fiscal_year_end=args.fiscal_year_end,
         )
     except SystemExit:
-        raise  # let explicit sys.exit pass through (e.g. exit code 2 for no files)
+        raise  # let explicit sys.exit pass through
+    except FileNotFoundError as e:
+        print(f"[extract] 文件未找到: {e}", file=sys.stderr)
+        print(f"提示: 请确认 workspace 路径 {workspace} 下有对应文件", file=sys.stderr)
+        return 1
     except Exception as e:  # noqa: BLE001
-        print(f"[extract] 失败：{e.__class__.__name__}: {e}", file=sys.stderr)
+        # 优先使用 ExtractionError 的 user_message（已含 hint）
+        if hasattr(e, 'user_message'):
+            print(f"[extract] 失败: {e.user_message()}", file=sys.stderr)
+        else:
+            print(f"[extract] 失败: {type(e).__name__}: {e}", file=sys.stderr)
+        logger = logging.getLogger("extract_segments")
+        if not logger.handlers:
+            # setup a basic stderr logger so traceback is visible in logs/
+            logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
+        logger.debug("Detailed traceback:", exc_info=True)
         return 1
 
     if args.print_preview or args.excel:

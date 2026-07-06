@@ -1,2 +1,4 @@
 # 生成本地Excel所需依赖
 openpyxl>=3.1.0
+# 富途 OpenAPI Python SDK（通过子进程调用 futuapi skill 脚本时需要）
+futu-api>=10.4.6408

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""PdfExtractionSupport — port of io.invest.iagent.service.extraction.parser.PdfExtractionSupport.
+"""PDF 提取公共工具：数值解析、Segment/Metric 写入、TOTAL 一致性校验。
 
-Shared numeric/segment/verification helpers for PDF layout handlers.
+unit 归一化复用 html_support.normalizeToMillion。
 """
 from __future__ import annotations
 

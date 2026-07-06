@@ -1,4 +1,4 @@
-"""Python HTML segment extraction engine (ported from Java io.invest.iagent.service.extraction).
+"""分部报告提取引擎（支持 HTML / PDF）。
 
-Stage 1: HTML only. See engine/README.md.
+详见 engine/README.md。
 """

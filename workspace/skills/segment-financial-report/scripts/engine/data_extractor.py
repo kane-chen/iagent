@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""DataExtractor — ported from io.invest.iagent.service.extraction.extractor.DataExtractor.
+"""表格数据提取器：从解析后的 FinancialTable 中提取数值、周期、segment 信息。
 
-Number semantics MUST match Java: normalizeToMillion uses Math.floor for thousand->million
-(the Java DataExtractor path; note HtmlExtractionSupport uses truncTowardZero -- BEKE relies
-on the trunc-toward-zero variant, which is what the BEKE handler goes through).
+数值归一化（normalizeToMillion）约定：
+- 通用路径使用 floor 法（千→百万，向下取整）
+- BEKE handler 使用 trunc-toward-zero 法（向零截断），与 html_support 保持一致
 """
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ class DataExtractor:
         self.segmentRecognizer = segmentRecognizer
         self.metricMapper = metricMapper
 
-    # ported from DataExtractor.extractSegmentData
     def extractSegmentData(self, table: FinancialTable) -> List[Segment]:
+        """从表格中提取 segment 数据。"""
         logger.info("Extracting segment data from table: %s", table.getTitle())
         segments = self.segmentRecognizer.recognizeSegments(table)
         for seg in segments:
@@ -351,7 +351,7 @@ class DataExtractor:
         return m
 
     def _normalize_to_million(self, value: float, unit: Optional[str]) -> float:
-        # ported from DataExtractor.normalizeToMillion — uses Math.floor (not truncTowardZero!)
+        """将数值归一化为百万单位，使用 floor 法（非 trunc-toward-zero）。"""
         if unit is None or not unit.strip():
             return value
         lower = unit.lower().strip()

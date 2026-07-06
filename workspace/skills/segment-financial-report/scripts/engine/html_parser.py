@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""HTML report parser — ported from io.invest.iagent.service.extraction.parser.HtmlReportParser.
+"""HTML 报告解析器（基于 BeautifulSoup）。
 
-JSoup -> BeautifulSoup. Preserves mergeSplitParentheses for BABA 2026Q1 EBITA rows.
+保留 mergeSplitParentheses 处理以支持 BABA 2026Q1 EBITA 行中括号拆分后的数值合并。
 """
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ class HtmlReportParser:
 
     # ---- title -------------------------------------------------------
     def _find_table_title(self, table_el: Tag) -> str:
-        # ported from HtmlReportParser.findTableTitle
+        """在 table 前驱元素中查找标题。"""
         prev = self._previous_element_sibling(table_el)
         while prev is not None:
             text = self._element_text(prev).strip()
@@ -143,8 +143,8 @@ class HtmlReportParser:
             row.addCell(TableCell(txt))
         return row
 
-    # ported from HtmlReportParser.mergeSplitParentheses
     def _merge_split_parentheses(self, cell_texts: List[str]) -> None:
+        """合并被拆分到相邻单元格的括号内容。"""
         n = len(cell_texts)
         for i in range(n):
             t = cell_texts[i]
@@ -178,7 +178,7 @@ class HtmlReportParser:
     _FONT_WEIGHT_RE = re.compile(r"font-weight\s*:\s*(\d{3})")
 
     def _detect_bold_style(self, cell_el: Tag) -> bool:
-        # ported from HtmlReportParser.detectBoldStyle
+        """检测单元格是否加粗（b/strong/font-weight/style）。"""
         if cell_el.find(["b", "strong"]):
             return True
         if self._style_has_bold(cell_el.get("style") or ""):
@@ -277,7 +277,7 @@ class HtmlReportParser:
             table.unit = "thousand"
 
     def _extract_surrounding_text(self, table_el: Tag) -> str:
-        # ported from HtmlReportParser.extractSurroundingText
+        """提取 table 前后的文本，用于上下文识别。"""
         prev = self._previous_element_sibling(table_el)
         if prev is not None:
             prev_text = self._element_text(prev).strip()

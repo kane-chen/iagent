@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""HtmlFileSegmentParser — wraps HtmlReportParser + HtmlReportOrchestrator.
-
-Mirrors io.invest.iagent.service.extraction.extractor.HtmlFileSegmentParser.
-"""
+"""HtmlFileSegmentParser：组合 HtmlReportParser + HtmlReportOrchestrator，HTML 侧 FileSegmentParser 实现。"""
 from __future__ import annotations
 
 import logging

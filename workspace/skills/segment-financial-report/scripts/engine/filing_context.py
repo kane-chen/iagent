@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""FilingContext — port of PdfFileSegmentParser.FilingContext.
+"""FilingContext：报告期上下文。
 
-Extracted to its own module to avoid a circular import between pdf_layout_handler
-(which needs FilingContext in apply() signatures) and pdf_parser (which defines it).
+独立模块以避免 pdf_layout_handler（apply() 签名需要 FilingContext）和
+pdf_parser（定义 FilingContext）之间的循环引用。
 """
 from __future__ import annotations
 

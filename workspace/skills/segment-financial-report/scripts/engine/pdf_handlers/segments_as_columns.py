@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SegmentsAsColumnsHandler — columns=segments, rows=metrics, single period.
-
-Ported from io.invest.iagent.service.extraction.parser.SegmentsAsColumnsHandler.
-"""
+"""SegmentsAsColumnsHandler：列=segments、行=metrics、单周期（腾讯收入/毛利块）。"""
 from __future__ import annotations
 
 from typing import Dict, List

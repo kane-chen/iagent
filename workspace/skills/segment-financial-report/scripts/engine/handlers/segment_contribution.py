@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SegmentContributionHandler — BEKE 3-row-block layout.
-
-Ported from io.invest.iagent.service.extraction.extractor.SegmentContributionHandler.
-"""
+"""SegmentContributionHandler：BEKE 三行块布局。"""
 from __future__ import annotations
 
 import logging

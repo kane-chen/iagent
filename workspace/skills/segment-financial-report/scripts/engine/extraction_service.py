@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
-"""FinancialExtractionService (Python port).
+"""分部数据提取主服务。
 
-Ported from io.invest.iagent.service.extraction.service.FinancialExtractionService.
-Supports both HTML (US SEC filings) and PDF (HK/CN filings) via a parser registry.
+通过 parser 注册表支持 HTML（美股 SEC）和 PDF（港股/A 股）两类财报文件。
 """
 from __future__ import annotations
 
@@ -24,6 +23,19 @@ from .segment_recognizer import SegmentRecognizer
 logger = logging.getLogger(__name__)
 
 
+class ExtractionError(Exception):
+    """提取失败，带面向用户的友好消息。"""
+    def __init__(self, message: str, hint: Optional[str] = None):
+        super().__init__(message)
+        self.message = message
+        self.hint = hint
+
+    def user_message(self) -> str:
+        if self.hint:
+            return f"{self.message}\n提示: {self.hint}"
+        return self.message
+
+
 class FinancialExtractionService:
     def __init__(self, companyCode: Optional[str] = None,
                  workspace: Optional[Path] = None,
@@ -37,6 +49,7 @@ class FinancialExtractionService:
         self.segmentRecognizer: Optional[SegmentRecognizer] = None
         self.dataExtractor: Optional[DataExtractor] = None
         self.htmlOrchestrator: Optional[HtmlReportOrchestrator] = None
+        self.last_errors: list[tuple[Path, str]] = []  # (file, error_msg)
 
         # Build parser list
         self.htmlParser = HtmlFileSegmentParser()
@@ -48,11 +61,18 @@ class FinancialExtractionService:
         elif companyCode is not None:
             cfg = self.configLoader.loadConfig(companyCode)
             if cfg is None:
-                raise FileNotFoundError(f"No company config for {companyCode}")
+                configs_dir = self.configLoader.config_dir
+                raise ExtractionError(
+                    f"缺少公司配置: {companyCode}",
+                    hint=(
+                        f"请在 {configs_dir}/ 下新增 {companyCode}.json（参考 BABA.json / 00700.json）；"
+                        f"或检查 ticker 拼写/市场前缀是否正确（如 BABA 而非 BABA-US、00700 而非 700）"
+                    ),
+                )
             self.configure(cfg)
 
     def configure(self, cfg: CompanyConfig) -> None:
-        """Build cfg-dependent collaborators. Single init point (like Java configure(cfg))."""
+        """根据公司 config 构建协作组件，单一初始化入口。"""
         self.companyConfig = cfg
         self.segmentRecognizer = SegmentRecognizer(cfg)
         self.dataExtractor = DataExtractor(self.segmentRecognizer, self.metricMapper)
@@ -86,21 +106,62 @@ class FinancialExtractionService:
     def extractSegments(self, ticker: str,
                         fiscal_year_start: Optional[str] = None,
                         fiscal_year_end: Optional[str] = None) -> List[Segment]:
+        self.last_errors = []
         if self.fileFilter is None:
-            logger.warning("extractSegments requires workspace")
-            return []
+            raise ExtractionError("未配置 workspace，无法定位财报文件")
         files = self.fileFilter.filter(ticker, fiscal_year_start, fiscal_year_end)
         if not files:
-            return []
+            diag = self.fileFilter.last_diagnostics
+            msg = f"未找到 {ticker} 的可提取财报文件"
+            hint = diag.summarize() if diag else None
+            raise ExtractionError(msg, hint=hint or "请先用 futu-filing skill 下载财报，或检查 ticker 拼写")
         all_segments: List[Segment] = []
         for f in files:
             try:
                 segs = self.extractFromFile(f)
                 if segs:
                     all_segments.extend(segs)
+                else:
+                    self.last_errors.append((f, "该文件未解析出任何 segment（可能格式不匹配或为不支持的报表类型）"))
+                    logger.warning("no segments extracted from %s", f)
+            except ExtractionError:
+                raise
+            except FileNotFoundError as e:
+                err = f"文件不存在: {e.filename if hasattr(e, 'filename') else f}"
+                self.last_errors.append((f, err))
+                logger.error("extract failed: %s: %s", f, err)
             except Exception as e:  # noqa: BLE001
+                err = f"{type(e).__name__}: {e}"
+                self.last_errors.append((f, err))
                 logger.error("extract failed: %s", f, exc_info=e)
-        return _merge_segments(all_segments)
+
+        if not all_segments:
+            # 所有文件都失败或没有解析出 segment
+            if self.last_errors:
+                sample = "; ".join(f"{f.name}: {e}" for f, e in self.last_errors[:3])
+                raise ExtractionError(
+                    f"解析 {ticker} 的 {len(files)} 个财报文件全部失败",
+                    hint=f"错误样例: {sample}" + (f"（共 {len(self.last_errors)} 个错误）"
+                          if len(self.last_errors) > 3 else ""),
+                )
+            raise ExtractionError(
+                f"{ticker} 的财报文件已找到，但未解析出分部数据",
+                hint=(
+                    "可能原因：\n"
+                    "  1. 该公司的分部表格布局尚未支持（需要新的 handler）\n"
+                    "  2. 公司配置（config/extraction/<TICKER>.json）的 segment 别名不匹配\n"
+                    "  3. PDF 是扫描件（图片型）无法直接抽取文本\n"
+                    "详细原因见日志文件"
+                ),
+            )
+
+        result = _merge_segments(all_segments)
+        if self.last_errors:
+            logger.warning("%d/%d files had errors, %d segments extracted from %d files",
+                           len(self.last_errors), len(files),
+                           sum(len(s.metrics) for s in result),
+                           len(files) - len(self.last_errors))
+        return result
 
     # --- backward-compat aliases ----------------------------------------------
 
@@ -109,7 +170,7 @@ class FinancialExtractionService:
 
 
 def _merge_segments(segments: List[Segment]) -> List[Segment]:
-    """Group by segmentCode and merge metrics/children recursively (port of SegmentMetricUtil.merge)."""
+    """按 segmentCode 分组，递归合并 metrics/children 去重。"""
     by_code: dict[str, Segment] = {}
     for seg in segments:
         code = seg.segmentCode

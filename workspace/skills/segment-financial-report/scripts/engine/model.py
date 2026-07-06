@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Data models — ported from io.invest.iagent.service.extraction.model.
+"""提取引擎的数据模型。
 
-Fields intentionally use camelCase to match the JSON produced by the Java engine
-and to keep JSON configs cross-compatible.
+字段统一使用 camelCase 以保持 JSON 配置和输出格式一致。
 """
 from __future__ import annotations
 
@@ -12,7 +11,7 @@ from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
-# TableCell — ported from TableCell.java
+# TableCell
 # ---------------------------------------------------------------------------
 class TableCell:
     __slots__ = ("text", "numericValue", "isNegative", "isParentheses", "unit")
@@ -40,7 +39,7 @@ class TableCell:
         return self.numericValue is not None
 
     def _parse(self):
-        # ported from TableCell.parseNumericValue
+        """解析单元格数值、符号、括号表示的负数。"""
         if self.text is None or not self.text.strip():
             self.numericValue = None
             return
@@ -67,7 +66,7 @@ class TableCell:
 
 
 # ---------------------------------------------------------------------------
-# TableRow — ported from TableRow.java
+# TableRow
 # ---------------------------------------------------------------------------
 class TableRow:
     __slots__ = ("label", "cells", "indentLevel", "isTotalRow", "isSubtotalRow", "isBold")
@@ -91,7 +90,7 @@ class TableRow:
 
 
 # ---------------------------------------------------------------------------
-# FinancialTable — ported from FinancialTable.java
+# FinancialTable
 # ---------------------------------------------------------------------------
 class FinancialTable:
     def __init__(self):
@@ -124,7 +123,7 @@ class FinancialTable:
 
 
 # ---------------------------------------------------------------------------
-# SegmentMetric — ported from SegmentMetric.java
+# SegmentMetric
 # ---------------------------------------------------------------------------
 class SegmentMetric:
     def __init__(self):
@@ -149,7 +148,7 @@ class SegmentMetric:
 
 
 # ---------------------------------------------------------------------------
-# Segment — ported from Segment.java
+# Segment
 # ---------------------------------------------------------------------------
 class Segment:
     def __init__(self, segmentName: Optional[str] = None, level: int = 1):
@@ -189,7 +188,7 @@ class Segment:
         self.metrics = metrics
 
     def getMetric(self, metricCode: str, period: Optional[str] = None) -> Optional[SegmentMetric]:
-        # ported from Segment.getMetric
+        """按 metricCode + period 查找指标。"""
         if metricCode is None:
             return None
         for m in self.metrics:
@@ -200,7 +199,7 @@ class Segment:
 
 
 # ---------------------------------------------------------------------------
-# MetricDict — ported from MetricDict.java
+# MetricDict
 # ---------------------------------------------------------------------------
 @dataclass
 class MetricDict:
@@ -226,7 +225,7 @@ class MetricDict:
 
 
 # ---------------------------------------------------------------------------
-# PDF column mapping — ported from CompanyConfig.PdfColumnMapping
+# PDF column mapping
 # ---------------------------------------------------------------------------
 class Layout(Enum):
     SEGMENTS_AS_COLUMNS = "SEGMENTS_AS_COLUMNS"
@@ -236,7 +235,7 @@ class Layout(Enum):
 
 @dataclass
 class RowDescriptor:
-    """Port of CompanyConfig.PdfColumnMapping.RowDescriptor."""
+    """PDF 表格中一行的指标/分部映射描述。"""
     metricCode: Optional[str] = None
     subSegmentCode: Optional[str] = None
     abs: bool = False
@@ -244,7 +243,7 @@ class RowDescriptor:
 
 @dataclass
 class PdfColumnMapping:
-    """Port of CompanyConfig.PdfColumnMapping."""
+    """PDF 表格列映射配置（layout + 行列描述符）。"""
     layout: Layout = Layout.SEGMENTS_AS_COLUMNS
     columnCount: int = 0
     segmentCodes: List[str] = field(default_factory=list)
@@ -259,7 +258,7 @@ class PdfColumnMapping:
 
 
 # ---------------------------------------------------------------------------
-# CompanyConfig — ported from CompanyConfig.java (nested SegmentConfig / MetricMappingRule)
+# CompanyConfig
 # ---------------------------------------------------------------------------
 @dataclass
 class SegmentConfig:
@@ -270,7 +269,7 @@ class SegmentConfig:
     parentCode: Optional[str] = None
 
     def matches(self, text: Optional[str]) -> bool:
-        # ported from CompanyConfig.SegmentConfig.matches
+        """判断文本是否命中该 segment（名称 / code / 别名）。"""
         if text is None:
             return False
         lower = text.lower().strip()

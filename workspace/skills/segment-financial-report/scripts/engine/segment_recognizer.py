@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SegmentRecognizer — ported from io.invest.iagent.service.extraction.recognizer.SegmentRecognizer."""
+"""Segment 识别器：优先按公司配置匹配，配置未命中时走结构启发式回退。"""
 from __future__ import annotations
 
 import logging
@@ -17,7 +17,6 @@ class SegmentRecognizer:
     def getCompanyConfig(self) -> Optional[CompanyConfig]:
         return self.companyConfig
 
-    # ported from SegmentRecognizer.recognizeSegments
     def recognizeSegments(self, table: FinancialTable) -> List[Segment]:
         logger.info("Recognizing segments from table: %s", table.getTitle())
         config_based = self._recognize_by_config(table)

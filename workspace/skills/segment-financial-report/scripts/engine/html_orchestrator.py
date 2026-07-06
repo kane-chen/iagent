@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""HtmlReportOrchestrator — ported from io.invest.iagent.service.extraction.extractor.HtmlReportOrchestrator."""
+"""HTML 报告解析编排器：按优先级分派到各 layout handler。"""
 from __future__ import annotations
 
 import logging

@@ -111,6 +111,12 @@ public class SegmentFinancialReportSkillTest {
     }
 
     @Test
+    public void test_skill_direct_pdd() throws Exception {
+        int result = this.runSkill("PDD", 120) ;
+        Assert.isTrue(result == 0, "call failed");
+    }
+
+    @Test
     public void test_skill_direct_tcom() throws Exception {
         int result = this.runSkill("TCOM", 120) ;
         Assert.isTrue(result == 0, "call failed");

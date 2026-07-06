@@ -622,7 +622,7 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
 def main():
     parser = argparse.ArgumentParser(description='生成分部业务财务报表Excel')
     parser.add_argument('ticker', nargs='?', help='股票代码，如 BABA, AAPL')
-    parser.add_argument('--json', '-j', required=True, help='包含Segment数据的JSON文件路径（由Java Tool传入）')
+    parser.add_argument('--json', '-j', required=True, help='包含 Segment 数据的 JSON 文件路径（由 extract_segments.py 产出）')
     parser.add_argument('--output', '-o', help='输出Excel文件路径')
     parser.add_argument('--workspace', '-w', help='项目工作空间路径')
     args = parser.parse_args()
@@ -652,7 +652,7 @@ def main():
     log_stdout(f">>> Processing {ticker} 分部财务数据")
 
     try:
-        # 从JSON文件加载数据（由Java Tool传入）
+        # 从 JSON 文件加载数据（由 extract_segments.py 产出）
         if args.json and os.path.exists(args.json):
             with open(args.json, 'r', encoding='utf-8') as f:
                 segments = json.load(f)

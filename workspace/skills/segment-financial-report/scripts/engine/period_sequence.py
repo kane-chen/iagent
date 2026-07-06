@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PeriodSequenceBuilder — ported from io.invest.iagent.service.extraction.extractor.PeriodSequenceBuilder."""
+"""列维度周期序列构建器：按列提取（period, currency）序列。"""
 from __future__ import annotations
 
 import re

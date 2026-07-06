@@ -1,94 +1,83 @@
-# 分部业务财务报表Excel生成工具
+# 分部业务财务报表 Excel 生成工具
 
 ## 功能说明
 
-本工具是 **Segment Financial Report Skill** 的 Python 辅助脚本，用于生成上市公司分部业务财务报表Excel，支持多层级分部展示（如BABA的三层业务结构）。
+本工具是 **Segment Financial Report Skill** 的 Python 实现，用于从上市公司财报文件（HTML/PDF）中提取分部业务财务数据，并生成多层级分部报表 Excel。
 
 ## 架构说明
 
 ```
-Agent (通过Tool名称调用)
+Agent（bash 调用）
     ↓
-FinancialSegmentMetricsTool (Java Tool)
-    ├─ queryFinancialMetrics()  ← 获取分部数据
-    └─ exportSegmentExcel()     ← 调用本Python脚本生成Excel
-        ↓
-generate_segment_excel.py (本脚本)
+extract_segments.py           # Stage 1：提取引擎编排（一步到位模式）
+    ├─ engine/                #   纯 Python 提取引擎
+    │   ├── extraction_service.py  # 主服务入口
+    │   ├── html_segment_parser.py # HTML 解析（SEC 美股）
+    │   └── pdf_parser.py          # PDF 解析（港股/A 股）
+    └─ generate_segment_excel.py  # Stage 2：JSON → Excel 渲染
 ```
 
-**注意：本脚本不直接调用 Java Tool，而是被 Java Tool 调用并传入数据。**
+**推荐使用 `extract_segments.py --excel` 一步完成提取+渲染**，无需单独调用 generate_segment_excel.py。
 
 ## 特性
 
 - 多层级分部展示（Level 1-3），通过缩进和颜色编码体现层级关系
-- 支持收入、EBITA等财务指标
-- YoY同比增长率自动高亮显示
-- 智能数值格式化（M/K单位）
+- 支持收入、EBITA 等财务指标
+- YoY 同比增长率自动高亮显示
+- 智能数值格式化（M/K 单位）
 - 多周期数据自动识别
+- 策略模式：按公司 config 自动选择 HTML/PDF 解析 handler
 
 ## 依赖安装
 
 ```bash
-pip install -r requirements.txt
+pip install -r workspace/skills/segment-financial-report/scripts/requirements.txt
 ```
 
 ## 使用方法
 
-### ✅ 推荐方式：通过 Java Tool 调用
-
-```java
-// 1. 创建Tool实例
-FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspacePath);
-
-// 2. 调用Tool生成Excel（内部会调用本Python脚本）
-String excelPath = tool.exportSegmentExcel("BABA");
-```
-
-对应的 Tool 名称（供Agent调用）：`export_segment_financial_excel`
-
-### 🛠️ 手动调用方式（需先准备JSON数据）
+### ✅ 推荐方式：一步到位（Agent 使用这个）
 
 ```bash
-# 从JSON文件生成（JSON由Java Tool生成并传入）
-python generate_segment_excel.py BABA --json ./segments.json
-
-# 指定输出路径
-python generate_segment_excel.py BABA --json ./segments.json --output ./output.xlsx
+# 提取 + 渲染 Excel 一次完成，stdout 最后一行是 xlsx 绝对路径
+python workspace/skills/segment-financial-report/scripts/extract_segments.py \
+    --ticker BABA --excel
+# → 输出 workspace/excels/BABA_segments_<ts>.xlsx
 ```
 
-## 输入数据格式
+### 🛠️ 分阶段（调试用）
 
-输入的JSON数据应遵循以下结构：
+```bash
+# Stage 1：只提取分部数据到 JSON
+python workspace/skills/segment-financial-report/scripts/extract_segments.py \
+    --ticker BABA --output ./segments.json
+
+# Stage 2：JSON → Excel
+python workspace/skills/segment-financial-report/scripts/generate_segment_excel.py BABA \
+    --json ./segments.json --workspace workspace
+```
+
+## 输入数据格式（Stage 2 JSON）
+
+`generate_segment_excel.py --json` 接受的 JSON 结构（flat 模式，由 extract_segments.py 产出）：
 
 ```json
 [
   {
-    "segmentId": "TAOBAO_TMALL",
+    "segmentCode": "TAOBAO_TMALL",
     "segmentName": "Taobao and Tmall Group",
     "level": 1,
-    "children": [
-      {
-        "segmentId": "CHINA_COMMERCE_RETAIL",
-        "segmentName": "China commerce retail",
-        "level": 2,
-        "children": [...],
-        "metrics": [...]
-      }
-    ],
-    "metrics": [
-      {
-        "metricCode": "REVENUE",
-        "metricName": "Revenue",
-        "value": 123456.78,
-        "yoyGrowth": 5.2,
-        "period": "2024Q1"
-      }
-    ]
+    "parentSegmentCode": null,
+    "metricCode": "ADJUSTED_EBITA",
+    "metricName": "调整后EBITA",
+    "value": 45635.0,
+    "yoyGrowth": 5.2,
+    "period": "2024Q1"
   }
 ]
 ```
 
-## 输出Excel结构
+## 输出 Excel 结构
 
 | 业务分部 | 指标 | 2024Q1 | 2024Q2 | ... | 2024Q1 YoY(%) | 2024Q2 YoY(%) | ... |
 |---------|-----|--------|--------|-----|---------------|---------------|-----|
@@ -102,16 +91,5 @@ python generate_segment_excel.py BABA --json ./segments.json --output ./output.x
 - **一级分部**：浅蓝背景，深蓝色粗体字
 - **二级分部**：浅绿背景，深绿色粗体字
 - **三级分部**：浅黄背景，深黄色字
-- **收入列**：浅蓝色背景
-- **EBITA列**：浅绿色背景
-- **YoY下降>5%**：红色粗体字
-- **YoY增长>30%**：绿色粗体字
-
-## 与Java集成
-
-通过`FinancialSegmentMetricsTool.exportSegmentExcel(ticker)`方法调用：
-
-```java
-FinancialSegmentMetricsTool tool = new FinancialSegmentMetricsTool(workspace);
-String excelPath = tool.exportSegmentExcel("BABA");
-```
+- **YoY 下降 > 5%**：红色粗体字
+- **YoY 增长 > 30%**：绿色粗体字

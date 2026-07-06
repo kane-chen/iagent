@@ -18,6 +18,7 @@
         <java.version>17</java.version>
         <junit.version>5.13.4</junit.version>
         <agentscope.vision>1.1.0-RC2</agentscope.vision>
+        <agentscope.extendsion>1.1.0-RC2</agentscope.extendsion>
     </properties>
 
     <dependencyManagement>
@@ -25,7 +26,7 @@
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
-                <version>1.1.4</version>
+                <version>2.0.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -137,7 +138,7 @@
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-autocontext-memory</artifactId>
-            <version>${agentscope.vision}</version>
+            <version>${agentscope.extendsion}</version>
         </dependency>
 
         <dependency>

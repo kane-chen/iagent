@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Config loader — ported from io.invest.iagent.service.extraction.config.CompanyConfigLoader."""
+"""公司配置加载器：从 config/extraction/<TICKER>.json 读取 CompanyConfig。"""
 from __future__ import annotations
 
 import json

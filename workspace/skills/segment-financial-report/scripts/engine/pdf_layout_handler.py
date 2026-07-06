@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""PdfLayoutHandler — port of io.invest.iagent.service.extraction.parser.PdfLayoutHandler.
+"""PDF layout handler 策略接口。
 
-Strategy interface for PDF segment table layouts. Different companies' HK report PDFs
-have very different table structures (Tencent = segments-as-columns or segments-as-rows;
-Meituan = subsegment-matrix); each layout gets its own handler.
+不同公司港股 PDF 表格结构差异大（腾讯=segments-as-columns / segments-as-rows；
+美团=subsegment-matrix），每种布局对应一个 handler。
 """
 from __future__ import annotations
 

@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Metric mapper — ported from io.invest.iagent.service.extraction.mapper.MetricMapper.
-
-Loads metric dict from workspace/skills/segment-financial-report/config/extraction/metric_dict.json
-(where the Java version had a hardcoded initDefaultMetrics()).
+"""指标映射器：从 config/extraction/metric_dict.json 加载指标字典，
+用于将原始文本中的指标名映射到标准 metricCode。
 """
 from __future__ import annotations
 
@@ -42,8 +40,8 @@ class MetricMapper:
                 isStandard=bool(entry.get("isStandard", True)),
             ))
 
-    # ported from MetricMapper.mapMetric
     def mapMetric(self, rawName: Optional[str]) -> Optional[MetricDict]:
+        """将原始指标名映射到标准 MetricDict。"""
         if not rawName or not rawName.strip():
             return None
         clean = rawName.strip()

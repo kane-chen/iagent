@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-"""PdfFileSegmentParser — port of io.invest.iagent.service.extraction.parser.PdfFileSegmentParser.
+"""港股 PDF 解析器。
 
-HK reports PDF parser: invokes multi-engine table extraction (camelot/pdfplumber) and
-applies position-based PdfColumnMapping via PdfLayoutHandler strategies, because Chinese
-font encoding in HK PDFs is often garbled.
+调用多引擎表格抽取（camelot/pdfplumber），通过 PdfLayoutHandler 策略
+基于位置映射（PdfColumnMapping）解析，因为港股 PDF 中文字体编码常出现乱码。
 """
 from __future__ import annotations
 

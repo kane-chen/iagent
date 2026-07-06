@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""HtmlExtractionSupport — ported from io.invest.iagent.service.extraction.extractor.HtmlExtractionSupport.
-
-Shared numeric/segment helpers for HTML layout handlers.
-"""
+"""HTML 提取公共工具：数值归一化、Segment/Metric 写入，供 HTML layout handlers 共享。"""
 from __future__ import annotations
 
 import math
@@ -13,7 +10,7 @@ from .model import CompanyConfig, FinancialTable, Segment, SegmentConfig, Segmen
 
 
 def _trunc_toward_zero(v: float) -> float:
-    # ported from HtmlExtractionSupport.truncTowardZero
+    """向零截断（负数向上取整，正数向下取整）。"""
     return math.ceil(v) if v < 0 else math.floor(v)
 
 
