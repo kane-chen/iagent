@@ -209,6 +209,34 @@
       "titleKeyWords": [],
       "filingSuffixNames": [],
       "supportPeriodTypes": []
+    },
+    {
+      "ticker": "09999",
+      "market": "HK",
+      "stockId": "79083232831247",
+      "displayName": "NETS",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "季度报告",
+        "年度报告",
+        "业绩公告",
+        "财报公告"
+      ],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
+    },
+    {
+      "ticker": "NETS",
+      "market": "US",
+      "stockId": "201088",
+      "displayName": "NetEase",
+      "supportFileTypes": [
+        "6-K",
+        "20-F"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     }
   ],
   "marketProfiles": {

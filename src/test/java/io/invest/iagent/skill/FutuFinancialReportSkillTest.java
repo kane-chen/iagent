@@ -53,6 +53,18 @@ public class FutuFinancialReportSkillTest {
     }
 
     @Test
+    public void test_netEase() {
+        String responseText = doCall("网易", "利润表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_vip() {
+        String responseText = doCall("唯品会", "利润表");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
     public void test_byd() {
         String responseText = doCall("比亚迪股份", "利润表");
         Assert.notNull(responseText, "call response");

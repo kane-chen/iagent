@@ -1,15 +1,10 @@
 package io.invest.iagent.skill;
 
-import com.alibaba.fastjson2.JSON;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
-import io.invest.iagent.service.extraction.model.Segment;
-import io.invest.iagent.service.extraction.model.SegmentMetricDTO;
-import io.invest.iagent.service.extraction.service.FinancialExtractionService;
-import io.invest.iagent.service.extraction.service.SegmentMetricUtil;
 import io.invest.iagent.utils.ProcessRunner;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,64 +104,15 @@ public class SegmentFinancialReportSkillTest {
                 .build();
     }
 
-    /**
-     * 直接调用 Java 引擎跑 flatten 后的 segments，验证提取逻辑；
-     * 老版本的 {@code FinancialSegmentMetricsTool.queryFinancialMetricsFlatter} 的等价路径。
-     * Excel 渲染现在完全交给 segment-financial-report skill 的 Python 脚本。
-     */
-    private static List<SegmentMetricDTO> extractSegments(String ticker) throws Exception {
-        Path workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
-        FinancialExtractionService service = new FinancialExtractionService(ticker, workspace);
-        List<Segment> segments = service.extractSegments(ticker, null, null);
-        return SegmentMetricUtil.flattenAndSort(segments);
-    }
-
-    @Test
-    public void test_tool_baba() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("BABA");
-        Assertions.assertNotNull(segments);
-        System.out.println(JSON.toJSONString(segments));
-    }
-
-    @Test
-    public void test_tool_baba_extract() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("BABA");
-        Assertions.assertNotNull(segments);
-    }
-
-    @Test
-    public void test_tool_00700_build() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("00700");
-        Assertions.assertNotNull(segments);
-    }
-
-    @Test
-    public void test_tool_83690_build() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("83690");
-        Assertions.assertNotNull(segments);
-    }
-
-    @Test
-    public void test_tool_baba_build() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("BABA");
-        Assertions.assertNotNull(segments);
-    }
-
-    @Test
-    public void test_tool_pdd_build() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("PDD");
-        Assertions.assertNotNull(segments);
-    }
-
-    @Test
-    public void test_tool_beke_build() throws Exception {
-        List<SegmentMetricDTO> segments = extractSegments("BEKE");
-        Assertions.assertNotNull(segments);
-    }
-
     @Test
     public void test_skill_direct_baba() throws Exception {
         int result = this.runSkill("BABA", 100) ;
+        Assert.isTrue(result == 0, "call failed");
+    }
+
+    @Test
+    public void test_skill_direct_tcom() throws Exception {
+        int result = this.runSkill("TCOM", 120) ;
         Assert.isTrue(result == 0, "call failed");
     }
 
