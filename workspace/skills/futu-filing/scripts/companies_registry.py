@@ -32,10 +32,12 @@ Company entry 字段规则（按需求）：
 from __future__ import annotations
 
 import json
+import socket
 import sys
 import time
 from pathlib import Path
 from typing import Optional
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -90,22 +92,56 @@ def _rank(market_name: str) -> int:
 # HTTP 拉取
 # ---------------------------------------------------------------------------
 
-def _fetch_predict(keyword: str, timeout: int = 15) -> list[dict]:
-    """调用 futunn 的 predict 接口拉候选列表；返回 quote 数组（顺序即接口原顺序）。"""
+def _fetch_predict(keyword: str, timeout: int = 15, retries: int = 3) -> list[dict]:
+    """调用 futunn 的 predict 接口拉候选列表；返回 quote 数组（顺序即接口原顺序）。
+
+    网络瞬时错误自动重试（指数退避）：DNS 失败、连接重置、超时、5xx。
+    """
     qs = urllib.parse.urlencode({"keyword": keyword})
     url = f"{PREDICT_URL}?{qs}"
-    req = urllib.request.Request(url, headers={
-        "User-Agent": DEFAULT_UA,
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.futunn.com/",
-    })
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read().decode("utf-8", errors="replace")
-    payload = json.loads(body)
-    if payload.get("code") not in (0, "0"):
-        raise RuntimeError(f"predict API code={payload.get('code')} "
-                           f"message={payload.get('message')}")
-    return payload.get("data", {}).get("quote", []) or []
+
+    last_error: Optional[Exception] = None
+    delay = 1.5
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": DEFAULT_UA,
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://www.futunn.com/",
+            })
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+            payload = json.loads(body)
+            if payload.get("code") not in (0, "0"):
+                # 业务错误（非网络错误）不重试
+                raise RuntimeError(f"predict API code={payload.get('code')} "
+                                   f"message={payload.get('message')}")
+            return payload.get("data", {}).get("quote", []) or []
+        except (urllib.error.URLError, socket.timeout, TimeoutError,
+                ConnectionError, OSError) as e:
+            last_error = e
+            if attempt < retries:
+                print(f"[companies_registry] predict fetch attempt {attempt} failed "
+                      f"({type(e).__name__}: {e}), retrying in {delay:.1f}s…",
+                      file=sys.stderr)
+                time.sleep(delay)
+                delay *= 2
+                continue
+            print(f"[companies_registry] predict fetch failed after {retries} attempts: {e}",
+                  file=sys.stderr)
+            raise
+        except json.JSONDecodeError as e:
+            # JSON 解析失败通常是 WAF 页面或服务端异常，可重试一次
+            last_error = e
+            if attempt < retries:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            raise
+    # unreachable
+    if last_error:
+        raise last_error
+    return []
 
 
 def _is_derivative(name: str) -> bool:

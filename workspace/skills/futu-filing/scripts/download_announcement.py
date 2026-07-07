@@ -43,15 +43,19 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
 except ImportError:
     print("ERROR: requests not installed. Run:\n"
           "  pip install -r workspace/skills/futu-filing/scripts/requirements.txt",
           file=sys.stderr)
     sys.exit(2)
+
+logger = logging.getLogger("futu-filing")
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +82,87 @@ _SESSION_EXPIRED_CODES = {-12009}
 
 class SessionExpiredError(RuntimeError):
     """WAF cookies 已失效，需要跑一次 login.py 才能继续。"""
+
+
+# ---------------------------------------------------------------------------
+# 重试工具
+# ---------------------------------------------------------------------------
+
+# 可安全重试的网络异常（幂等 GET 请求遇到这些可以重试）
+_RETRYABLE_EXCEPTIONS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+    ConnectionResetError,
+    TimeoutError,
+)
+
+# 可重试的 HTTP 状态码（服务端瞬时错误、限流）
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _retry_request(
+    fn: Callable[..., requests.Response],
+    *,
+    retries: int = 3,
+    backoff: float = 1.5,
+    desc: str = "request",
+    **kwargs,
+) -> Optional[requests.Response]:
+    """带指数退避的 HTTP 请求重试。
+
+    - 网络异常（ConnectionError/Timeout/ChunkedEncodingError）：重试
+    - 429/5xx 服务端错误：重试
+    - 4xx 客户端错误（439 WAF、403、404）：直接返回，不重试
+    - 达到最大重试次数后返回最后一次的 Response（或 None 如果全是网络异常）
+    """
+    last_resp: Optional[requests.Response] = None
+    delay = backoff
+    for attempt in range(1, retries + 1):
+        try:
+            resp = fn(**kwargs)
+            last_resp = resp
+            if resp.status_code in _RETRYABLE_STATUS:
+                if attempt < retries:
+                    print(f"[downloader] {desc} HTTP {resp.status_code}, "
+                          f"retry {attempt}/{retries} in {delay:.1f}s…",
+                          file=sys.stderr)
+                    time.sleep(delay)
+                    delay *= backoff
+                    continue
+            return resp
+        except _RETRYABLE_EXCEPTIONS as e:
+            if attempt < retries:
+                print(f"[downloader] {desc} {type(e).__name__}: {e}, "
+                      f"retry {attempt}/{retries} in {delay:.1f}s…",
+                      file=sys.stderr)
+                time.sleep(delay)
+                delay *= backoff
+                continue
+            print(f"[downloader] {desc} failed after {retries} retries: {e}",
+                  file=sys.stderr)
+            return None
+    return last_resp
+
+
+def _build_session() -> requests.Session:
+    """创建带 urllib3 底层重试策略的 requests Session。
+
+    urllib3 Retry 只处理底层连接建立阶段的失败（DNS/连接/读取超时），
+    上面的 _retry_request 处理应用层的 429/5xx 和业务异常。两层互补。
+    """
+    s = requests.Session()
+    retry_strategy = Retry(
+        total=2,                      # 底层最多额外重试 2 次
+        backoff_factor=0.8,           # 0.8s, 1.6s 退避
+        status_forcelist=list(_RETRYABLE_STATUS),
+        allowed_methods=["GET"],      # 只对 GET 重试（幂等）
+        raise_on_status=False,        # 不抛异常，交给上层判断
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=4, pool_maxsize=8)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +286,7 @@ def load_config(path: Path) -> Config:
         companies=companies,
         profiles=profiles,
         sec_ua=raw.get("secEdgarUserAgent") or DEFAULT_UA,
-        page_size=int(defaults.get("pageSize", 50)),
+        page_size=int(defaults.get("pageSize", 80)),
         sleep_between_docs=float(defaults.get("sleepBetweenDocs", 0.5)),
         sleep_between_files=float(defaults.get("sleepBetweenFilesInAccession", 0.3)),
     )
@@ -588,6 +673,7 @@ def fetch_news_list(session: requests.Session, stock_id: str, market_type: int,
 
     WAF 会话过期时（HTTP 439 或 payload.code == -12009）抛 {@link SessionExpiredError}，
     调用方捕获后可以跑一次 login.py 刷 cookies 再重试。
+    网络瞬时错误会由 _retry_request 自动重试 3 次。
     """
     params = {
         "stock_id": stock_id,
@@ -598,14 +684,24 @@ def fetch_news_list(session: requests.Session, stock_id: str, market_type: int,
         "_": int(time.time() * 1000),
     }
     headers = _augment_headers_with_signature(build_headers(referer), cookies, params)
-    resp = session.get(NEWS_LIST_API, params=params, headers=headers,
-                       cookies=cookies, timeout=20)
+    resp = _retry_request(
+        session.get,
+        desc="news-list API",
+        url=NEWS_LIST_API, params=params, headers=headers,
+        cookies=cookies, timeout=20,
+    )
+    if resp is None:
+        raise RuntimeError("list API failed after retries (network error)")
     if resp.status_code in _SESSION_EXPIRED_HTTP_STATUS:
         raise SessionExpiredError(
             f"list API HTTP {resp.status_code} (WAF session expired): {resp.text[:300]}")
     if resp.status_code != 200:
         raise RuntimeError(f"list API HTTP {resp.status_code}: {resp.text[:300]}")
-    payload = resp.json()
+    try:
+        payload = resp.json()
+    except (json.JSONDecodeError, ValueError) as e:
+        raise RuntimeError(f"list API returned non-JSON response "
+                           f"({resp.text[:200]!r})") from e
     code = payload.get("code")
     try:
         code_int = int(code) if code is not None else 0
@@ -621,12 +717,20 @@ def fetch_news_list(session: requests.Session, stock_id: str, market_type: int,
 
 def warm_up_session(session: requests.Session, cookies: dict) -> None:
     """访问一次根域拿全 WAF cookies；否则 news.futunn.com 详情页返回 10 KB 空壳而非 SSR 内容。
-    幂等：同一 session 反复调也没坏处。"""
-    session.get("https://www.futunn.com/",
-                headers={"User-Agent": DEFAULT_UA,
-                         "Accept": "text/html,application/xhtml+xml,*/*",
-                         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
-                cookies=cookies, timeout=15)
+    幂等：同一 session 反复调也没坏处。失败不致命（后面 API 照样可能工作），只打警告。"""
+    resp = _retry_request(
+        session.get,
+        desc="warmup futunn.com",
+        url="https://www.futunn.com/",
+        headers={"User-Agent": DEFAULT_UA,
+                 "Accept": "text/html,application/xhtml+xml,*/*",
+                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"},
+        cookies=cookies, timeout=15,
+    )
+    if resp is None or resp.status_code != 200:
+        print(f"[downloader] warning: warmup request failed "
+              f"(status={resp.status_code if resp else 'None'}), continuing anyway",
+              file=sys.stderr)
 
 
 def fetch_notice_pdf_url(session: requests.Session, detail_url: str, cookies: dict,
@@ -643,10 +747,13 @@ def fetch_notice_pdf_url(session: requests.Session, detail_url: str, cookies: di
         "Sec-Fetch-Site": "cross-site",
         "Upgrade-Insecure-Requests": "1",
     }
-    try:
-        resp = session.get(detail_url, headers=headers, cookies=cookies, timeout=20)
-    except Exception as e:
-        print(f"[downloader] notice fetch failed: {e}", file=sys.stderr)
+    resp = _retry_request(
+        session.get,
+        desc=f"notice page {detail_url[:80]}",
+        url=detail_url, headers=headers, cookies=cookies, timeout=20,
+    )
+    if resp is None:
+        print(f"[downloader] notice fetch failed after retries: {detail_url}", file=sys.stderr)
         return None
     if resp.status_code != 200:
         print(f"[downloader] notice HTTP {resp.status_code} for {detail_url}", file=sys.stderr)
@@ -812,6 +919,62 @@ def _sec_should_download(name: str, announcement_title: str, ticker: str,
     return sec_file_passes_filters(name, announcement_title, ticker, entry)
 
 
+def _retry_stream_download(session: requests.Session, url: str, headers: dict,
+                           target: Path, desc: str,
+                           cookies: Optional[dict] = None,
+                           retries: int = 3, backoff: float = 2.0,
+                           timeout: int = 60) -> bool:
+    """流式下载大文件（PDF/HTM），网络错误时自动重试并清理临时文件。
+
+    流式下载特殊性：连接建立后仍可能中断（断网/服务端断开），重试时从头开始下。
+    返回 True 表示成功写入 target，False 表示全部重试失败。
+    """
+    delay = backoff
+    for attempt in range(1, retries + 1):
+        try:
+            with session.get(url, headers=headers, cookies=cookies,
+                             timeout=timeout, stream=True) as r:
+                if r.status_code in _RETRYABLE_STATUS and attempt < retries:
+                    print(f"[downloader] {desc} HTTP {r.status_code}, "
+                          f"retry {attempt}/{retries} in {delay:.1f}s…",
+                          file=sys.stderr)
+                    time.sleep(delay)
+                    delay *= backoff
+                    continue
+                if r.status_code != 200:
+                    if attempt < retries and r.status_code in _RETRYABLE_STATUS:
+                        time.sleep(delay); delay *= backoff; continue
+                    print(f"[downloader] {desc} HTTP {r.status_code} for {url}", file=sys.stderr)
+                    return False
+                tmp = target.with_suffix(target.suffix + ".part")
+                with tmp.open("wb") as f:
+                    for chunk in r.iter_content(64 * 1024):
+                        f.write(chunk)
+                tmp.replace(target)  # 下载完整后原子替换
+                return True
+        except _RETRYABLE_EXCEPTIONS as e:
+            if attempt < retries:
+                print(f"[downloader] {desc} {type(e).__name__}: {e}, "
+                      f"retry {attempt}/{retries} in {delay:.1f}s…",
+                      file=sys.stderr)
+                time.sleep(delay)
+                delay *= backoff
+                # 清理半成品
+                try:
+                    if target.with_suffix(target.suffix + ".part").exists():
+                        target.with_suffix(target.suffix + ".part").unlink()
+                except Exception:
+                    pass
+                continue
+            print(f"[downloader] {desc} failed after {retries} retries: {e}",
+                  file=sys.stderr)
+            return False
+        except Exception as e:
+            print(f"[downloader] {desc} unexpected error: {e}", file=sys.stderr)
+            return False
+    return False
+
+
 def download_hk_single_pdf(session: requests.Session, pdf_url: str, target_dir: Path,
                            cookies: dict) -> Optional[Path]:
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -822,18 +985,9 @@ def download_hk_single_pdf(session: requests.Session, pdf_url: str, target_dir: 
     target = target_dir / fname
     headers = {"User-Agent": DEFAULT_UA, "Accept": "application/pdf,*/*",
                "Referer": "https://news.futunn.com/"}
-    try:
-        r = session.get(pdf_url, headers=headers, cookies=cookies, timeout=60, stream=True)
-    except Exception as e:
-        print(f"[downloader] hk pdf fetch failed: {e}", file=sys.stderr)
-        return None
-    if r.status_code != 200:
-        print(f"[downloader] hk pdf HTTP {r.status_code} for {pdf_url}", file=sys.stderr)
-        return None
-    with target.open("wb") as f:
-        for chunk in r.iter_content(64 * 1024):
-            f.write(chunk)
-    return target
+    ok = _retry_stream_download(session, pdf_url, headers, target,
+                                desc=f"HK PDF {fname}", cookies=cookies)
+    return target if ok else None
 
 
 def download_sec_accession(session: requests.Session, seed_url: str, target_dir: Path,
@@ -842,17 +996,19 @@ def download_sec_accession(session: requests.Session, seed_url: str, target_dir:
                            entry: CompanyEntry) -> list[Path]:
     """给定 SEC EDGAR 某个 accession 里的任意一个文件 URL，拉 index.json，
     按 companies.json 的过滤规则（filingSuffixNames 或表格类型默认规则）逐个下载到 target_dir。
-    返回落地的文件列表；空列表表示失败。"""
+    返回落地的文件列表；空列表表示失败。网络瞬时错误自动重试。"""
     # 反推 accession folder
     if "/" not in seed_url:
         return []
     accession_base = seed_url.rsplit("/", 1)[0]
     index_url = f"{accession_base}/index.json"
     hdrs = {"User-Agent": sec_ua, "Accept": "application/json, */*"}
-    try:
-        r = session.get(index_url, headers=hdrs, timeout=20)
-    except Exception as e:
-        print(f"[downloader] sec index fetch failed: {e}", file=sys.stderr)
+    r = _retry_request(
+        session.get, desc="SEC index.json",
+        url=index_url, headers=hdrs, timeout=20,
+    )
+    if r is None:
+        print(f"[downloader] sec index fetch failed after retries: {index_url}", file=sys.stderr)
         return []
     if r.status_code != 200:
         print(f"[downloader] sec index HTTP {r.status_code} for {index_url}", file=sys.stderr)
@@ -878,18 +1034,14 @@ def download_sec_accession(session: requests.Session, seed_url: str, target_dir:
         if target.exists() and target.stat().st_size > 0:
             saved.append(target)
             continue
-        try:
-            fr = session.get(file_url, headers={"User-Agent": sec_ua}, timeout=60, stream=True)
-        except Exception as e:
-            print(f"[downloader]   sec fetch failed {name}: {e}", file=sys.stderr)
-            continue
-        if fr.status_code != 200:
-            print(f"[downloader]   sec HTTP {fr.status_code} for {name}", file=sys.stderr)
-            continue
-        with target.open("wb") as f:
-            for chunk in fr.iter_content(64 * 1024):
-                f.write(chunk)
-        saved.append(target)
+        ok = _retry_stream_download(
+            session, file_url,
+            headers={"User-Agent": sec_ua, "Accept": "*/*"},
+            target=target, desc=f"SEC file {name}",
+            retries=3, backoff=2.0, timeout=60,
+        )
+        if ok:
+            saved.append(target)
         time.sleep(sleep_between_files)
     return saved
 
@@ -1260,7 +1412,7 @@ def main() -> int:
         refresh_cookies(cookies_path)
 
     cookies = load_cookies(cookies_path)
-    session = requests.Session()
+    session = _build_session()
     session.cookies.update(cookies)
     warm_up_session(session, cookies)  # 拿全 WAF cookies，让详情页 SSR 内容能返回
 

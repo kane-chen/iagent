@@ -40,7 +40,10 @@ src/test/resources/test.properties
 src/main/resources/application.properties
 
 # workspace
-workspace/agents
+# agents 目录：忽略运行时数据（tasks/ 等），但跟踪 AGENTS.md 定义文件
+workspace/agents/**
+!workspace/agents/*/
+!workspace/agents/*/AGENTS.md
 workspace/portfolio
 workspace/excels
 workspace/logs
