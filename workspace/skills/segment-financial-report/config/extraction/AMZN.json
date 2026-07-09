@@ -1,0 +1,45 @@
+{
+  "companyCode": "AMZN",
+  "companyName": "Amazon",
+  "market": "NASDAQ",
+  "defaultCurrency": "USD",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4","FY"],
+  "segments": [
+    {
+      "segmentCode": "North_America",
+      "segmentName": "North America",
+      "aliases": ["North America"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "International",
+      "segmentName": "International",
+      "aliases": ["International"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "AWS",
+      "segmentName": "AWS",
+      "aliases": ["AWS"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenues", "Revenue", "收入", "Net sales"]
+    },
+    {
+      "standardMetricCode": "OPERATING_EXPENSES",
+      "rawMetricNames": ["Operating expenses"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating Income", "Operating income (loss):", "经营利润", "营业利润"]
+    }
+  ]
+}

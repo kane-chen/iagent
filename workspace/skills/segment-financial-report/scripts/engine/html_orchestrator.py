@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 
 from .data_extractor import DataExtractor
 from .handlers.generic_html import GenericHtmlLayoutHandler
+from .handlers.segment_blocks import SegmentBlocksHandler
 from .handlers.segment_contribution import SegmentContributionHandler
 from .handlers.segment_row_period_column import SegmentRowPeriodColumnHandler
 from .html_support import HtmlExtractionSupport
@@ -27,6 +28,7 @@ class HtmlReportOrchestrator:
         return HtmlReportOrchestrator([
             SegmentContributionHandler(support, recognizer),
             SegmentRowPeriodColumnHandler(support),
+            SegmentBlocksHandler(support),
             GenericHtmlLayoutHandler(data_extractor),
         ])
 

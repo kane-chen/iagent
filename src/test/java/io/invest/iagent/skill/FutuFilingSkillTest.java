@@ -94,7 +94,13 @@ public class FutuFilingSkillTest {
 
     @Test
     public void test_ms() {
-        String responseText = doDownload("微软", "2020", "2026");
+        String responseText = doDownload("微软", "2021", "2026");
+        Assert.notNull(responseText, "call response");
+    }
+
+    @Test
+    public void test_amzn() {
+        String responseText = doDownload("亚马逊", "2021", "2026");
         Assert.notNull(responseText, "call response");
     }
 
@@ -113,6 +119,12 @@ public class FutuFilingSkillTest {
     @Test
     public void test_direct_tcom() throws Exception {
         int result = runDownloadSkill("TCOM", "2023,2024,2025", 200);
+        Assertions.assertEquals(0,result);
+    }
+
+    @Test
+    public void test_direct_amzn() throws Exception {
+        int result = runDownloadSkill("AMZN", "2021,2022,2023,2024,2025,2026", 200);
         Assertions.assertEquals(0,result);
     }
 

@@ -4,6 +4,7 @@
   "market": "NYSE",
   "defaultCurrency": "RMB",
   "defaultUnit": "million",
+  "fiscalYearEndMonth": 3,
   "includePeriodTypes": ["Q1","Q2","Q3","Q4"],
   "segments": [
     {

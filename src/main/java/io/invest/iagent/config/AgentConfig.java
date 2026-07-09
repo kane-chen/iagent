@@ -76,6 +76,7 @@ public class AgentConfig {
         ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
         toolkit.registerTool(shellCommandTool);
         SkillBox skillBox = new SkillBox(toolkit) ;
+        skillBox.setExposeAllSkillMetadata(false);
         skillBox.codeExecution()
                 .withShell(shellCommandTool)
                 .withRead()

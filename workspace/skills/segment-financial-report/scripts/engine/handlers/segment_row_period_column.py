@@ -34,13 +34,14 @@ class SegmentRowPeriodColumnHandler:
 
     def apply(self, table: FinancialTable, cfg: Optional[CompanyConfig],
               sink: Dict[str, Segment]) -> int:
-        default_quarter = period_type_util.determinePeriodType(table)
+        fyem = int(getattr(cfg, "fiscalYearEndMonth", 12) or 12) if cfg else 12
+        default_quarter = period_type_util.determinePeriodType(table, fyem)
         if not default_quarter:
             default_quarter = "Q3"
-        seq = period_sequence.build(table, default_quarter)
+        seq = period_sequence.build(table, default_quarter, fyem)
         if not seq:
             return 0
-        currency_by_period = period_sequence.buildCurrencies(table, default_quarter)
+        currency_by_period = period_sequence.buildCurrencies(table, default_quarter, fyem)
         default_currency = cfg.defaultCurrency
         unit_override = cfg.defaultUnit
 

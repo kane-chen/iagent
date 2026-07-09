@@ -4,6 +4,7 @@
   "market": "NASDAQ",
   "defaultCurrency": "USD",
   "defaultUnit": "million",
+  "fiscalYearEndMonth": 6,
   "includePeriodTypes": ["Q1","Q2","Q3","Q4"],
   "segments": [
     {

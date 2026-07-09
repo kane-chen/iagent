@@ -158,6 +158,18 @@
       "supportPeriodTypes": []
     },
     {
+      "ticker": "AMZN",
+      "market": "US",
+      "stockId": "205111",
+      "cik": "0000320193",
+      "displayName": "亚马逊",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ],
+      "supportPeriodTypes": []
+    },
+    {
       "ticker": "NVDA",
       "market": "US",
       "stockId": "202597",

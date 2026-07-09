@@ -52,6 +52,7 @@ class CompanyConfigLoader:
             defaultUnit=data.get("defaultUnit"),
             includePeriodTypes=list(data.get("includePeriodTypes") or []),
             htmlLayout=data.get("htmlLayout"),
+            fiscalYearEndMonth=int(data.get("fiscalYearEndMonth") or 12),
         )
         for sc in data.get("segments") or []:
             cfg.segments.append(SegmentConfig(

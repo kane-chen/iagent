@@ -19,6 +19,7 @@ from .metric_mapper import MetricMapper
 from .model import CompanyConfig, Segment
 from .pdf_parser import PdfFileSegmentParser
 from .segment_recognizer import SegmentRecognizer
+from .ytd_derivation import derive_ytd_quarters
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +157,13 @@ class FinancialExtractionService:
             )
 
         result = _merge_segments(all_segments)
+        # Derive missing single quarters from YTD / FY totals (Q4 = FY - QTD9, Q2 = QTD6 - Q1)
+        added = derive_ytd_quarters(result)
+        if added:
+            logger.info("Derived %d single-quarter metrics from YTD/FY totals", added)
+        # Final period-type filter: drop YTD/H periods that aren't in includePeriodTypes
+        if self.dataExtractor is not None:
+            result = self.dataExtractor.filterSegmentsByPeriodType(result)
         if self.last_errors:
             logger.warning("%d/%d files had errors, %d segments extracted from %d files",
                            len(self.last_errors), len(files),

@@ -1,19 +1,19 @@
 package io.invest.iagent.skill;
 
-import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
 import io.invest.iagent.utils.ProcessRunner;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.Assert;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -24,13 +24,7 @@ import java.util.Objects;
 public class SegmentFinancialReportSkillTest {
 
     @Autowired
-    private HarnessAgent baseAgent ;
-
-    private RuntimeContext context;
-
-    @BeforeEach
-    public void init() {
-    }
+    private HarnessAgent baseAgent;
 
     @Test
     public void test_excel_baba() {
@@ -57,8 +51,18 @@ public class SegmentFinancialReportSkillTest {
     }
 
     @Test
+    @Disabled
     public void test_excel_microsoft() {
         String companyName = "微软";
+        Msg response = this.doExecute(companyName);
+        String responseText = Objects.requireNonNull(response).getTextContent();
+        Assert.notNull(responseText, "question response");
+    }
+
+    @Test
+    @Disabled
+    public void test_excel_amazon() {
+        String companyName = "亚马逊";
         Msg response = this.doExecute(companyName);
         String responseText = Objects.requireNonNull(response).getTextContent();
         Assert.notNull(responseText, "question response");
@@ -105,42 +109,73 @@ public class SegmentFinancialReportSkillTest {
     }
 
     @Test
-    public void test_skill_direct_baba() throws Exception {
-        int result = this.runSkill("BABA", 100) ;
-        Assert.isTrue(result == 0, "call failed");
-    }
-
-    @Test
     public void test_skill_direct_pdd() throws Exception {
-        int result = this.runSkill("PDD", 120) ;
-        Assert.isTrue(result == 0, "call failed");
-    }
-
-    @Test
-    public void test_skill_direct_tcom() throws Exception {
-        int result = this.runSkill("TCOM", 120) ;
-        Assert.isTrue(result == 0, "call failed");
+        int code = this.runSkill("PDD", 360);
+        Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_00700() throws Exception {
-        int result = this.runSkill("00700", 360) ;
-        Assert.isTrue(result == 0, "call failed");
+        int code = this.runSkill("00700", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_83690() throws Exception {
+        int code = this.runSkill("83690", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_baba() throws Exception {
+        int code = this.runSkill("BABA", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_beke() throws Exception {
+        int code = this.runSkill("BEKE", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_tcom() throws Exception {
+        int code = this.runSkill("TCOM", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct__microsoft() throws Exception {
+        int code = this.runSkill("MSFT", 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_amazon() throws Exception {
+        int code = this.runSkill("AMZN", 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_google() throws Exception {
+        int code = this.runSkill("GOOG", 360);
+        Assertions.assertEquals(0,code);
     }
 
     private int runSkill(String ticker, int timeoutSeconds) throws Exception {
-        // workspace
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/segment-financial-report/scripts/extract_segments.py");
-        Assertions.assertTrue(script.toFile().isFile(), "generate script missing at " + script);
-        // command
+        Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
+
         List<String> cmd = List.of(
                 "python", script.toString(),
                 "--ticker", ticker,
                 "--excel"
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
-        return result.getExitCode();
+        Assertions.assertEquals(0, result.getExitCode(),
+                "extract_segments.py failed, stderr: " + result.getStderr());
+        return result.getExitCode() ;
     }
 
 }

@@ -65,8 +65,135 @@ class HtmlReportParser:
         table.title = self._find_table_title(table_el)
         table.headers = self._parse_headers(table_el)
         table.rows = self._parse_rows(table_el)
+        table.period = self._infer_table_period(table_el)
         self._infer_currency_and_unit(table, table_el)
         return table
+
+    # ---- table-level period hint from surrounding text ---------------
+    _PERIOD_PHRASE_RE = re.compile(
+        r"(?:three|six|nine|twelve)\s+months?\s+ended\s+([a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})",
+        re.IGNORECASE,
+    )
+    _QUARTER_ENDED_RE = re.compile(
+        r"quarter\s+ended\s+([a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})",
+        re.IGNORECASE,
+    )
+    _YEAR_ENDED_RE = re.compile(
+        r"(?:year|fiscal\s+year)\s+ended\s+([a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})",
+        re.IGNORECASE,
+    )
+
+    _MONTH_NAMES = ("january","february","march","april","may","june",
+                    "july","august","september","october","november","december")
+
+    def _infer_table_period(self, table_el: Tag) -> Optional[str]:
+        """Look in immediately preceding content for period-ending phrases like
+        "Three Months Ended June 30, 2025" or "fiscal year ended March 31, 2026".
+
+        Strategy for combined press releases (which contain both quarterly and FY
+        tables): search preceding elements (walking siblings upward, including text
+        inside container elements like <table> highlights blocks), and stop when we
+        find a period phrase, prioritizing the one CLOSEST to the table.  Also
+        detect section-boundary headings to avoid crossing into a previous
+        section's data.
+
+        Downstream code can use this as a fallback when the table itself has no
+        period header (common in press-release / 6-K tables).
+        """
+        import re as _re
+
+        def _find_phrase_in_text(text: str):
+            """Return (year, end_pos_in_text, match_text) for the last period phrase
+            in *text*, or None."""
+            if not text:
+                return None
+            low = text.lower().replace("\xa0", " ")
+            # Normalize newlines inside the phrase (e.g. "March 31,\n2026")
+            low_norm = re.sub(r"[,\s]+", " ", low)
+            best = None
+            for pat in (self._PERIOD_PHRASE_RE, self._YEAR_ENDED_RE, self._QUARTER_ENDED_RE):
+                # Use a version that allows embedded commas/newlines between tokens
+                for m in pat.finditer(low_norm):
+                    try:
+                        y = int(m.group(3))
+                        if best is None or y > best[0] or (y == best[0] and m.end() > best[1]):
+                            best = (y, m.end(), m.group(0))
+                    except (IndexError, ValueError):
+                        continue
+            return best
+
+        def _is_section_heading(el: Tag) -> bool:
+            """Return True if el looks like a section heading that separates periods."""
+            tag_name = getattr(el, "name", "") or ""
+            if tag_name in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                return True
+            # Bold short text announcing results
+            txt = self._element_text(el).strip()
+            if 0 < len(txt) < 200:
+                low = txt.lower()
+                if "results" in low and re.search(r"\b(fiscal\s+year|quarter|three\s+months?|six\s+months?|nine\s+months?|twelve\s+months?|year\s+ended)\b", low):
+                    return True
+            return False
+
+        def _is_divider(el: Tag) -> bool:
+            """Return True if el is a page/section divider (border-top rule)."""
+            tag_name = getattr(el, "name", "") or ""
+            style = (el.get("style", "") or "").lower()
+            cls = " ".join(el.get("class", []) or []).lower()
+            if "border-top" in style or "rule-page" in cls or "field: rule-page" in str(el):
+                return True
+            return False
+
+        # Walk backwards through previous siblings, collecting text and stopping at
+        # first period phrase found or section boundary.
+        prev = self._previous_element_sibling(table_el)
+        visited = 0
+        best_match = None  # (year, end_pos_in_combined, match_text)
+        accumulated_len = 0
+        while prev is not None and visited < 30 and accumulated_len < 4000:
+            visited += 1
+            tag_name = getattr(prev, "name", "") or ""
+            # Page/section dividers used in EDGAR press releases:
+            #   <!-- Field: Rule-Page --> or <div style="...border-top...">
+            # These reliably separate the quarterly and FY sections in combined
+            # BABA press releases.
+            is_divider = _is_divider(prev)
+            is_heading = is_divider or _is_section_heading(prev)
+            txt = self._element_text(prev).strip()
+            if is_heading:
+                break
+            if txt:
+                # Check if this element contains a period phrase
+                hit = _find_phrase_in_text(txt)
+                if hit is not None:
+                    # Found a phrase in this sibling; since we walk backwards (closest
+                    # first), the first hit is the nearest to the table → keep it
+                    # only if it's from a later/equal year than any prior.
+                    if best_match is None or hit[0] >= best_match[0]:
+                        best_match = hit
+                    # Stop after finding a phrase in a paragraph-level element (not
+                    # in a highlights <table> which may list multiple periods).
+                    if tag_name in ("p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "span"):
+                        break
+                    # For <table> highlights blocks: the phrase with the latest year
+                    # is usually the period this section is about, but keep walking
+                    # one more sibling to see if there's a closer explicit heading
+                    # like "In the fiscal year ended ...:" paragraph.
+                accumulated_len += len(txt)
+            prev = self._previous_element_sibling(prev)
+
+        # Check next sibling for immediately-following caption/period note
+        nxt = self._next_element_sibling(table_el)
+        if nxt is not None:
+            ntxt = self._element_text(nxt).strip()
+            if ntxt and len(ntxt) < 500:
+                hit = _find_phrase_in_text(ntxt)
+                if hit is not None:
+                    return hit[2]
+
+        if best_match is not None:
+            return best_match[2]
+        return None
 
     # ---- title -------------------------------------------------------
     def _find_table_title(self, table_el: Tag) -> str:

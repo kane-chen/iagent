@@ -299,6 +299,10 @@ class CompanyConfig:
     defaultUnit: Optional[str] = None
     includePeriodTypes: List[str] = field(default_factory=list)
     htmlLayout: Optional[str] = None
+    fiscalYearEndMonth: int = 12
+    """Fiscal year end month (1-12). Default 12 = December (calendar year).
+       June FY-end companies (e.g. MSFT) use 6; March FY-end (e.g. BABA) use 3.
+       This shifts month→quarter mapping so that the first month of the fiscal year maps to Q1."""
     segments: List[SegmentConfig] = field(default_factory=list)
     metricMappingRules: List[MetricMappingRule] = field(default_factory=list)
     pdfColumnMappings: List[PdfColumnMapping] = field(default_factory=list)

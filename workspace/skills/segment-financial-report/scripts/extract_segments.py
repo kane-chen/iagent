@@ -133,6 +133,10 @@ def run_python_engine(ticker: str,
             "children": [_seg_to_dict(c, seg.segmentCode) for c in seg.children],
         }
 
+    fy_end_month = 12
+    if svc.companyConfig is not None:
+        fy_end_month = int(getattr(svc.companyConfig, "fiscalYearEndMonth", 12) or 12)
+
     if flat:
         payload = []
 
@@ -157,6 +161,13 @@ def run_python_engine(ticker: str,
                 _walk(c, seg.segmentCode)
         for s in all_segments:
             _walk(s, None)
+        # Attach metadata for the Excel renderer (fiscal year end month)
+        if payload:
+            payload.append({
+                "__meta__": True,
+                "fiscalYearEndMonth": fy_end_month,
+                "ticker": ticker,
+            })
     else:
         payload = [_seg_to_dict(s) for s in all_segments]
 
@@ -185,6 +196,16 @@ def generate_excel(ticker: str, workspace: Path, json_path: Path,
         print(f"[extract] 分部数据为空，跳过 Excel 生成", file=sys.stderr)
         sys.exit(2)
 
+    # Extract metadata record (last entry if __meta__)
+    fy_end_month = 12
+    data_segments = []
+    for rec in segments:
+        if rec.get("__meta__"):
+            fy_end_month = int(rec.get("fiscalYearEndMonth", 12) or 12)
+        else:
+            data_segments.append(rec)
+    segments = data_segments
+
     periods = gx.get_all_periods(segments)
     if not periods:
         periods = ["Latest"]
@@ -199,7 +220,8 @@ def generate_excel(ticker: str, workspace: Path, json_path: Path,
         output_xlsx = excels_dir / f"{ticker}_segments_{timestamp}.xlsx"
     log_file = logs_dir / f"segment_{ticker}_{timestamp}.log"
     logger = gx.setup_logging(str(log_file))
-    gx.generate_excel_with_styling(segments, periods, str(output_xlsx), ticker, logger)
+    gx.generate_excel_with_styling(segments, periods, str(output_xlsx), ticker, logger,
+                                   fiscal_year_end_month=fy_end_month)
     print(f"[extract] Excel written to {output_xlsx}", file=sys.stderr)
     return output_xlsx
 

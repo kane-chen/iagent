@@ -37,18 +37,28 @@ class DataExtractor:
         self.segmentRecognizer = segmentRecognizer
         self.metricMapper = metricMapper
 
+    def _fyem(self) -> int:
+        cfg = self.segmentRecognizer.getCompanyConfig() if self.segmentRecognizer else None
+        return int(getattr(cfg, "fiscalYearEndMonth", 12) or 12) if cfg else 12
+
     def extractSegmentData(self, table: FinancialTable) -> List[Segment]:
-        """从表格中提取 segment 数据。"""
+        """从表格中提取 segment 数据。
+
+        NOTE: We do NOT filter by includePeriodTypes here; YTD values (QTD6/QTD9)
+        are retained so that downstream ytd_derivation can compute missing single
+        quarters (Q4 = FY - QTD9, Q2 = QTD6 - Q1). The final filter is applied by
+        the caller (FinancialExtractionService) after merge + derivation.
+        """
         logger.info("Extracting segment data from table: %s", table.getTitle())
         segments = self.segmentRecognizer.recognizeSegments(table)
         for seg in segments:
             self._extract_metrics_for_segment(seg, table)
             self._extract_metrics_for_children(seg, table)
         self._aggregate_child_metrics(segments)
-        segments = self._filter_by_period_type(segments)
         return segments
 
-    def _filter_by_period_type(self, segments: List[Segment]) -> List[Segment]:
+    def filterSegmentsByPeriodType(self, segments: List[Segment]) -> List[Segment]:
+        """Public: apply includePeriodTypes filter after derivation is complete."""
         self._filter_segments_by_period_type(segments)
         return [s for s in segments if s.segmentCode is not None or s.children is not None]
 
@@ -72,12 +82,13 @@ class DataExtractor:
         cells = row.getCells()
         title = table.getTitle() or ""
         title_year = self._extract_year(title)
+        fyem = self._fyem()
 
-        quarter = period_type_util.determinePeriodType(table)
+        quarter = period_type_util.determinePeriodType(table, fyem)
         if not quarter:
             quarter = "Q3"
 
-        seq = period_sequence.build(table, quarter)
+        seq = period_sequence.build(table, quarter, fyem)
         if not seq:
             if title_year > 0:
                 seq = [f"{title_year - 1}{quarter}", f"{title_year}{quarter}"]
@@ -104,8 +115,9 @@ class DataExtractor:
         for idx in range(match_count):
             period = seq[idx]
             cell = valid_cells[idx]
-            if period.endswith("QTD9") or period.endswith("QTD6") or period.endswith("H"):
-                continue
+            # Retain YTD values (QTD6/QTD9/H) as well; downstream derive_ytd_quarters()
+            # uses them to compute missing quarters (Q4=FY-QTD9, Q2=QTD6-Q1). The
+            # period-type filter removes them if not in includePeriodTypes.
             if segment.getMetric(metricCode, period) is not None:
                 continue
             metric = self._create_metric(metricCode, cell, table, period)
@@ -201,7 +213,7 @@ class DataExtractor:
         return -1
 
     def _title_mentions_other_metrics(self, lower_title: str, current: str) -> bool:
-        has_revenue = "revenue" in lower_title or "收入" in lower_title
+        has_revenue = self._matches_revenue_title(lower_title)
         has_operating = ("operating income" in lower_title or "operating profit" in lower_title
                         or "income from operations" in lower_title
                         or "经营利润" in lower_title or "营业利润" in lower_title)
@@ -221,19 +233,75 @@ class DataExtractor:
                 continue
             lower_label = row.getLabel().lower().strip()
             contains_kw = any(x in lower_label for x in (
-                "revenue", "income", "profit", "expense", "cost", "loss", "supplemental"))
+                "revenue", "sales", "income", "profit", "expense", "cost", "loss", "supplemental"))
             if contains_kw and section_title_detector.isSectionTitleRow(row, lower_label):
                 return i
         return -1
 
+    # 非收入类的 "sales" 短语，避免 "Net Sales Mix"（占比表）/ "sales growth" 等误判为收入段标题
+    _NON_REVENUE_SALES_PHRASES = ("mix", "growth", "per store", "price", "volume",
+                                  "marketing", "tax", "return", "allowance")
+    # 非经营性收入类的 "revenue" 短语：递延收入/未实现收入 等属于资产负债表项目，不是分部营业收入
+    _NON_OPERATING_REVENUE_PHRASES = ("unearned revenue", "deferred revenue",
+                                      "unearned income", "deferred income",
+                                      "contract liabilities", "contracted revenue",
+                                      "future recognition")
+
+    def _matches_revenue_title(self, lower_text: str) -> bool:
+        """判断文本是否指向收入（Revenue / Net Sales）段标题。
+
+        Amazon/Apple 等美股公司在财报里使用 "Net sales" 表示营业收入，而不是 "revenue"。
+        这里额外识别 "net sales" / 独立出现的 "sales"，并排除 "sales mix" / "sales growth" 等非收入用法。
+        同时排除 "unearned revenue"/"deferred revenue"（递延收入，属于负债，不是分部收入）。
+        """
+        if not lower_text:
+            return False
+        # Exclude balance-sheet "revenue" terms (unearned/deferred) that match on "revenue" but
+        # are NOT operating segment revenue
+        for exc in self._NON_OPERATING_REVENUE_PHRASES:
+            if exc in lower_text:
+                return False
+        if "revenue" in lower_text or "revenues" in lower_text:
+            return True
+        if "收入" in lower_text or "营收" in lower_text:
+            return True
+        if "net sales" in lower_text:
+            # 排除 "net sales mix"（占比表）等 —— 含 "mix" 直接视为非收入段
+            for exclude in self._NON_REVENUE_SALES_PHRASES:
+                if exclude in lower_text:
+                    return False
+            return True
+        # 单独 "sales" 且在段标题位置（不是 "sales growth" 之类短语）时才认为是收入
+        if "sales" in lower_text:
+            for exclude in self._NON_REVENUE_SALES_PHRASES:
+                if exclude in lower_text:
+                    return False
+            return True
+        return False
+
     def _get_metric_keywords(self, metricCode: str) -> List[str]:
         if metricCode == "REVENUE":
-            return ["revenue", "revenues", "收入"]
+            return ["revenue", "revenues", "net sales", "sales", "收入", "营收"]
         if metricCode == "OPERATING_INCOME":
             return ["operating", "income", "profit", "利润", "收益"]
         if metricCode == "ADJUSTED_EBITA":
             return ["ebita", "ebit", "调整后"]
         return []
+
+    # Titles that mention "segment" but are NOT segment results (balance-sheet items,
+    # deferred revenue, other segment-related disclosures).
+    _NON_SEGMENT_RESULTS_KEYWORDS = ("unearned revenue", "deferred revenue",
+                                     "unearned income", "contract liabilities",
+                                     "expected future recognition", "reconciliation")
+
+    def _is_segment_results_title(self, lower_title: str) -> bool:
+        """Title refers to a segment results / segment financials table (not a disclosure)."""
+        if not lower_title:
+            return False
+        for kw in self._NON_SEGMENT_RESULTS_KEYWORDS:
+            if kw in lower_title:
+                return False
+        return "segment" in lower_title
 
     def _infer_possible_metrics(self, table: FinancialTable) -> List[str]:
         title = table.getTitle()
@@ -248,7 +316,7 @@ class DataExtractor:
                 continue
             ll = label.lower().strip()
             if section_title_detector.isSectionTitleRow(r, ll):
-                if "revenue" in ll or "revenues" in ll:
+                if self._matches_revenue_title(ll):
                     has_rev_section = True
                 if ("operating income" in ll or "operating profit" in ll
                         or "income from operations" in ll):
@@ -257,8 +325,8 @@ class DataExtractor:
                     has_ebita_section = True
 
         metrics: List[str] = []
-        is_segment_table = "segment" in lower_title
-        has_revenue = ("revenue" in lower_title or "revenues" in lower_title or has_rev_section)
+        is_segment_table = self._is_segment_results_title(lower_title)
+        has_revenue = (self._matches_revenue_title(lower_title) or has_rev_section)
         has_prof = ("profitability" in lower_title or "profit" in lower_title
                     or "operating income" in lower_title or "经营利润" in lower_title
                     or has_oi_section)
@@ -294,8 +362,7 @@ class DataExtractor:
         if ("operating income" in lower_title or "经营利润" in lower_title
                 or "营业利润" in lower_title):
             metrics.append("OPERATING_INCOME")
-        if ("revenue" in lower_title or "收入" in lower_title
-                or "营收" in lower_title or "revenues" in lower_title):
+        if self._matches_revenue_title(lower_title):
             metrics.append("REVENUE")
 
         if not metrics:
@@ -312,7 +379,7 @@ class DataExtractor:
         if ("adjusted ebita" in lt or "经调整ebita" in lt
                 or "调整后ebita" in lt or "ebita by segment" in lt):
             return "ADJUSTED_EBITA"
-        if "revenue" in lt or "收入" in lt or "营收" in lt or "revenues" in lt:
+        if self._matches_revenue_title(lt):
             return "REVENUE"
         if "ebitda" in lt:
             return "EBITDA"

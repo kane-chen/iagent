@@ -138,6 +138,70 @@ def get_all_periods(flat_metrics):
     return sorted(list(periods), key=period_sort_key)
 
 
+# Quarter end months for fiscal quarter Qn given fiscal_year_end_month.
+# For a FY ending in month F (1-12), Q1 ends month (F-9) mod 12 adjusted to 1-12, etc.
+# Simpler: directly compute ending calendar month for each fiscal quarter.
+def _quarter_end_month(fy_end: int, q: int) -> int:
+    """Return the calendar month (1-12) in which fiscal quarter Q*q* ends.
+
+    For fy_end=3 (BABA, Mar): Q1 ends Jun(6), Q2 ends Sep(9), Q3 ends Dec(12), Q4 ends Mar(3)
+    For fy_end=6 (MSFT, Jun): Q1 ends Sep(9), Q2 ends Dec(12), Q3 ends Mar(3), Q4 ends Jun(6)
+    For fy_end=12 (Dec): Q1 ends Mar(3), Q2 ends Jun(6), Q3 ends Sep(9), Q4 ends Dec(12)
+    """
+    # Q4 ends in fy_end month; Q3 in fy_end-3; Q2 in fy_end-6; Q1 in fy_end-9 (mod 12, 1-indexed)
+    m = fy_end - (4 - q) * 3
+    while m <= 0:
+        m += 12
+    while m > 12:
+        m -= 12
+    return m
+
+
+def fiscal_period_to_calendar(period: str, fy_end_month: int) -> str:
+    """Map a fiscal period label (e.g. '2026Q1', '2025FY') to a calendar period label.
+
+    Returns a human-readable calendar period string:
+    - Qn → 'YYYYQn' (calendar year + calendar quarter)
+    - FY → 'YYYY' if fy_end=12, otherwise 'YYYY-YY' (spans two calendar years)
+    """
+    import re
+    m = re.match(r'^(\d{4})(Q[1-4]|FY|QTD6|QTD9|H1|H2)$', period.upper())
+    if not m:
+        return ""
+    fy = int(m.group(1))
+    ptype = m.group(2)
+
+    if ptype == "FY":
+        if fy_end_month == 12:
+            return str(fy)
+        # FY spans two calendar years; show as "YYYY-YY" where YY is the ending year
+        end_year = fy  # fiscal year label = calendar year in which FY ends
+        start_year = end_year - 1
+        return f"{start_year}-{end_year % 100:02d}"
+
+    # Quarter mapping
+    qnum = int(ptype[1])
+    end_month = _quarter_end_month(fy_end_month, qnum)
+    if ptype in ("QTD6", "H1"):
+        # 6-month period ending Q2
+        end_month = _quarter_end_month(fy_end_month, 2)
+    elif ptype == "QTD9":
+        end_month = _quarter_end_month(fy_end_month, 3)
+    # Calendar year of the ending month: if end_month <= fy_end_month, the ending
+    # year is the fiscal year; else it's fy - 1.
+    # For BABA (fy_end=3): Jun(6) > 3 → end calendar year = fy-1 = 2025 for FY2026
+    #                     Mar(3) <= 3 → end calendar year = fy = 2026
+    # For MSFT (fy_end=6): Sep(9) > 6 → end calendar year = fy-1 = 2025 for FY2026
+    #                     Jun(6) <= 6 → end calendar year = fy = 2026
+    if end_month <= fy_end_month:
+        cal_year = fy
+    else:
+        cal_year = fy - 1
+    # Calendar quarter (1=Jan-Mar, 2=Apr-Jun, 3=Jul-Sep, 4=Oct-Dec)
+    cal_q = (end_month - 1) // 3 + 1
+    return f"{cal_year}Q{cal_q}"
+
+
 def get_all_level1_segments(flat_metrics):
     """获取所有一级业务分部及其颜色映射"""
     level1_segments = {}
@@ -455,10 +519,13 @@ def format_value(val):
     return val
 
 
-def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logger=None):
+def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logger=None,
+                                fiscal_year_end_month: int = 12):
     """生成带样式的Excel，体现层级关系和一级业务分组颜色
 
-    每个一级业务的所有相关行（包括子业务的所有指标行）使用相同的背景色
+    每个一级业务的所有相关行（包括子业务的所有指标行）使用相同的背景色。
+    当 fiscal_year_end_month != 12（即财年与日历年不一致）时，在表头下方追加一行
+    「日历年」标注每个财年周期对应的日历年/季度，方便跨公司对比。
     """
     if not HAS_OPENPYXL:
         raise ImportError("需要安装 openpyxl: pip install openpyxl")
@@ -469,6 +536,7 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
 
     # 基础样式
     header_font = Font(bold=True, name="微软雅黑", color=COLORS['header_font'])
+    calyear_font = Font(italic=True, name="微软雅黑", color='595959', size=9)
     normal_font = Font(name="微软雅黑")
     red_font = Font(name="微软雅黑", color=COLORS['yoy_alert'], bold=True)
 
@@ -485,11 +553,20 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
     # 构建数据行（从扁平数据）
     data_rows = build_data_rows_from_flat(flat_metrics, periods, logger)
 
+    # Compute calendar year labels for each period (if fiscal year differs from calendar year)
+    show_calendar_year = fiscal_year_end_month != 12
+    cal_labels = {}
+    if show_calendar_year:
+        for p in periods:
+            lbl = fiscal_period_to_calendar(p, fiscal_year_end_month)
+            cal_labels[p] = lbl if lbl else ""
+
     # 写入表头
     # 结构：业务分部 | 指标 | [各期数值]
+    header_row = 1
     headers = ['业务分部', '指标'] + periods
     for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx)
+        cell = ws.cell(row=header_row, column=col_idx)
         cell.value = header
         cell.font = header_font
         cell.fill = PatternFill(start_color=COLORS['header'],
@@ -498,8 +575,30 @@ def generate_excel_with_styling(flat_metrics, periods, output_file, ticker, logg
         cell.alignment = center_align
         cell.border = thin_border
 
+    # 写入日历年行（紧跟表头之后，仅当财年与日历年不一致）
+    cal_row_idx = header_row + 1
+    if show_calendar_year:
+        # 名称列留空，指标列写「日历年」
+        c = ws.cell(row=cal_row_idx, column=1, value="")
+        c.fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        c.border = thin_border
+        c = ws.cell(row=cal_row_idx, column=2, value="日历年")
+        c.font = calyear_font
+        c.fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        c.alignment = center_align
+        c.border = thin_border
+        for col_offset, p in enumerate(periods):
+            c = ws.cell(row=cal_row_idx, column=3 + col_offset, value=cal_labels.get(p, ""))
+            c.font = calyear_font
+            c.fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+            c.alignment = center_align
+            c.border = thin_border
+        data_start_row = cal_row_idx + 1
+    else:
+        data_start_row = cal_row_idx
+
     # 写入数据
-    row_idx = 2
+    row_idx = data_start_row
     for data_row in data_rows:
         level = data_row['level']
         row_type = data_row['type']
@@ -625,6 +724,8 @@ def main():
     parser.add_argument('--json', '-j', required=True, help='包含 Segment 数据的 JSON 文件路径（由 extract_segments.py 产出）')
     parser.add_argument('--output', '-o', help='输出Excel文件路径')
     parser.add_argument('--workspace', '-w', help='项目工作空间路径')
+    parser.add_argument('--fy-end-month', type=int, default=12,
+                        help='财年结束月（1-12），默认12（日历年）；例如 BABA=3, MSFT=6')
     args = parser.parse_args()
 
     # 确定 workspace 根目录：
@@ -653,6 +754,7 @@ def main():
 
     try:
         # 从 JSON 文件加载数据（由 extract_segments.py 产出）
+        fy_end_month = args.fy_end_month
         if args.json and os.path.exists(args.json):
             with open(args.json, 'r', encoding='utf-8') as f:
                 segments = json.load(f)
@@ -660,6 +762,15 @@ def main():
         else:
             log_stdout(f"ERROR: JSON文件不存在: {args.json}")
             return 1
+
+        # Extract metadata record (__meta__ appended by extract_segments.py)
+        data_segments = []
+        for rec in segments:
+            if rec.get("__meta__"):
+                fy_end_month = int(rec.get("fiscalYearEndMonth", fy_end_month) or fy_end_month)
+            else:
+                data_segments.append(rec)
+        segments = data_segments
 
         if not segments:
             log_stdout("ERROR: 分部数据为空")
@@ -683,7 +794,8 @@ def main():
         output_file = os.path.abspath(output_file)
 
         # 生成Excel
-        generate_excel_with_styling(segments, periods, output_file, ticker, logger)
+        generate_excel_with_styling(segments, periods, output_file, ticker, logger,
+                                   fiscal_year_end_month=fy_end_month)
 
         # 最终输出
         result = {

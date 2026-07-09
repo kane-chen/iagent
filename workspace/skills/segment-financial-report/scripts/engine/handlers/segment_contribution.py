@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from .. import period_sequence
+from .. import period_sequence, period_type_util
 from ..html_support import HtmlExtractionSupport
 from ..model import CompanyConfig, FinancialTable, Segment, TableRow
 from ..segment_recognizer import SegmentRecognizer
@@ -37,7 +37,9 @@ class SegmentContributionHandler:
     def apply(self, table: FinancialTable, cfg: Optional[CompanyConfig],
               sink: Dict[str, Segment]) -> int:
         rows = table.getRows()
-        seq = period_sequence.build(table, "Q4")
+        fyem = int(getattr(cfg, "fiscalYearEndMonth", 12) or 12) if cfg else 12
+        default_q = period_type_util.determinePeriodType(table, fyem) or "Q4"
+        seq = period_sequence.build(table, default_q, fyem)
         if not seq:
             return 0
 
@@ -64,8 +66,7 @@ class SegmentContributionHandler:
                 v = nums[idx]
                 if not period or v is None:
                     continue
-                if period.endswith("QTD9") or period.endswith("QTD6") or period.endswith("H"):
-                    continue
+                # YTD values retained for downstream derive_ytd_quarters()
                 self.support.addMetric(current, metric_code, period, v, table, unit_override)
                 hits += 1
         return hits
