@@ -145,7 +145,7 @@ public class SegmentFinancialReportSkillTest {
     }
 
     @Test
-    public void test_skill_direct__microsoft() throws Exception {
+    public void test_skill_direct_microsoft() throws Exception {
         int code = this.runSkill("MSFT", 160);
         Assertions.assertEquals(0,code);
     }

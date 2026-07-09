@@ -96,20 +96,44 @@ def _from_period_phrase(lower_text: str, m2q: dict) -> str:
 
 
 def _from_rows(rows, m2q: dict) -> Optional[str]:
+    """Detect the table's primary period type by scanning cells for period keywords.
+
+    When a table mixes quarter columns with YTD/FY columns (common in H1/Q2 press
+    releases which show both Three Months and Six Months Ended), prefer the
+    single-quarter type so that period_sequence can correctly label each column
+    (QTD columns are filtered downstream). FY is detected first as it dominates
+    annual reports.
+    """
     if not rows:
         return None
-    # Look for "year ended" / "twelve months" / "fiscal year" phrase anywhere in table
-    for kw in ("year ended", "twelve months ended", "fiscal year ended", "12 months ended"):
-        if any(_row_contains(r, kw) for r in rows):
-            return "FY"
-    if any(_row_contains(r, "three months ended") for r in rows):
-        for month, q in m2q.items():
-            if any(_row_contains(r, month) for r in rows):
-                return q
-    if any(_row_contains(r, "six months ended") for r in rows):
-        return "QTD6"
-    if any(_row_contains(r, "nine months ended") for r in rows):
+    has_fy = any(_row_contains(r, kw) for r in rows
+                 for kw in ("year ended", "twelve months ended",
+                            "fiscal year ended", "12 months ended"))
+    has_qtd9 = any(_row_contains(r, kw) for r in rows
+                   for kw in ("nine months ended", "9 months ended"))
+    has_qtd6 = any(_row_contains(r, kw) for r in rows
+                   for kw in ("six months ended", "6 months ended", "half year"))
+    has_quarter = any(_row_contains(r, kw) for r in rows
+                      for kw in ("three months ended", "three month ended",
+                                 "three-month", "3 months ended", "3 month ended",
+                                 "quarter ended"))
+    # FY dominates (annual report table, no single-quarter breakdown)
+    if has_fy and not has_quarter and not has_qtd9 and not has_qtd6:
+        return "FY"
+    # Single-quarter takes precedence over YTD for mixed press-release tables
+    # (e.g. Q2 releases show both Three Months and Six Months Ended).
+    if has_quarter:
+        latest = _find_latest_year_month(rows)
+        if latest is not None:
+            _y, mname = latest
+            return m2q.get(mname, "Q1")
+        return "Q1"
+    if has_qtd9:
         return "QTD9"
+    if has_qtd6:
+        return "QTD6"
+    if has_fy:
+        return "FY"
     return None
 
 
@@ -124,36 +148,97 @@ def _row_contains(row: TableRow, keyword: str) -> bool:
     return False
 
 
+_MONTH_SET = {"january","february","march","april","may","june",
+              "july","august","september","october","november","december"}
+
+
+def _find_latest_year_month(rows) -> Optional[tuple]:
+    """Scan all cells for (year, month_name) pairs and return the latest chronologically.
+
+    Looks for phrases like ``september 30, 2025`` or ``june 2025`` in cell text.
+    Returns (year_int, month_name_lower) or None if no date found.
+    """
+    import re
+    # Match <Month> <day?>, <year>
+    _DATE_RE = re.compile(
+        r"(january|february|march|april|may|june|july|august|september|"
+        r"october|november|december)\s+\d{1,2}\s*,?\s*(20\d{2})",
+        re.IGNORECASE,
+    )
+    _YEAR_RE = re.compile(r"\b(20\d{2})\b")
+    best: Optional[tuple] = None
+    for row in rows or []:
+        # Check label
+        for text_src in [(row.getLabel() if row else "")] + [
+            (c.getText() if c else "") for c in (row.getCells() if row else [])
+        ]:
+            if not text_src:
+                continue
+            low = text_src.lower().replace("\xa0", " ")
+            for m in _DATE_RE.finditer(low):
+                mon = m.group(1).lower()
+                yr = int(m.group(2))
+                cand = (yr, mon)
+                if best is None or _date_tuple_gt(cand, best):
+                    best = cand
+    return best
+
+
+def _date_tuple_gt(a: tuple, b: tuple) -> bool:
+    """Return True if (year, month_name) a is later than b."""
+    month_order = {n: i + 1 for i, n in enumerate(
+        ["january","february","march","april","may","june",
+         "july","august","september","october","november","december"])}
+    if a[0] != b[0]:
+        return a[0] > b[0]
+    return month_order.get(a[1], 0) > month_order.get(b[1], 0)
+
+
+def _month_from_text(lower_text: str) -> Optional[str]:
+    """Return the latest month name appearing in lower_text, or None."""
+    found = None
+    month_order = {n: i + 1 for i, n in enumerate(
+        ["january","february","march","april","may","june",
+         "july","august","september","october","november","december"])}
+    for mon in _MONTH_SET:
+        if mon in lower_text:
+            if found is None or month_order[mon] > month_order[found]:
+                found = mon
+    return found
+
+
 def _from_title(lower_title: str, m2q: dict) -> str:
     if not lower_title:
         return ""
-    if "three months" in lower_title or "quarter" in lower_title:
-        for month, q in m2q.items():
-            if month in lower_title:
-                return q
-        return "Q1"
+    if any(x in lower_title for x in (
+            "year ended", "fiscal year", "twelve months", "12 months", "full year")):
+        return "FY"
     if "nine months" in lower_title or "9 months" in lower_title:
         return "QTD9"
     if any(x in lower_title for x in ("six months", "six-month", "half year")):
         return "QTD6"
-    if any(x in lower_title for x in (
-            "year ended", "fiscal year", "twelve months", "12 months", "full year")):
-        return "FY"
+    if "three months" in lower_title or "three-month" in lower_title or "quarter" in lower_title:
+        mon = _month_from_text(lower_title)
+        if mon:
+            return m2q.get(mon, "Q1")
+        return "Q1"
     return ""
 
 
 def _from_header(header: Optional[str], m2q: dict) -> Optional[str]:
     if not header or not header.strip():
         return None
-    h = header.lower()
-    if "year ended" in h:
+    h = header.lower().replace("\xa0", " ")
+    if any(x in h for x in ("year ended", "fiscal year ended", "twelve months ended")):
         return "FY"
-    if "six months ended" in h:
-        return "QTD6"
-    if "nine months ended" in h:
+    if "nine months ended" in h or "9 months ended" in h:
         return "QTD9"
-    if "three months ended" in h:
-        for month, q in m2q.items():
-            if month in h:
-                return q
+    if "six months ended" in h or "6 months ended" in h or "half year" in h:
+        return "QTD6"
+    if any(x in h for x in ("three months ended", "three month ended",
+                            "three-month", "3 months ended", "quarter ended")):
+        mon = _month_from_text(h)
+        if mon:
+            return m2q.get(mon, "Q1")
+        return "Q1"
     return None

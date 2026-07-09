@@ -5,7 +5,8 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
-import org.assertj.core.api.Assertions;
+import io.invest.iagent.utils.ProcessRunner;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.Assert;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Objects;
 
 @SpringBootTest(classes = AgentConfig4Test.class)
@@ -93,6 +98,89 @@ public class FutuFinancialReportSkillTest {
                 .role(MsgRole.USER)
                 .textContent(content)
                 .build();
+    }
+
+    @Test
+    public void test_skill_direct_00700() throws Exception {
+        int code = this.runSkill("HK.00700","income",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_83690() throws Exception {
+        int code = this.runSkill("HK.83690","income",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_01211() throws Exception {
+        int code = this.runSkill("HK.01211","income",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_microsoft() throws Exception {
+        int code = this.runSkill("US.MSFT","income",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_amazon() throws Exception {
+        int code = this.runSkill("US.AMZN","income",32,  360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_google() throws Exception {
+        int code = this.runSkill("US.GOOG", "income",32, 360);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_beke() throws Exception {
+        int code = this.runSkill("US.BEKE", "income",8, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_jd() throws Exception {
+        int code = this.runSkill("US.JD", "income",8, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_nio() throws Exception {
+        int code = this.runSkill("US.NIO", "income",8, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_xp() throws Exception {
+        int code = this.runSkill("US.XPEV", "income",8, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_amazon_2() throws Exception {
+        int code = this.runSkill("US.AMZN", "balance",8, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    private int runSkill(String ticker,String type,int limit, int timeoutSeconds) throws Exception {
+        Path projectRoot = Paths.get(System.getProperty("user.dir"));
+        Path script = projectRoot.resolve("workspace/skills/futu-financial-report/scripts/generate_financial_excel.py");
+        Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
+
+        List<String> cmd = List.of(
+                "python", script.toString(),
+                ticker,
+                "--type", type,
+                "--num", limit+""
+        );
+        ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
+        Assertions.assertEquals(0, result.getExitCode(),
+                "extract_segments.py failed, stderr: " + result.getStderr());
+        return result.getExitCode() ;
     }
 
 }

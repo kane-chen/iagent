@@ -697,17 +697,23 @@ def get_financial_data_with_structure(stock_code, statement_type, num=16, logger
             hint=f"JSON 片段: {json_str[:200]}"
         )
 
-    # 检查返回码
-    ret_code = data.get('code', -1)
-    ret_msg = data.get('msg', '')
-    if ret_code != 0:
-        if 'no permission' in ret_msg.lower() or 'permission' in ret_msg.lower():
+    # 检查错误：futuapi 脚本成功时返回 {"code": "<stock_code>", "data": {...}}，
+    # code 字段是股票代码字符串而非数字返回码；失败时返回 {"error": "..."} 无 code/data。
+    if 'error' in data and not data.get('data'):
+        err_msg = str(data.get('error', ''))
+        if 'no permission' in err_msg.lower() or 'permission' in err_msg.lower():
             raise FetchError(
-                f"无权限获取 {stock_code} 的财务数据（富途返回: {ret_msg}）",
+                f"无权限获取 {stock_code} 的财务数据（富途返回: {err_msg}）",
                 hint="请确认富途账号已登录且有该市场行情权限（港股/A股/美股可能需要相应权限包）"
             )
         raise FetchError(
-            f"API 返回错误 (code={ret_code}): {ret_msg}",
+            f"API 返回错误: {err_msg}",
+            hint="可能是代码错误、停牌、或接口限流，请检查代码格式后重试"
+        )
+    ret_msg = data.get('msg', '')
+    if ret_msg and not data.get('data'):
+        raise FetchError(
+            f"API 返回错误: {ret_msg}",
             hint="可能是代码错误、停牌、或接口限流，请检查代码格式后重试"
         )
 

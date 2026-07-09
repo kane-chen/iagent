@@ -178,10 +178,16 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
                 continue
 
             if group_suffix is not None and has_year:
-                # Self-contained group cell with year: "Year Ended June 30, 2025".
+                # Self-contained group cell with year: "Year Ended June 30, 2025"
+                # or "Quarter ended September 30, 2025". When a month is present,
+                # derive the quarter from the month rather than trusting the
+                # generic defaultQuarter (which may reflect a different column's
+                # period when a table mixes multiple quarters).
                 final_suffix = group_suffix
                 if mon_in_cell is not None:
                     year = _fiscal_year(year, MONTH_NUM[mon_in_cell], fiscal_year_end_month)
+                    if final_suffix in ("Q1", "Q2", "Q3", "Q4"):
+                        final_suffix = m2q[mon_in_cell]
                 self_contained.append(_Column(c_idx, f"{year}{final_suffix}", _detect_currency(lower)))
                 continue
 
@@ -450,17 +456,25 @@ def _find_month(lower: str) -> Optional[str]:
 
 
 def _classify_group_suffix(lower: str, defaultQuarter: str) -> Optional[str]:
-    if ("nine month" in lower or "9 month" in lower or "nine-month" in lower
-            or "year to date" in lower or "ytd" in lower):
+    # Normalize hyphens: "three-month" -> "three month"
+    l = lower.replace("-", " ")
+    if ("nine month" in l or "9 month" in l
+            or "year to date" in l or "ytd" in l):
         return "QTD9"
-    if "six month" in lower or "6 month" in lower or "six-month" in lower:
+    if "six month" in l or "6 month" in l:
         return "QTD6"
-    if ("year ended" in lower or "twelve months" in lower
-            or "12 months" in lower or "full year" in lower
-            or "fiscal year" in lower):
+    if ("year ended" in l or "twelve months" in l
+            or "12 months" in l or "full year" in l
+            or "fiscal year" in l):
         return "FY"
-    if "three month" in lower or "3 month" in lower or "quarter" in lower:
-        return defaultQuarter
+    if "three month" in l or "3 month" in l or "quarter" in l:
+        # Return the defaultQuarter only if it looks like a real quarter/FY marker;
+        # otherwise return None so that self-contained date cells can resolve via
+        # their own month.
+        if defaultQuarter and defaultQuarter in (
+                "Q1", "Q2", "Q3", "Q4", "FY", "QTD6", "QTD9", "H1", "H2"):
+            return defaultQuarter
+        return None
     return None
 
 

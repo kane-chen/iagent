@@ -107,14 +107,17 @@ public class SegmentFinancialReportSkillByValueValidTest {
     public void test_skill_direct_tcom() throws Exception {
         List<Map<String, Object>> segments = this.runSkill("TCOM", 120);
         System.out.println(JSON.toJSONString(segments));
-        Assert.isTrue(!segments.isEmpty(), "google segments should not be empty");
+        Assert.isTrue(!segments.isEmpty(), "tcom segments should not be empty");
         Assertions.assertNotNull(segments);
         Assertions.assertEquals("8047", getValue(segments, buildParams("Hotel", "REVENUE", "2025Q3"), "value"));
         Assertions.assertEquals("6225", getValue(segments, buildParams("Hotel", "REVENUE", "2025Q2"), "value"));
-        Assertions.assertEquals("4496", getValue(segments, buildParams("Hotel", "REVENUE", "2024Q3"), "value"));
+        Assertions.assertEquals("6802", getValue(segments, buildParams("Hotel", "REVENUE", "2024Q3"), "value"));
+        Assertions.assertEquals("5541", getValue(segments, buildParams("Hotel", "REVENUE", "2025Q1"), "value"));
+        Assertions.assertEquals("4496", getValue(segments, buildParams("Hotel", "REVENUE", "2024Q1"), "value"));
         Assertions.assertEquals("6306", getValue(segments, buildParams("Ticket", "REVENUE", "2025Q3"), "value"));
-        Assertions.assertEquals("5000", getValue(segments, buildParams("Ticket", "REVENUE", "2024Q3"), "value"));
+        Assertions.assertEquals("5650", getValue(segments, buildParams("Ticket", "REVENUE", "2024Q3"), "value"));
         Assertions.assertEquals("1606", getValue(segments, buildParams("Tour", "REVENUE", "2025Q3"), "value"));
+        Assertions.assertEquals("1558", getValue(segments, buildParams("Tour", "REVENUE", "2024Q3"), "value"));
     }
 
     @Test
