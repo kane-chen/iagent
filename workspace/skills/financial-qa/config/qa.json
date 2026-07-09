@@ -1,0 +1,35 @@
+{
+  "backend": "milvus",
+  "topK": 5,
+  "similarityThreshold": 0.3,
+  "milvus": {
+    "endpoint": "http://127.0.0.1:19530",
+    "token": "",
+    "collection": "invest_filing",
+    "requestTimeoutSeconds": 60,
+    "insertBatchSize": 100
+  },
+  "ragflow": {
+    "baseUrl": "http://localhost:9380",
+    "apiKey": "",
+    "datasetPrefix": "filing_rag_",
+    "similarityThreshold": 0.3,
+    "keywordWeight": 0.3,
+    "requestTimeoutSeconds": 60
+  },
+  "embedding": {
+    "baseUrl": "http://localhost:11434/api/embed",
+    "apiKey": "local",
+    "model": "qwen3-embedding:4b",
+    "dimension": 2560,
+    "requestTimeoutSeconds": 120
+  },
+  "llm": {
+    "baseUrl": "http://localhost:11434/v1",
+    "apiKey": "local",
+    "model": "qwen3:4b",
+    "temperature": 0.2,
+    "maxTokens": 2048,
+    "requestTimeoutSeconds": 180
+  }
+}

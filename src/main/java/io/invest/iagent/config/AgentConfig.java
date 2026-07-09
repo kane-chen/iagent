@@ -14,6 +14,8 @@ import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.hook.AgentTraceHook;
 import io.invest.iagent.hook.DetailedTracingHook;
 import io.invest.iagent.hook.LoggingTracer;
+import io.invest.iagent.service.filingrag.FilingRagService;
+import io.invest.iagent.tools.filingrag.FilingQaTool;
 import io.invest.iagent.tools.web.WebSearchTool;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +35,9 @@ public class AgentConfig {
 
     @Autowired
     private ApplicationProperties applicationProperties;
+
+    @Autowired(required = false)
+    private FilingRagService filingRagService;
 
     @PostConstruct
     public void init() {
@@ -72,6 +77,9 @@ public class AgentConfig {
                                         .build()
                         ).build());
         toolkit.registerTool(new WebSearchTool());
+        if (filingRagService != null) {
+            toolkit.registerTool(new FilingQaTool(filingRagService));
+        }
         // shell-command (python is allowed for futu_financial skill)
         ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
         toolkit.registerTool(shellCommandTool);
