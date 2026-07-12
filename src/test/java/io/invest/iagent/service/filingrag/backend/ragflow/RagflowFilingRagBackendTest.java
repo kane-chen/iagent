@@ -1,5 +1,6 @@
-package io.invest.iagent.service.filingrag.backend.milvus;
+package io.invest.iagent.service.filingrag.backend.ragflow;
 
+import io.invest.iagent.service.filingrag.config.FilingRagConfig;
 import io.invest.iagent.service.filingrag.chunker.FilingChunker;
 import io.invest.iagent.service.filingrag.chunker.HtmlTextExtractor;
 import io.invest.iagent.service.filingrag.chunker.OverlapWindowChunker;
@@ -27,35 +28,46 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Milvus filing RAG backend e2e smoke test.
+ * RAGFlow filing RAG backend e2e smoke test.
  *
  * <p>This test is self-contained: it constructs the backend directly (no Spring context),
- * so it is not affected by {@code app.filing-rag.backend}. All endpoints/collection/model
+ * so it is not affected by {@code app.filing-rag.backend}. All endpoints/keys/model
  * are configured inline in {@link #setUp()}.
  *
- * <p>Requires: local Milvus running at 127.0.0.1:19530, Ollama at localhost:11434 with
- * {@code qwen3-embedding:4b} pulled. Enable by setting env var {@code MILVUS_SMOKE=1}
- * (e.g. {@code MILVUS_SMOKE=1 mvn test -Dtest=MilvusFilingRagBackendSmokeTest}).
+ * <p>Requires: local RAGFlow at localhost:9380, with an API key exposed via
+ * {@code RAGFLOW_API_KEY} env var; Ollama at localhost:11434 for query embedding
+ * (RAGFlow embeds chunks server-side with its own configured model).
+ * Enable by setting env var {@code RAGFLOW_API_KEY=<your-key>}
+ * (e.g. {@code RAGFLOW_API_KEY=ragflow-xxx mvn test -Dtest=RagflowFilingRagBackendTest}).
  */
-@EnabledIfEnvironmentVariable(named = "MILVUS_SMOKE", matches = "1")
+@EnabledIfEnvironmentVariable(named = "RAGFLOW_API_KEY", matches = ".+")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class MilvusFilingRagBackendSmokeTest {
+class RagflowFilingRagBackendTest {
 
-    private MilvusFilingRagBackend backend;
+    private RagflowFilingRagBackend backend;
     private EmbeddingProvider embeddingProvider;
     private FilingChunker chunker;
 
     private static final String TICKER = "00700";
-    private static final String COLLECTION = "invest_filing_rag_smoke";
-    private static final String MILVUS_ENDPOINT = "http://127.0.0.1:19530";
+    private static final String RAGFLOW_BASE_URL = "http://localhost:9380";
     private static final String OLLAMA_EMBED_URL = "http://localhost:11434/api/embed";
     private static final String EMBED_MODEL = "qwen3-embedding:4b";
     private static final int EMBED_DIM = 2560;
 
     @BeforeEach
     void setUp() {
+        FilingRagConfig.Ragflow cfg = new FilingRagConfig.Ragflow();
+        cfg.setBaseUrl(RAGFLOW_BASE_URL);
+        cfg.setApiKey(System.getenv("RAGFLOW_API_KEY"));
+        cfg.setDatasetPrefix("filing_rag_smoke_");
+        cfg.setSimilarityThreshold(0.2);
+        cfg.setKeywordWeight(0.3);
+        cfg.setParsePollTimeoutSeconds(120);
+        cfg.setParsePollIntervalSeconds(3);
+        cfg.setRequestTimeoutSeconds(60);
+
         embeddingProvider = new OllamaEmbeddingProvider(OLLAMA_EMBED_URL, EMBED_MODEL, EMBED_DIM);
-        backend = new MilvusFilingRagBackend(MILVUS_ENDPOINT, null, COLLECTION, 50, embeddingProvider);
+        backend = new RagflowFilingRagBackend(cfg, embeddingProvider);
         chunker = new OverlapWindowChunker(400, 600, 80);
     }
 
@@ -73,19 +85,18 @@ class MilvusFilingRagBackendSmokeTest {
         if (!Files.isDirectory(filingsDir)) {
             filingsDir = WorkspacePaths.filingsDir(workspace, "BABA");
         }
-        assertTrue(Files.isDirectory(filingsDir), "No filings directory found; download a filing first");
+        assertTrue(Files.isDirectory(filingsDir), "No filings directory found");
 
         Path docDir;
         try (var ds = Files.list(filingsDir)) {
             docDir = ds.filter(Files::isDirectory).findFirst().orElse(null);
         }
-        assertNotNull(docDir, "No document dirs found");
+        assertNotNull(docDir);
         String documentId = docDir.getFileName().toString();
 
         PdfTextExtractor pdfExtractor = new PdfTextExtractor();
         HtmlTextExtractor htmlExtractor = new HtmlTextExtractor();
         List<FilingChunk> chunks = null;
-        String sourceFileName = null;
         try (var fs = Files.list(docDir)) {
             for (Path f : fs.filter(Files::isRegularFile).toList()) {
                 String name = f.getFileName().toString().toLowerCase();
@@ -95,7 +106,6 @@ class MilvusFilingRagBackendSmokeTest {
                             .ticker(TICKER).documentId(documentId).formType("FY")
                             .fiscalYear(2022).fiscalPeriod("FY").filingDate("2023-03-22").build();
                     chunks = chunker.chunk(meta, f.getFileName().toString(), sections);
-                    sourceFileName = f.getFileName().toString();
                     break;
                 } else if (name.endsWith(".htm") || name.endsWith(".html")) {
                     List<RawSectionVO> sections = htmlExtractor.extract(f);
@@ -103,23 +113,19 @@ class MilvusFilingRagBackendSmokeTest {
                             .ticker(TICKER).documentId(documentId).formType("FY")
                             .fiscalYear(2025).fiscalPeriod("FY").filingDate("2025-01-01").build();
                     chunks = chunker.chunk(meta, f.getFileName().toString(), sections);
-                    sourceFileName = f.getFileName().toString();
                     break;
                 }
             }
         }
         assertNotNull(chunks, "No PDF/HTML found in first document dir: " + docDir);
-        assertFalse(chunks.isEmpty(), "chunks should not be empty");
-        System.out.println("Extracted " + chunks.size() + " chunks from " + sourceFileName);
+        assertFalse(chunks.isEmpty());
+        System.out.println("Extracted " + chunks.size() + " chunks");
 
-        List<String> texts = chunks.stream().map(FilingChunk::getContent).toList();
-        List<List<Float>> embeddings = embeddingProvider.embedBatch(texts);
-        assertEquals(chunks.size(), embeddings.size());
-
-        backend.upsertDocument(TICKER, documentId, chunks, embeddings);
+        // embeddings param is unused by RAGFlow backend (embedding happens server-side)
+        backend.upsertDocument(TICKER, documentId, chunks, List.of());
 
         FilingQuery query = FilingQuery.builder()
-                .question("收入增长")
+                .question("revenue growth")
                 .ticker(TICKER)
                 .topK(3)
                 .similarityThreshold(0.2)
@@ -127,13 +133,12 @@ class MilvusFilingRagBackendSmokeTest {
         List<Float> qembed = embeddingProvider.embed(query.getQuestion());
         FilingQueryResult result = backend.search(query, qembed);
         assertNotNull(result);
-        assertFalse(result.getChunks().isEmpty(), "search should return at least one chunk");
         System.out.println("Search returned " + result.getChunks().size() + " chunks");
         for (FilingChunk c : result.getChunks()) {
             System.out.println("  score=" + c.getScore() + " section=" + c.getSectionTitle());
         }
 
         int deleted = backend.delete(TICKER, documentId);
-        System.out.println("Deleted " + deleted + " entities");
+        System.out.println("Deleted " + deleted + " documents");
     }
 }

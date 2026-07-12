@@ -45,11 +45,11 @@ public class PdfTextExtractor implements FilingTextExtractor {
     }
 
     @Override
-    public List<RawSection> extract(Path file) throws Exception {
+    public List<RawSectionVO> extract(Path file) throws Exception {
         byte[] pdfBytes = Files.readAllBytes(file);
         try (PDDocument doc = Loader.loadPDF(pdfBytes)) {
             int pages = doc.getNumberOfPages();
-            List<RawSection> sections = new ArrayList<>();
+            List<RawSectionVO> sections = new ArrayList<>();
             // Accumulators for current section
             String currentTitle = null;
             StringBuilder currentContent = new StringBuilder();
@@ -74,8 +74,8 @@ public class PdfTextExtractor implements FilingTextExtractor {
                     // Detect a heading candidate: short line (<=120 chars) matching section pattern
                     if (line.length() <= 120 && SECTION_TITLE.matcher(line).find()) {
                         // flush current section
-                        if (currentContent.length() > 0 || currentTitle != null) {
-                            sections.add(RawSection.builder()
+                        if (!currentContent.isEmpty() || currentTitle != null) {
+                            sections.add(RawSectionVO.builder()
                                     .title(currentTitle)
                                     .content(normalize(currentContent.toString()))
                                     .pageNumber(currentStartPage)
@@ -90,8 +90,8 @@ public class PdfTextExtractor implements FilingTextExtractor {
                 }
             }
 
-            if (currentContent.length() > 0 || currentTitle != null) {
-                sections.add(RawSection.builder()
+            if (!currentContent.isEmpty() || currentTitle != null) {
+                sections.add(RawSectionVO.builder()
                         .title(currentTitle)
                         .content(normalize(currentContent.toString()))
                         .pageNumber(currentStartPage)

@@ -1,12 +1,13 @@
 package io.invest.iagent.service.filingrag.chunker;
 
-import org.jsoup.Jsoup;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,6 +21,14 @@ class HtmlTextExtractorTest {
         assertTrue(extractor.supports("text/html", Path.of("test.html")));
         assertTrue(extractor.supports(null, Path.of("a.HTM")));
         assertFalse(extractor.supports("application/pdf", Path.of("a.pdf")));
+    }
+
+    @Test
+    void test_extract_baba() throws Exception {
+        Path file = Paths.get(System.getProperty("user.dir"))
+                .resolve("workspace/portfolio/BABA/filings/fil_0001104659-26-032060/tm269353d1_ex99-1.htm") ;
+        List<RawSectionVO> sections = extractor.extract(file) ;
+        Assertions.assertNotNull(sections);
     }
 
     @Test
@@ -39,7 +48,7 @@ class HtmlTextExtractorTest {
                 """;
         Path f = dir.resolve("sec.html");
         Files.writeString(f, html, StandardCharsets.UTF_8);
-        List<RawSection> sections = extractor.extract(f);
+        List<RawSectionVO> sections = extractor.extract(f);
         assertFalse(sections.isEmpty());
         // Should find at least the two h2 sections
         boolean hasBusiness = sections.stream().anyMatch(s -> "Item 1. Business".equals(s.getTitle()));
@@ -47,7 +56,7 @@ class HtmlTextExtractorTest {
         assertTrue(hasBusiness, "Expected 'Item 1. Business' section");
         assertTrue(hasMDA, "Expected MD&A section");
         // Boilerplate script/style/nav content should not appear
-        for (RawSection s : sections) {
+        for (RawSectionVO s : sections) {
             String c = s.getContent() == null ? "" : s.getContent();
             assertFalse(c.contains("var x = 1"), "script text should be stripped");
             assertFalse(c.contains("color:red"), "style text should be stripped");

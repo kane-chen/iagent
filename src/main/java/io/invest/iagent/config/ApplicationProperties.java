@@ -40,7 +40,7 @@ public class ApplicationProperties {
         /**
          * Name of the LLM model to use.
          */
-        private String model = "qwen3:4b";
+        private String model = "qwen3.5:4b";
 
         private Integer maxTokens = 32*1024 ;
     }

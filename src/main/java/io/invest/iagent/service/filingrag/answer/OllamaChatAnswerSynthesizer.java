@@ -1,27 +1,19 @@
 package io.invest.iagent.service.filingrag.answer;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import io.invest.iagent.service.filingrag.chunker.OverlapWindowChunker;
 import io.invest.iagent.service.filingrag.model.FilingAnswer;
 import io.invest.iagent.service.filingrag.model.FilingChunk;
+import io.invest.iagent.service.filingrag.util.LlmClient;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * {@link AnswerSynthesizer} that calls an OpenAI-compatible chat completions endpoint (e.g., Ollama).
+ * {@link AnswerSynthesizer} that calls an OpenAI-compatible chat completions endpoint (e.g., Ollama)
+ * via the shared {@link LlmClient}.
  * <p>
  * System prompt (Chinese) instructs the model to answer strictly from cited chunks, annotating
  * numeric claims with [C1][C2]-style references that match the numbered citations listed at the end.
@@ -34,20 +26,13 @@ public class OllamaChatAnswerSynthesizer implements AnswerSynthesizer {
      * We stop adding citations once the cumulative content exceeds this budget.
      */
     private static final int CONTEXT_BUDGET_TOKENS = 12000;
-    private static final int MAX_SNIPPET_CHARS = 80;
 
-    private final HttpClient httpClient;
-    private final String baseUrl;
-    private final String model;
+    private final LlmClient llmClient;
     private final double temperature;
     private final int maxTokens;
 
-    public OllamaChatAnswerSynthesizer(String baseUrl, String model, double temperature, int maxTokens) {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-        this.baseUrl = StringUtils.removeEnd(baseUrl, "/");
-        this.model = model;
+    public OllamaChatAnswerSynthesizer(LlmClient llmClient, double temperature, int maxTokens) {
+        this.llmClient = llmClient;
         this.temperature = temperature;
         this.maxTokens = maxTokens;
     }
@@ -56,6 +41,7 @@ public class OllamaChatAnswerSynthesizer implements AnswerSynthesizer {
     public FilingAnswer answer(String question, List<FilingChunk> citedChunks, String backendName) {
         long start = System.currentTimeMillis();
         String queryId = UUID.randomUUID().toString();
+        String model = llmClient.getModel();
         try {
             // Sort by score desc (if present) then trim to context budget
             List<FilingChunk> ordered = new ArrayList<>(citedChunks);
@@ -76,7 +62,6 @@ public class OllamaChatAnswerSynthesizer implements AnswerSynthesizer {
                 String header = buildCitationHeader(n, c);
                 context.append(prefix).append(header).append("\n").append(text).append("\n\n");
                 used.add(c);
-                // re-number with stable index
                 usedTokens += ct;
                 n++;
                 if (usedTokens >= CONTEXT_BUDGET_TOKENS) break;
@@ -104,30 +89,22 @@ public class OllamaChatAnswerSynthesizer implements AnswerSynthesizer {
                     """;
             String userPrompt = "[引用片段]\n" + context + "\n用户问题：" + question;
 
-            JSONObject body = new JSONObject();
-            body.put("model", model);
-            body.put("temperature", temperature);
-            body.put("max_tokens", maxTokens);
-            body.put("stream", false);
-            JSONArray messages = new JSONArray();
-            messages.add(msg("system", systemPrompt));
-            messages.add(msg("user", userPrompt));
-            body.put("messages", messages);
+            String content = llmClient.chat(LlmClient.ChatRequest.builder()
+                    .systemPrompt(systemPrompt)
+                    .userPrompt(userPrompt)
+                    .temperature(temperature)
+                    .maxTokens(maxTokens)
+                    .timeoutSeconds(180)
+                    .build());
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/chat/completions"))
-                    .timeout(Duration.ofSeconds(180))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body), StandardCharsets.UTF_8))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IOException("Chat completions HTTP " + response.statusCode() + ": " +
-                        StringUtils.abbreviate(response.body(), 300));
+            // 如果content为空或为reasoning内容，尝试从reasoning中提取答案
+            if (StringUtils.isBlank(content) || (content.contains("reasoning") && !content.contains("## 引用来源"))) {
+                String extracted = llmClient.extractAnswerFromReasoning(content);
+                if (StringUtils.isNotBlank(extracted)) {
+                    content = extracted;
+                }
             }
-            JSONObject respJson = JSON.parseObject(response.body());
-            String content = respJson.getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").getString("content");
+
             // Convert [1] markers in LLM output to [C1] for user-facing format if not already
             String finalAnswer = normalizeCitationMarkers(StringUtils.defaultString(content));
             return FilingAnswer.builder()
@@ -151,13 +128,6 @@ public class OllamaChatAnswerSynthesizer implements AnswerSynthesizer {
                     .elapsedMs(System.currentTimeMillis() - start)
                     .build();
         }
-    }
-
-    private JSONObject msg(String role, String content) {
-        JSONObject m = new JSONObject();
-        m.put("role", role);
-        m.put("content", content);
-        return m;
     }
 
     private String buildCitationHeader(int idx, FilingChunk c) {

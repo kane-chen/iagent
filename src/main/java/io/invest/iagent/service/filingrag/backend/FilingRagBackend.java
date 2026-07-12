@@ -12,4 +12,9 @@ public interface FilingRagBackend {
      void upsertDocument(String ticker, String documentId, List<FilingChunk> chunks, List<List<Float>> embeddings);
      int delete(String ticker, String documentId);
      FilingQueryResult search(FilingQuery query, List<Float> queryEmbedding);
+
+     /**
+      * 该后端是否需要嵌入向量。基于文本检索的后端可以返回false以跳过embedding计算，降低成本。
+      */
+     default boolean requiresEmbeddings() { return true; }
  }

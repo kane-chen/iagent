@@ -2,6 +2,7 @@ package io.invest.iagent.service.filingrag.answer;
 
 import io.invest.iagent.service.filingrag.model.FilingAnswer;
 import io.invest.iagent.service.filingrag.model.FilingChunk;
+import io.invest.iagent.service.filingrag.util.LlmClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -18,8 +19,8 @@ class OllamaChatAnswerSynthesizerTest {
 
     @Test
     void answerProducesCitations() {
-        OllamaChatAnswerSynthesizer synth = new OllamaChatAnswerSynthesizer(
-                "http://localhost:11434/v1", "qwen3.5:4b", 0.2, 2048);
+        LlmClient llmClient = new LlmClient("http://localhost:11434/v1", "qwen3.5:4b", 180);
+        OllamaChatAnswerSynthesizer synth = new OllamaChatAnswerSynthesizer(llmClient, 0.2, 2048);
         List<FilingChunk> chunks = List.of(
                 FilingChunk.builder()
                         .chunkId("c1").ticker("BABA").formType("FY").fiscalYear(2025).fiscalPeriod("FY")

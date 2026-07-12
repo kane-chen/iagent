@@ -32,13 +32,13 @@ public class OverlapWindowChunker implements FilingChunker {
     }
 
     @Override
-    public List<FilingChunk> chunk(FilingDocumentMeta meta, String sourceFileName, List<RawSection> sections) {
+    public List<FilingChunk> chunk(FilingDocumentMeta meta, String sourceFileName, List<RawSectionVO> sections) {
         List<FilingChunk> result = new ArrayList<>();
         if (sections == null || sections.isEmpty()) {
             return result;
         }
         int sectionIdx = 0;
-        for (RawSection section : sections) {
+        for (RawSectionVO section : sections) {
             String secTitle = section.getTitle();
             String secContent = section.getContent();
             if (StringUtils.isBlank(secContent) && StringUtils.isBlank(secTitle)) {
@@ -191,7 +191,7 @@ public class OverlapWindowChunker implements FilingChunker {
                 int accT = 0;
                 for (String s : sub) {
                     int st = estimateTokens(s);
-                    if (accT + st > maxTokens && acc.length() > 0) {
+                    if (accT + st > maxTokens && !acc.isEmpty()) {
                         out.add(acc.toString().trim());
                         acc = new StringBuilder();
                         accT = 0;
@@ -199,7 +199,7 @@ public class OverlapWindowChunker implements FilingChunker {
                     acc.append(s);
                     accT += st;
                 }
-                if (acc.length() > 0) out.add(acc.toString().trim());
+                if (!acc.isEmpty()) out.add(acc.toString().trim());
             } else {
                 out.add(p);
             }

@@ -1,6 +1,7 @@
 package io.invest.iagent.service.filingrag.chunker;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -48,7 +49,7 @@ public class HtmlTextExtractor implements FilingTextExtractor {
     }
 
     @Override
-    public List<RawSection> extract(Path file) throws Exception {
+    public List<RawSectionVO> extract(Path file) throws Exception {
         String html = Files.readString(file, StandardCharsets.UTF_8);
         Document doc = Jsoup.parse(html);
 
@@ -61,11 +62,13 @@ public class HtmlTextExtractor implements FilingTextExtractor {
             }
         }
 
-        Element body = doc.body() != null ? doc.body() : doc;
-        List<RawSection> sections = new ArrayList<>();
+        // body walk
+        Element body = ObjectUtils.firstNonNull(doc.body(),doc);
+        List<RawSectionVO> sections = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         String currentTitle = null;
 
+        // node walk
         for (Node node : body.childNodes()) {
             if (node instanceof Element el) {
                 String tag = el.tagName().toLowerCase();
@@ -79,15 +82,17 @@ public class HtmlTextExtractor implements FilingTextExtractor {
                     continue;
                 }
 
+                // text check
                 String text = el.text();
                 if (StringUtils.isBlank(text)) {
                     continue;
                 }
                 String trimmed = text.trim();
 
+                // section heading
                 if (isSectionHeading(el, trimmed, tag)) {
                     // flush current section
-                    if (current.length() > 0 || currentTitle != null) {
+                    if (!current.isEmpty() || currentTitle != null) {
                         sections.add(buildSection(currentTitle, current.toString()));
                     }
                     currentTitle = trimmed;
@@ -109,7 +114,7 @@ public class HtmlTextExtractor implements FilingTextExtractor {
             }
         }
 
-        if (current.length() > 0 || currentTitle != null) {
+        if (!current.isEmpty() || currentTitle != null) {
             sections.add(buildSection(currentTitle, current.toString()));
         }
 
@@ -118,8 +123,8 @@ public class HtmlTextExtractor implements FilingTextExtractor {
         return sections;
     }
 
-    private RawSection buildSection(String title, String content) {
-        return RawSection.builder()
+    private RawSectionVO buildSection(String title, String content) {
+        return RawSectionVO.builder()
                 .title(StringUtils.trimToNull(title))
                 .content(normalizeWhitespace(content))
                 .pageNumber(null)

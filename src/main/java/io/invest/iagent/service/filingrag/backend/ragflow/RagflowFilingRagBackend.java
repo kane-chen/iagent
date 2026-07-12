@@ -1,7 +1,7 @@
 package io.invest.iagent.service.filingrag.backend.ragflow;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.invest.iagent.service.filingrag.FilingRagConfig;
+import io.invest.iagent.service.filingrag.config.FilingRagConfig;
 import io.invest.iagent.service.filingrag.backend.FilingRagBackend;
 import io.invest.iagent.service.filingrag.embed.EmbeddingProvider;
 import io.invest.iagent.service.filingrag.model.FilingChunk;

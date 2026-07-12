@@ -5,10 +5,12 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,6 +24,14 @@ class PdfTextExtractorTest {
         assertTrue(extractor.supports("application/pdf", Path.of("x.pdf")));
         assertTrue(extractor.supports(null, Path.of("X.PDF")));
         assertFalse(extractor.supports("text/html", Path.of("x.html")));
+    }
+
+    @Test
+    void test_extract_tencent() throws Exception {
+        Path file = Paths.get(System.getProperty("user.dir"))
+                .resolve("workspace/portfolio/00700/filings/fil_hk_00700_2025_Q3/11914784-0.PDF") ;
+        List<RawSectionVO> sections = extractor.extract(file) ;
+        Assertions.assertNotNull(sections);
     }
 
     @Test
@@ -55,7 +65,7 @@ class PdfTextExtractorTest {
             }
             doc.save(pdf.toFile());
         }
-        List<RawSection> sections = extractor.extract(pdf);
+        List<RawSectionVO> sections = extractor.extract(pdf);
         assertFalse(sections.isEmpty());
         // At least one section should have pageNumber = 1 (first page)
         assertTrue(sections.stream().anyMatch(s -> s.getPageNumber() != null && s.getPageNumber() >= 1),

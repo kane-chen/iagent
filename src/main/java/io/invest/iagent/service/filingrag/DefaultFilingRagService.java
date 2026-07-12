@@ -6,7 +6,8 @@ import io.invest.iagent.service.filingrag.answer.AnswerSynthesizer;
 import io.invest.iagent.service.filingrag.backend.FilingRagBackend;
 import io.invest.iagent.service.filingrag.chunker.FilingChunker;
 import io.invest.iagent.service.filingrag.chunker.FilingTextExtractor;
-import io.invest.iagent.service.filingrag.chunker.RawSection;
+import io.invest.iagent.service.filingrag.chunker.RawSectionVO;
+import io.invest.iagent.service.filingrag.config.FilingRagConfig;
 import io.invest.iagent.service.filingrag.embed.EmbeddingProvider;
 import io.invest.iagent.service.filingrag.model.FilingAnswer;
 import io.invest.iagent.service.filingrag.model.FilingBuildReport;
@@ -61,15 +62,18 @@ public class DefaultFilingRagService implements FilingRagService {
                 .errors(new ArrayList<>())
                 .build();
         try {
+            // Load filings directory
             Path filingsDir = WorkspacePaths.filingsDir(workspace, ticker);
             if (!Files.isDirectory(filingsDir)) {
                 report.getErrors().add("No filings directory for " + ticker + ": " + filingsDir);
                 report.setElapsedMs(System.currentTimeMillis() - start);
                 return report;
             }
+            // Iterate over filings
             try (var stream = Files.list(filingsDir)) {
                 List<Path> docDirs = stream.filter(Files::isDirectory).toList();
                 for (Path docDir : docDirs) {
+                    // build one document
                     String documentId = docDir.getFileName().toString();
                     try {
                         int n = buildOneDocument(ticker, documentId, force);
@@ -108,6 +112,7 @@ public class DefaultFilingRagService implements FilingRagService {
     }
 
     private int buildOneDocument(String ticker, String documentId, boolean force) throws Exception {
+        // document check
         String normTicker = StringUtils.upperCase(ticker);
         Path docDir = WorkspacePaths.filingsDir(workspace, normTicker, documentId);
         if (!Files.isDirectory(docDir)) {
@@ -120,17 +125,19 @@ public class DefaultFilingRagService implements FilingRagService {
         if (files.isEmpty()) {
             throw new IOException("No files found in " + docDir);
         }
+        // chunk
         List<FilingChunk> allChunks = new ArrayList<>();
         for (Path file : files) {
+            // route
             FilingTextExtractor extractor = findExtractor(file);
             if (extractor == null) {
                 log.debug("No extractor for file {}, skipping", file.getFileName());
                 continue;
             }
-            String contentType = Files.probeContentType(file);
-            if (!extractor.supports(contentType, file)) continue;
-            List<RawSection> sections = extractor.extract(file);
+            // extract
+            List<RawSectionVO> sections = extractor.extract(file);
             String sourceFileName = file.getFileName().toString();
+            // chunk
             List<FilingChunk> chunks = chunker.chunk(meta, sourceFileName, sections);
             allChunks.addAll(chunks);
         }
@@ -138,17 +145,22 @@ public class DefaultFilingRagService implements FilingRagService {
             log.warn("No chunks extracted from document {} (ticker={})", documentId, normTicker);
             return 0;
         }
-        // Embed in batches
-        List<List<Float>> embeddings = new ArrayList<>(allChunks.size());
-        int batchSize = 16;
-        for (int i = 0; i < allChunks.size(); i += batchSize) {
-            int end = Math.min(i + batchSize, allChunks.size());
-            List<String> texts = new ArrayList<>(end - i);
-            for (int j = i; j < end; j++) {
-                texts.add(allChunks.get(j).getContent());
+        // Embed in batches（如果后端需要embedding）
+        List<List<Float>> embeddings;
+        if (backend.requiresEmbeddings()) {
+            embeddings = new ArrayList<>(allChunks.size());
+            int batchSize = 16;
+            for (int i = 0; i < allChunks.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, allChunks.size());
+                List<String> texts = new ArrayList<>(end - i);
+                for (int j = i; j < end; j++) {
+                    texts.add(allChunks.get(j).getContent());
+                }
+                List<List<Float>> batch = embeddingProvider.embedBatch(texts);
+                embeddings.addAll(batch);
             }
-            List<List<Float>> batch = embeddingProvider.embedBatch(texts);
-            embeddings.addAll(batch);
+        } else {
+            embeddings = List.of();
         }
         backend.upsertDocument(normTicker, documentId, allChunks, embeddings);
         return allChunks.size();
@@ -164,11 +176,15 @@ public class DefaultFilingRagService implements FilingRagService {
         long start = System.currentTimeMillis();
         FilingQuery normalized = applyDefaults(query);
         String q = normalized.getQuestion();
-        List<Float> qembed = embeddingProvider.embed(q);
-        FilingQueryResult result = backend.search(normalized, qembed);
+        List<Float> qEmbedding = backend.requiresEmbeddings() ? embeddingProvider.embed(q) : List.of();
+        FilingQueryResult result = backend.search(normalized, qEmbedding);
         // Defaults if backend doesn't fill these
-        if (result.getQuestion() == null) result.setQuestion(q);
-        if (result.getTicker() == null) result.setTicker(normalized.getTicker());
+        if (result.getQuestion() == null){
+            result.setQuestion(q);
+        }
+        if (result.getTicker() == null){
+            result.setTicker(normalized.getTicker());
+        }
         result.setElapsedMs(System.currentTimeMillis() - start);
         return result;
     }
@@ -263,7 +279,9 @@ public class DefaultFilingRagService implements FilingRagService {
     private FilingTextExtractor findExtractor(Path file) throws IOException {
         String contentType = Files.probeContentType(file);
         for (FilingTextExtractor ext : extractors) {
-            if (ext.supports(contentType, file)) return ext;
+            if (ext.supports(contentType, file)) {
+                return ext;
+            }
         }
         return null;
     }

@@ -17,5 +17,5 @@ public interface FilingChunker {
      * @param sections       extracted raw sections
      * @return list of chunks (never null)
      */
-    List<FilingChunk> chunk(FilingDocumentMeta meta, String sourceFileName, List<RawSection> sections);
+    List<FilingChunk> chunk(FilingDocumentMeta meta, String sourceFileName, List<RawSectionVO> sections);
 }

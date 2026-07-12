@@ -4,7 +4,6 @@ import io.invest.iagent.service.filingrag.model.FilingChunk;
 import io.invest.iagent.service.filingrag.model.FilingDocumentMeta;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -23,7 +22,7 @@ class OverlapWindowChunkerTest {
 
     @Test
     void singleShortSection_oneChunk() {
-        RawSection sec = RawSection.builder().title("Overview").content("Hello world, this is a short section.").build();
+        RawSectionVO sec = RawSectionVO.builder().title("Overview").content("Hello world, this is a short section.").build();
         List<FilingChunk> out = chunker.chunk(meta(), "x.html", List.of(sec));
         assertEquals(1, out.size());
         assertTrue(out.get(0).getContent().startsWith("Section: Overview\n"));
@@ -37,7 +36,7 @@ class OverlapWindowChunkerTest {
         String sentence = "Revenue grew strongly across all business segments driven by cloud computing and e-commerce. ";
         StringBuilder body = new StringBuilder();
         for (int i = 0; i < 100; i++) body.append(sentence);
-        RawSection sec = RawSection.builder().title("MD&A").content(body.toString()).build();
+        RawSectionVO sec = RawSectionVO.builder().title("MD&A").content(body.toString()).build();
         List<FilingChunk> out = chunker.chunk(meta(), "x.html", List.of(sec));
         assertTrue(out.size() > 1, "Expected multiple chunks but got " + out.size());
         // All chunks should have chunkId and content
@@ -52,7 +51,7 @@ class OverlapWindowChunkerTest {
 
     @Test
     void chunkIdsAreDeterministic() {
-        RawSection sec = RawSection.builder().title("S").content("Deterministic content").build();
+        RawSectionVO sec = RawSectionVO.builder().title("S").content("Deterministic content").build();
         List<FilingChunk> a = chunker.chunk(meta(), "x.html", List.of(sec));
         List<FilingChunk> b = chunker.chunk(meta(), "x.html", List.of(sec));
         assertEquals(a.size(), b.size());
@@ -61,7 +60,7 @@ class OverlapWindowChunkerTest {
 
     @Test
     void chunkIdsAre16HexChars() {
-        RawSection sec = RawSection.builder().title("S").content("Content").build();
+        RawSectionVO sec = RawSectionVO.builder().title("S").content("Content").build();
         List<FilingChunk> out = chunker.chunk(meta(), "x.html", List.of(sec));
         for (FilingChunk c : out) {
             assertTrue(c.getChunkId().matches("[0-9a-f]{16}"), "chunkId not 16 hex: " + c.getChunkId());
@@ -70,8 +69,8 @@ class OverlapWindowChunkerTest {
 
     @Test
     void chunkIdsUniqueAcrossSections() {
-        RawSection s1 = RawSection.builder().title("S1").content("alpha").build();
-        RawSection s2 = RawSection.builder().title("S2").content("beta").build();
+        RawSectionVO s1 = RawSectionVO.builder().title("S1").content("alpha").build();
+        RawSectionVO s2 = RawSectionVO.builder().title("S2").content("beta").build();
         List<FilingChunk> out = chunker.chunk(meta(), "x.html", List.of(s1, s2));
         Set<String> ids = new HashSet<>();
         for (FilingChunk c : out) ids.add(c.getChunkId());

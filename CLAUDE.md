@@ -51,7 +51,7 @@ workspace/
 - **Temp files**: put them under `workspace/temp/`.
 - **Logging**: use `@Slf4j`; domain-specific loggers use names `filing_download`, `filing_process`, `filing_query` (configured in `application.yml` at DEBUG).
 - **Timeouts**: agent model/tool execution is 900 seconds; RAGFlow parse polling defaults to 300s with 3s interval (configurable).
-
+- **Comments**：use Chinese.
 
 ## 常用命令
 

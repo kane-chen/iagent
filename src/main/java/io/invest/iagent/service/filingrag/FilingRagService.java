@@ -1,5 +1,6 @@
 package io.invest.iagent.service.filingrag;
 
+import io.invest.iagent.service.filingrag.config.FilingRagConfig;
 import io.invest.iagent.service.filingrag.model.FilingAnswer;
 import io.invest.iagent.service.filingrag.model.FilingBuildReport;
 import io.invest.iagent.service.filingrag.model.FilingQuery;
@@ -30,7 +31,7 @@ import io.invest.iagent.service.filingrag.model.FilingQueryResult;
  * (see {@code io.invest.iagent.tools.filingrag.FilingQaTool}) expose this service to the agent.
  *
  * <h3>Python CLI (dev / manual usage)</h3>
- * A sibling Python skill lives at {@code workspace/skills/financial-qa/} and talks to the same
+ * A sibling Python skill lives at {@code workspace/skills/financial-filing-qa/} and talks to the same
  * backends directly via HTTP. See {@code SKILL.md} there for CLI usage.
  *
  * <h3>Chunking</h3>
@@ -39,18 +40,42 @@ import io.invest.iagent.service.filingrag.model.FilingQueryResult;
  */
 public interface FilingRagService {
 
-    /** Build/rebuild the RAG index for all filings under the given ticker. */
+    /**
+     * Build/rebuild the RAG index for all filings under the given ticker.
+     * @param ticker stock-code
+     * @param force update force
+     * @return build report
+     */
     FilingBuildReport buildIndex(String ticker, boolean force);
 
-    /** Build/rebuild the index for a single documentId within the ticker. */
+    /**
+     * Build/rebuild the index for a single documentId within the ticker
+     * @param ticker stock-code
+     * @param documentId   doc-id
+     * @param force update force
+     * @return  result
+     */
     FilingBuildReport buildDocument(String ticker, String documentId, boolean force);
 
-    /** Delete all chunks for (ticker, documentId). Returns count deleted. */
+    /**
+     * Delete all chunks for (ticker, documentId). Returns count deleted.
+     * @param ticker stock-code
+     * @param documentId doc-id
+     * @return  result
+     */
     int delete(String ticker, String documentId);
 
-    /** Run a search and return raw chunk results (no LLM synthesis). */
+    /**
+     * Run a search and return raw chunk results (no LLM synthesis).
+     * @param query  query
+     * @return  result
+     */
     FilingQueryResult search(FilingQuery query);
 
-    /** Search + LLM synthesize an answer with [Cn] citations. */
+    /**
+     * Search + LLM synthesize an answer with [Cn] citations.
+     * @param query  query
+     * @return  result
+     */
     FilingAnswer answer(FilingQuery query);
 }

@@ -9,11 +9,14 @@ import java.util.List;
 public interface FilingTextExtractor {
     /**
      * Whether this extractor can handle the given content type / file.
+     * @param contentType content type of the file
+     * @param file file to extract from
      */
     boolean supports(String contentType, Path file);
 
     /**
      * Extract ordered sections from the given file.
+     * @param file file to extract from
      */
-    List<RawSection> extract(Path file) throws Exception;
+    List<RawSectionVO> extract(Path file) throws Exception;
 }
