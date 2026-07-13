@@ -22,9 +22,12 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import logging
+import os
 import sys
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +42,35 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent            # segment-financial-report/
 WORKSPACE_DIR = SKILL_DIR.parent.parent  # workspace/
+
+# 产物新鲜度：7天内的分部 Excel 直接复用，除非 --force
+FRESH_TTL_SECONDS = 7 * 24 * 3600
+
+
+def find_recent_segment_excel(excels_dir: Path, ticker: str,
+                              ttl_seconds: int = FRESH_TTL_SECONDS) -> tuple[Path, float] | None:
+    """在 excels_dir 下查找匹配 {ticker}_segments_*.xlsx 的最新文件。
+
+    返回 (path, mtime) 或 None。仅返回 mtime 距今 <= ttl_seconds 的文件。
+    """
+    if not excels_dir.is_dir():
+        return None
+    pattern = str(excels_dir / f"{ticker}_segments_*.xlsx")
+    candidates = glob.glob(pattern)
+    if not candidates:
+        return None
+    now = time.time()
+    best: tuple[Path, float] | None = None
+    for p in candidates:
+        try:
+            mtime = os.path.getmtime(p)
+        except OSError:
+            continue
+        if now - mtime > ttl_seconds:
+            continue
+        if best is None or mtime > best[1]:
+            best = (Path(p), mtime)
+    return best
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +306,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="额外在 stderr 打印前 5 条 segment 便于快速核对",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制重新提取并生成 Excel，忽略 7 天内的已有产物（仅对 --excel 且未指定 --excel-output 时生效）",
+    )
     return parser.parse_args()
 
 
@@ -291,6 +328,21 @@ def main() -> int:
     flat = args.flat
     if args.excel:
         flat = True
+
+    # 缓存复用：--excel 模式下，若未指定输出路径且存在 7 天内的产物，直接返回复用（除非 --force）
+    if args.excel and args.excel_output is None and not args.force:
+        excels_dir = workspace / "excels"
+        cached = find_recent_segment_excel(excels_dir, args.ticker)
+        if cached:
+            cached_path, cached_mtime = cached
+            age_days = (time.time() - cached_mtime) / 86400.0
+            print(
+                f"[extract] Cache hit: reusing {cached_path} (age={age_days:.1f}d); "
+                f"pass --force to regenerate",
+                file=sys.stderr,
+            )
+            print(str(cached_path))
+            return 0
 
     try:
         json_path = run_python_engine(

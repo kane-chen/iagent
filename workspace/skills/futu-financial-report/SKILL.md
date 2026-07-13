@@ -338,6 +338,17 @@ python workspace/skills/futu-financial-report/scripts/generate_financial_excel.p
 | `--type` / `-t` | `income` / `balance` / `cashflow` | `income` |
 | `--num` / `-n` | 期数（利润表=季度，其他=年度） | `16` |
 | `--output` / `-o` | 输出路径 | 自动生成到 `workspace/excels/` |
+| `--force` | 强制重新生成，忽略 7 天内的已有产物 | `False`（默认命中缓存直接复用）|
+
+### 缓存复用规则（重要）
+
+为避免重复调用富途 API 拉取相同数据，默认启用**7天缓存复用**：
+
+- 触发条件：**未指定 `--output`** 且 **未加 `--force`**
+- 命中逻辑：`workspace/excels/` 下若存在 `{代码}_{报表类型}_*.xlsx` 且**修改时间距今 ≤ 7 天**，直接返回该文件路径并退出（`cache_hit: true`）
+- 强制刷新：用户明确说"重新拉一下"、"最新"、"强制更新"、"更新数据"等意图时，加 `--force`
+- 命中时的 stdout JSON 会带 `"cache_hit": true, "cache_age_days": <days>`，无 `quarters`/`rows`/`period_range` 字段
+
 
 **stdout 最终输出**（脚本最后一行 JSON）：
 

@@ -146,6 +146,17 @@ python workspace/skills/segment-financial-report/scripts/extract_segments.py \
 | `--excel-output` | 自定义 xlsx 输出路径 | `workspace/excels/<TICKER>_segments_<ts>.xlsx` |
 | `--no-flat` | 输出树状 Segment（调试用，Excel 需要 flat 格式） | flat 模式 |
 | `--print-preview` | stderr 打印前 5 条 segment 便于快速核对 | 关闭 |
+| `--force` | 强制重新提取并生成 Excel，忽略 7 天内的已有产物（仅对 `--excel` 且未指定 `--excel-output` 时生效） | 关闭 |
+
+### 缓存复用规则（重要）
+
+为避免对相同财报重复解析 PDF/HTML，`--excel` 模式默认启用**7天缓存复用**：
+
+- 触发条件：`--excel` 模式 + **未指定 `--excel-output`** + **未加 `--force`**
+- 命中逻辑：`workspace/excels/` 下若存在 `{ticker}_segments_*.xlsx` 且**修改时间距今 ≤ 7 天**，直接把该 xlsx 路径打到 stdout 并 exit 0，跳过所有解析
+- 强制刷新：用户明确说"重新提取"、"最新"、"强制更新"等意图时，加 `--force`
+- stderr 命中时打印 `[extract] Cache hit: reusing <path> (age=<days>d); pass --force to regenerate`
+
 
 ### 分阶段（调试场景）
 

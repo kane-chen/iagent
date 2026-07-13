@@ -1,0 +1,44 @@
+{
+  "阿里巴巴": {
+    "company": "阿里巴巴",
+    "timestamp": 1783954019,
+    "timestampIso": "2026-07-13T14:46:59+00:00",
+    "results": [
+      {
+        "symbol": "BABA",
+        "name": "阿里巴巴",
+        "exchange": 106,
+        "exchangeName": "NYSE",
+        "marketRegion": null,
+        "securityType": "美股",
+        "companyType": null,
+        "annualReportType": null,
+        "quarterlyReportType": null,
+        "semiAnnualReportType": null,
+        "filingAuthority": null,
+        "matchScore": 1.0
+      }
+    ]
+  },
+  "美团": {
+    "company": "美团",
+    "timestamp": 1783954019,
+    "timestampIso": "2026-07-13T14:46:59+00:00",
+    "results": [
+      {
+        "symbol": "83690",
+        "name": "美团-WR",
+        "exchange": 116,
+        "exchangeName": "HKG",
+        "marketRegion": "HK",
+        "securityType": "港股",
+        "companyType": "HK_LISTED",
+        "annualReportType": "年报",
+        "quarterlyReportType": "季度业绩公告（自愿）",
+        "semiAnnualReportType": "中期报告",
+        "filingAuthority": "香港联交所",
+        "matchScore": 1.0
+      }
+    ]
+  }
+}

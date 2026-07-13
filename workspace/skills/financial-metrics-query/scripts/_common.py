@@ -12,6 +12,7 @@ financial-metrics-query skill 内部公共层。
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -27,13 +28,78 @@ except AttributeError:
 
 SCRIPT_DIR = Path(__file__).parent
 SKILL_DIR = SCRIPT_DIR.parent
-WORKSPACE_DIR = SKILL_DIR.parent.parent            # workspace/
+# 注意：SKILL_DIR.parent.parent 只在 skill 位于 workspace/skills/<name>/ 时才等于 workspace/。
+# 但在 subagent 场景，skill 会被缓存到 workspace/agents/<agent>/workspace/.skills-cache/... 下，
+# 这时 SKILL_DIR.parent.parent 指向的是 .skills-cache 而非真正的 workspace。
+# 因此下面统一用 resolve_workspace() 做健壮推断，不要再直接用 WORKSPACE_DIR 拼相对路径。
+WORKSPACE_DIR = SKILL_DIR.parent.parent            # workspace/（可能位于 .skills-cache 下，仅作 fallback）
 DEFAULT_CONFIG = SKILL_DIR / "config" / "excel-format.json"
+
+
+def resolve_workspace(cli_workspace: str | Path | None = None) -> Path:
+    """解析真正的 workspace 根目录（含 excels/ portfolio/ 等业务子目录）。
+
+    优先级：
+      1. 显式传入的 CLI 参数
+      2. 环境变量 IAGENT_WORKSPACE_DIR（Java 侧或运行脚本时设置）
+      3. 从脚本位置向上回溯，寻找同时包含 excels/ 或 portfolio/ 的 workspace 目录
+         —— 兼容 subagent 场景下 skill 被缓存到 .skills-cache/ 的路径错位问题
+      4. fallback 到 SKILL_DIR.parent.parent（原始默认值，最稳但可能落到 .skills-cache）
+    """
+    if cli_workspace:
+        return Path(cli_workspace).resolve()
+    env_ws = os.environ.get("IAGENT_WORKSPACE_DIR")
+    if env_ws:
+        return Path(env_ws).resolve()
+
+    # 从 SCRIPT_DIR 向上回溯，找一个名字叫 workspace 且不在 .skills-cache 下
+    # 且里面有 excels/ 或 portfolio/ 的目录（业务约定的 workspace 布局特征）
+    candidates: list[Path] = []
+    cursor = SCRIPT_DIR.resolve()
+    for _ in range(10):
+        parent = cursor.parent
+        if parent == cursor:
+            break
+        # 名字是 workspace 且路径中不含 .skills-cache
+        if parent.name == "workspace" and ".skills-cache" not in parent.parts:
+            candidates.append(parent)
+        cursor = parent
+
+    for c in candidates:
+        if (c / "excels").is_dir() or (c / "portfolio").is_dir():
+            return c
+
+    # 至少返回一个名叫 workspace 的目录（可能刚创建、里面还是空的）
+    if candidates:
+        return candidates[0]
+
+    # 极端 fallback：脚本位于 workspace/skills/<name>/scripts/ 时旧行为
+    return SKILL_DIR.parent.parent
 
 
 def load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def resolve_excels_dir(cfg: dict[str, Any],
+                       cli_excels_dir: str | Path | None = None,
+                       cli_workspace: str | Path | None = None) -> Path:
+    """把 config['excelsDir']（可能是 'workspace/excels' 或 'excels'）解析成绝对路径。
+
+    - 若 CLI 显式传了 --excels-dir，直接使用（相对路径按当前 CWD 解析）。
+    - 否则以 resolve_workspace() 为基础，去掉 'workspace/' 前缀后拼接。
+    """
+    if cli_excels_dir:
+        p = Path(cli_excels_dir)
+        return p.resolve() if p.is_absolute() else p.resolve()
+
+    ws = resolve_workspace(cli_workspace)
+    raw = str(cfg.get("excelsDir", "excels"))
+    # 去掉可能的 "workspace/" 前缀，因为 ws 本身已指向 workspace 根
+    if raw.startswith("workspace/") or raw.startswith("workspace\\"):
+        raw = raw.split("/", 1)[-1] if "/" in raw else raw.split("\\", 1)[-1]
+    return (ws / raw).resolve()
 
 
 # ---------------------------------------------------------------------------

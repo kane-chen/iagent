@@ -123,7 +123,7 @@ public class AgentConfig {
                         # 运行约定：
                         1、执行过程中产生的临时文件放到.workspace/temp目录下。
                         2、长期记忆只存储泛化的知识，不会记录某个特定公司的规则。
-                        # 反例（不要这么做）
+                        # 反模式（不要这么做）
                         1、执行多步命令：比如[cd ~/iagent && python ./skills/scripts/query.py --ticker HK.83690 2>&1 | head -50] 存在拼接多条命令的行为（包含关键字 && & | ）
                         2、执行过程中的临时文件放到workspace目录下。
                         """)

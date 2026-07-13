@@ -32,6 +32,7 @@ from _common import (
     emit, fail, find_latest_excel, load_config,
     normalize_value, open_worksheet,
     parse_period_filter, period_passes,
+    resolve_excels_dir,
 )
 
 
@@ -50,6 +51,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--periods", default=None, help="精确 period 列表，如 '2024Q3,2025FY'")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--excels-dir", type=Path, default=None, help="覆盖 config 里的 excels 目录")
+    parser.add_argument("--workspace", type=Path, default=None,
+                        help="workspace 根目录；未传时按 IAGENT_WORKSPACE_DIR / 脚本位置回溯推断")
     parser.add_argument("--pretty", action="store_true")
     return parser.parse_args()
 
@@ -58,12 +61,7 @@ def main() -> int:
     args = parse_args()
     cfg = load_config(args.config)
     income_cfg = cfg["income"]
-    excels_dir = args.excels_dir or (WORKSPACE_DIR.parent / cfg["excelsDir"]) \
-        if not (WORKSPACE_DIR / cfg["excelsDir"].split("/", 1)[-1]).exists() \
-        else (WORKSPACE_DIR / cfg["excelsDir"].split("/", 1)[-1])
-    # 上面的 fallback 兼容 excelsDir 是 'workspace/excels' 或 'excels'
-    if not excels_dir.is_dir():
-        excels_dir = Path(cfg["excelsDir"])
+    excels_dir = resolve_excels_dir(cfg, args.excels_dir, args.workspace)
     if not excels_dir.is_dir():
         return fail(args.ticker, f"excels 目录不存在: {excels_dir}")
 

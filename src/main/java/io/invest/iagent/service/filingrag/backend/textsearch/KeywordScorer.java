@@ -2,15 +2,13 @@ package io.invest.iagent.service.filingrag.backend.textsearch;
 
 import io.invest.iagent.service.filingrag.model.FilingChunk;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
+import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 基于BM25F的多字段关键词检索评分器。
@@ -39,6 +37,10 @@ public class KeywordScorer {
     private static final double TITLE_B = 0.35;
     private static final double CONTENT_B = 0.75;
 
+    // 预编译正则：4位年份 + 周期标识（Q1-Q4 / H1-H2 / FY），严格匹配整串
+    private static final Pattern FISCAL_PERIOD_PATTERN =
+            Pattern.compile("^(\\d{4})(Q[1-4]|H[12]|FY)$");
+
     /**
      * 评分结果：chunk + 分数。
      */
@@ -58,6 +60,8 @@ public class KeywordScorer {
             return new ArrayList<>();
         }
 
+        // 0. 预处理：处理 FiscalPeriod
+        chunks = filterByFiscalPeriod( chunks,keywords) ;
         // 1. 预处理：提取字段文本并统计字段长度，计算DF（文档频率）
         int N = chunks.size();
         List<ChunkFields> fieldsList = new ArrayList<>(N);
@@ -209,6 +213,47 @@ public class KeywordScorer {
             idx += sub.length();
         }
         return count;
+    }
+
+    private List<FilingChunk> filterByFiscalPeriod(List<FilingChunk> chunks,Set<String> keywords) {
+        if(CollectionUtils.isEmpty(chunks) || CollectionUtils.isEmpty(keywords)){
+            return chunks ;
+        }
+        Map<Integer, List<String>> periods = keywords.stream()
+                .map(this::parseFiscalPeriod).filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(Pair::getKey, Collectors.mapping(Pair::getValue, Collectors.toList()))) ;
+        if(periods.isEmpty()){
+            return chunks ;
+        }
+        return chunks.stream()
+                .filter(Objects::nonNull)
+                .filter(c->Objects.nonNull(c.getFiscalYear()) && StringUtils.isNotBlank(c.getFiscalPeriod()))
+                .filter(chunk->periods.containsKey(chunk.getFiscalYear()) && periods.get(chunk.getFiscalYear()).contains(chunk.getFiscalPeriod()))
+                .toList() ;
+    }
+
+
+    /**
+     * 校验并解析财年周期字符串
+     *
+     * @param input 输入字符串，示例：2001Q1、2020H1、2026FY
+     * @return Pair 结构：key=财年（Integer），value=周期标识（String）
+     * @throws IllegalArgumentException 输入为空或格式不合法时抛出
+     */
+    public Pair<Integer, String> parseFiscalPeriod(String input) {
+        // 空值前置校验
+        if (StringUtils.isBlank(input)) {
+            return null ;
+        }
+        Matcher matcher = FISCAL_PERIOD_PATTERN.matcher(input);
+        if (!matcher.matches()) {
+            return null ;
+        }
+
+        // 提取分组：组1为财年，组2为周期
+        int fiscalYear = Integer.parseInt(matcher.group(1));
+        String period = matcher.group(2);
+        return Pair.of(fiscalYear, period);
     }
 
     /**

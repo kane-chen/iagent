@@ -501,6 +501,56 @@ K1 = 1.2
 TITLE_B = 0.35
 CONTENT_B = 0.75
 
+# 预编译正则：4位年份 + 周期标识（Q1-Q4 / H1-H2 / FY），严格匹配整串
+_FISCAL_PERIOD_PATTERN = re.compile(r"^(\d{4})(Q[1-4]|H[12]|FY)$")
+
+
+def _parse_fiscal_period(text: str) -> tuple[int, str] | None:
+    """校验并解析财年周期字符串，示例：2001Q1、2020H1、2026FY。
+
+    返回 (fiscalYear, period)；输入为空或格式非法时返回 None。
+    """
+    if not text or not text.strip():
+        return None
+    m = _FISCAL_PERIOD_PATTERN.match(text.strip())
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)
+
+
+def _filter_by_fiscal_period(chunks: list[dict], keywords: set[str]) -> list[dict]:
+    """基于 keywords 中的财年周期串（如 2024Q1、2023FY）过滤 chunks。
+
+    - 若 keywords 中不含任何合法财年周期串，直接返回原 chunks（不过滤）。
+    - 否则仅保留 fiscalYear/fiscalPeriod 同时匹配的 chunk。
+    """
+    if not chunks or not keywords:
+        return chunks
+    periods: dict[int, list[str]] = {}
+    for kw in keywords:
+        parsed = _parse_fiscal_period(kw)
+        if parsed is None:
+            continue
+        year, period = parsed
+        periods.setdefault(year, []).append(period)
+    if not periods:
+        return chunks
+    result: list[dict] = []
+    for c in chunks:
+        if c is None:
+            continue
+        fy = c.get("fiscalYear")
+        fp = c.get("fiscalPeriod")
+        if fy is None or not fp or not str(fp).strip():
+            continue
+        try:
+            fy_int = int(fy)
+        except (TypeError, ValueError):
+            continue
+        if fy_int in periods and fp in periods[fy_int]:
+            result.append(c)
+    return result
+
 
 def _count_occurrences(s: str, sub: str) -> int:
     """Count non-overlapping occurrences of sub in s (case-insensitive)."""
@@ -541,6 +591,11 @@ def bm25f_score(chunks: list[dict], keywords: set[str], top_n: int,
                 min_score: float) -> list[tuple[dict, float]]:
     """Score chunks using BM25F over title+content fields, return top-n sorted by score desc."""
     if not chunks or not keywords:
+        return []
+
+    # 0. 预处理：基于财年周期关键词过滤（如 2024Q1、2023FY）
+    chunks = _filter_by_fiscal_period(chunks, keywords)
+    if not chunks:
         return []
 
     n = len(chunks)

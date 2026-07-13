@@ -34,9 +34,10 @@ public class FinancialReportSubAgentTest {
 
     @Test
     public void test_excel_83690() {
-        String question = "美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么";
+        String question = "美团公司核心本地商业分部2025Q3经营利润率同比下降的原因是什么";
         String response = this.doCall(question);
         Assert.notNull(response, "question response");
+        System.out.println(response);
         Assertions.assertThat(response).containsAnyOf("外卖行业","竞争加剧","外賣行業","競爭加劇");
     }
 

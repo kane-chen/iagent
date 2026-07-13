@@ -32,6 +32,7 @@ from _common import (
     emit, fail, find_latest_excel, load_config,
     normalize_value, open_worksheet,
     parse_period_filter, period_passes,
+    resolve_excels_dir,
 )
 
 
@@ -61,6 +62,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--excels-dir", type=Path, default=None)
+    parser.add_argument("--workspace", type=Path, default=None,
+                        help="workspace 根目录；未传时按 IAGENT_WORKSPACE_DIR / 脚本位置回溯推断")
     parser.add_argument("--pretty", action="store_true")
     return parser.parse_args()
 
@@ -96,9 +99,7 @@ def main() -> int:
     cfg = load_config(args.config)
     seg_cfg = cfg["segments"]
 
-    excels_dir = args.excels_dir or (WORKSPACE_DIR / cfg["excelsDir"].split("/", 1)[-1])
-    if not excels_dir.is_dir():
-        excels_dir = Path(cfg["excelsDir"])
+    excels_dir = resolve_excels_dir(cfg, args.excels_dir, args.workspace)
     if not excels_dir.is_dir():
         return fail(args.ticker, f"excels 目录不存在: {excels_dir}")
 

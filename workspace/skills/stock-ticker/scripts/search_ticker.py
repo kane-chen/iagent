@@ -23,9 +23,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -46,11 +49,85 @@ except AttributeError:  # 老 Python：< 3.7 无 reconfigure，跳过
 SCRIPT_DIR = Path(__file__).parent
 SKILL_DIR = SCRIPT_DIR.parent
 DEFAULT_CONFIG = SKILL_DIR / "config" / "stock-search.json"
+DEFAULT_CACHE_FILE = SKILL_DIR / "cache" / "ticker_cache.json"
+
+# 缓存条目最长有效期（秒）；用户可通过 --cache-ttl-days 调整
+DEFAULT_CACHE_TTL_SECONDS = 30 * 24 * 3600
 
 
 def load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+# ---------------------------------------------------------------------------
+# 本地缓存：按公司名归档 normalize 后的候选列表
+# 结构：
+#   {
+#       "<company_key>": {
+#           "company": "<原始公司名>",
+#           "timestamp": <epoch秒>,
+#           "results": [ <normalize_raw 后但未 fill_profile/score 的 dict>, ... ]
+#       },
+#       ...
+#   }
+# 缓存的是"最小可复用形态"——保留 exchange/exchangeName/securityType 等原始字段，
+# 交由主流程根据当前 --preferred-exchanges / --limit / 最新 config 重新排序打分。
+# ---------------------------------------------------------------------------
+
+def _cache_key(company: str) -> str:
+    """归一化 company 为缓存 key：去空白 + 小写。"""
+    return (company or "").strip().lower()
+
+
+def load_cache(cache_file: Path) -> dict[str, Any]:
+    if not cache_file.is_file():
+        return {}
+    try:
+        with cache_file.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        # 缓存损坏时不影响主流程，返回空 dict 让后续覆盖
+        return {}
+
+
+def save_cache(cache_file: Path, cache: dict[str, Any]) -> None:
+    """写缓存文件；用同目录临时文件 + 原子 rename 避免半写。"""
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    tmp = cache_file.with_suffix(cache_file.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, cache_file)
+
+
+def get_cached_normalized(cache: dict[str, Any], company: str,
+                          ttl_seconds: int) -> list[dict[str, Any]] | None:
+    """读取一条缓存的 normalized 候选列表；过期返回 None。"""
+    entry = cache.get(_cache_key(company))
+    if not isinstance(entry, dict):
+        return None
+    ts = entry.get("timestamp")
+    if not isinstance(ts, (int, float)):
+        return None
+    if ttl_seconds > 0 and time.time() - ts > ttl_seconds:
+        return None
+    results = entry.get("results")
+    if not isinstance(results, list):
+        return None
+    # 返回 deep copy，避免调用方回写脏数据到缓存
+    return [dict(r) for r in results if isinstance(r, dict)]
+
+
+def put_cached_normalized(cache: dict[str, Any], company: str,
+                          normalized: list[dict[str, Any]]) -> None:
+    """把 normalized 结果写入 in-memory 缓存 dict（未落盘）。"""
+    cache[_cache_key(company)] = {
+        "company": company,
+        "timestamp": int(time.time()),
+        "timestampIso": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "results": [dict(r) for r in normalized],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -194,32 +271,61 @@ def score_by_rank(results: list[dict[str, Any]], cfg: dict[str, Any]) -> None:
 def search_ticker(company_name: str,
                   limit: int,
                   preferred_exchanges: list[str],
-                  cfg: dict[str, Any]) -> list[dict[str, Any]]:
-    raw_list = do_search(company_name, cfg)
+                  cfg: dict[str, Any],
+                  cache_file: Path | None = None,
+                  cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS,
+                  force_refresh: bool = False) -> tuple[list[dict[str, Any]], bool]:
+    """按公司名查股票信息；先查本地缓存，未命中再调接口并追加回写。
 
-    # 过滤 & 规范化
-    normalized: list[dict[str, Any]] = []
-    for raw in raw_list:
-        info = normalize_raw(raw, cfg)
-        if info is not None:
-            normalized.append(info)
+    返回 (results, cache_hit)。cache_file=None 时完全跳过缓存读写。
+    """
+    cache: dict[str, Any] = {}
+    cache_hit = False
+    normalized: list[dict[str, Any]] | None = None
+
+    # 1) 优先读缓存
+    if cache_file is not None:
+        cache = load_cache(cache_file)
+        if not force_refresh:
+            normalized = get_cached_normalized(cache, company_name, cache_ttl_seconds)
+            if normalized is not None:
+                cache_hit = True
+
+    # 2) 缓存未命中 → 调东方财富接口
+    if normalized is None:
+        raw_list = do_search(company_name, cfg)
+        normalized = []
+        for raw in raw_list:
+            info = normalize_raw(raw, cfg)
+            if info is not None:
+                normalized.append(info)
+
+        # 3) 只要跑过一次接口（无论有无结果）都追加/更新到缓存文件
+        if cache_file is not None:
+            put_cached_normalized(cache, company_name, normalized)
+            try:
+                save_cache(cache_file, cache)
+            except OSError as e:
+                # 写缓存失败不应阻断主流程，仅告警到 stderr
+                print(f"[stock-ticker] 缓存写入失败（忽略）: {e}", file=sys.stderr)
 
     if not normalized:
-        return []
+        return [], cache_hit
 
-    score_by_rank(normalized, cfg)
+    # 4) 打分 + 偏好排序 + 截取 + 补 profile
+    #    这些步骤依赖当前 config 与 CLI 参数，不缓存中间结果。
+    scored = [dict(x) for x in normalized]  # 避免污染 cache 中的对象
+    score_by_rank(scored, cfg)
 
-    # 按偏好排序
     preferred = preferred_exchanges or cfg["preferredExchanges"]["default"]
-    sort_by_preferred(normalized, preferred)
+    sort_by_preferred(scored, preferred)
 
-    # 截取 + 填 profile
-    actual_limit = min(limit, len(normalized))
+    actual_limit = min(limit, len(scored))
     final_results: list[dict[str, Any]] = []
-    for info in normalized[:actual_limit]:
+    for info in scored[:actual_limit]:
         fill_stock_detail(info, cfg)
         final_results.append(info)
-    return final_results
+    return final_results, cache_hit
 
 
 def parse_args() -> argparse.Namespace:
@@ -235,6 +341,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="配置文件路径")
     parser.add_argument("--pretty", action="store_true", help="缩进输出 JSON")
+    parser.add_argument(
+        "--cache-file",
+        type=Path,
+        default=DEFAULT_CACHE_FILE,
+        help=f"本地缓存文件路径，默认 {DEFAULT_CACHE_FILE.relative_to(SKILL_DIR)}",
+    )
+    parser.add_argument(
+        "--cache-ttl-days",
+        type=int,
+        default=DEFAULT_CACHE_TTL_SECONDS // 86400,
+        help="缓存有效期（天），过期视为未命中；<=0 表示永不过期",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="完全禁用本地缓存（不读也不写）",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="强制调用接口并回写缓存（跳过读缓存，但仍会写）",
+    )
     return parser.parse_args()
 
 
@@ -244,8 +372,19 @@ def main() -> int:
 
     preferred = [x.strip() for x in args.preferred_exchanges.split(",") if x.strip()]
 
+    cache_file: Path | None = None if args.no_cache else args.cache_file
+    ttl_seconds = args.cache_ttl_days * 86400 if args.cache_ttl_days > 0 else 0
+
     try:
-        results = search_ticker(args.company, args.limit, preferred, cfg)
+        results, cache_hit = search_ticker(
+            args.company,
+            args.limit,
+            preferred,
+            cfg,
+            cache_file=cache_file,
+            cache_ttl_seconds=ttl_seconds,
+            force_refresh=args.force_refresh,
+        )
     except Exception as e:  # noqa: BLE001
         print(json.dumps({
             "success": False,
@@ -258,6 +397,7 @@ def main() -> int:
         "success": True,
         "company": args.company,
         "count": len(results),
+        "cacheHit": cache_hit,
         "results": results,
     }
     indent = 2 if args.pretty else None

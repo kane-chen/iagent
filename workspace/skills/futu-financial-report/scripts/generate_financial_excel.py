@@ -28,6 +28,7 @@
     python generate_financial_excel.py SH.600519 --type cashflow --num 20
 """
 
+import glob
 import json
 import subprocess
 import sys
@@ -35,6 +36,7 @@ import os
 import re
 import argparse
 import logging
+import time
 from datetime import datetime
 
 try:
@@ -90,6 +92,34 @@ COLORS = {
 # YoY阈值配置
 YOY_DECLINE_THRESHOLD = -5.0   # 下降超过此阈值红色高亮
 YOY_GROWTH_THRESHOLD = 30.0    # 增长超过此阈值绿色高亮
+
+# 产物新鲜度：7天内的Excel直接复用，除非 --force
+FRESH_TTL_SECONDS = 7 * 24 * 3600
+
+
+def find_recent_excel(excels_dir, safe_code, statement_type, ttl_seconds=FRESH_TTL_SECONDS):
+    """在 excels_dir 下查找匹配 {safe_code}_{statement_type}_*.xlsx 的最新文件。
+
+    返回 (path, mtime) 或 None。仅返回 mtime 距今 <= ttl_seconds 的文件。
+    """
+    if not os.path.isdir(excels_dir):
+        return None
+    pattern = os.path.join(excels_dir, f"{safe_code}_{statement_type}_*.xlsx")
+    candidates = glob.glob(pattern)
+    if not candidates:
+        return None
+    now = time.time()
+    best = None
+    for path in candidates:
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        if now - mtime > ttl_seconds:
+            continue
+        if best is None or mtime > best[1]:
+            best = (path, mtime)
+    return best
 
 # ─────────────────────────────────────────────────────────────
 # 财务比率配置 (分子field_id, 分母field_id, 基础名称, 是否紧跟父项后)
@@ -1133,6 +1163,8 @@ def main():
                         help='报表类型：income(利润表), balance(资产负债表), cashflow(现金流量表)')
     parser.add_argument('--num', '-n', type=int, default=16, help='季度数量，默认16')
     parser.add_argument('--output', '-o', help='输出Excel文件路径')
+    parser.add_argument('--force', action='store_true',
+                        help='强制重新生成，忽略7天内的已有Excel产物')
     args = parser.parse_args()
 
     # 确保日志目录存在（相对于项目根目录）
@@ -1149,6 +1181,30 @@ def main():
     # 标准化股票代码格式（HK.700 → HK.00700, SH.600 → SH.000600）
     original_code = args.stock_code
     normalized_code = normalize_stock_code(original_code)
+
+    # 缓存复用：默认输出路径下若已有 7 天内的 Excel 产物，直接返回复用（除非 --force）
+    if not args.output and not args.force:
+        excels_dir = os.path.join(project_root, 'workspace', 'excels')
+        safe_code = normalized_code.replace('.', '_')
+        cached = find_recent_excel(excels_dir, safe_code, args.type)
+        if cached:
+            cached_path, cached_mtime = cached
+            age_days = (time.time() - cached_mtime) / 86400.0
+            result = {
+                "status": "ok",
+                "stock_code": normalized_code,
+                "statement_type": args.type,
+                "statement_name": statement_name,
+                "excel_path": os.path.abspath(cached_path),
+                "cache_hit": True,
+                "cache_age_days": round(age_days, 2),
+                "message": f"Reused Excel generated {age_days:.1f} days ago; pass --force to regenerate",
+            }
+            log_stdout(f">>> Cache hit: reusing {cached_path} (age={age_days:.1f}d)")
+            log_stdout("=" * 60)
+            log_stdout(json.dumps(result, ensure_ascii=False))
+            log_stdout("=" * 60)
+            return 0
 
     log_file = os.path.join(logs_dir, f"financial_{normalized_code}_{args.type}_{timestamp}.log")
     logger = setup_logging(log_file)

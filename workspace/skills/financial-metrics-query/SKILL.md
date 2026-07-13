@@ -99,10 +99,6 @@ python workspace/skills/financial-metrics-query/scripts/query_income.py \
 # BABA 全部分部全部指标（可能很大，建议加过滤）
 python workspace/skills/financial-metrics-query/scripts/query_segments.py --ticker BABA --pretty
 
-# 只看云智能分部的收入与 EBITA
-python workspace/skills/financial-metrics-query/scripts/query_segments.py \
-    --ticker BABA --segment "Cloud" --pretty
-
 # 只要一级分部（level=1）
 python workspace/skills/financial-metrics-query/scripts/query_segments.py \
     --ticker BABA  --max-level 1 --pretty
@@ -117,7 +113,6 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py \
 | 参数 | 说明 | 默认 |
 |---|---|---|
 | `--ticker` | 股票代码 | 必填 |
-| `--segment` | 分部名子串过滤（大小写不敏感） | 全部 |
 | `--fiscal-years` / `--fiscal-periods` / `--periods` | 同 income | 不限 |
 | `--max-level` | 只返回层级 ≤ N 的分部（Level 1 = 顶层） | 不限 |
 

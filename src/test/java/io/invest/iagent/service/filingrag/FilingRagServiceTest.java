@@ -6,7 +6,6 @@ import io.invest.iagent.service.filingrag.model.FilingAnswer;
 import io.invest.iagent.service.filingrag.model.FilingBuildReport;
 import io.invest.iagent.service.filingrag.model.FilingQuery;
 import io.invest.iagent.service.filingrag.model.FilingQueryResult;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -75,7 +74,7 @@ class FilingRagServiceTest {
         FilingQuery query = FilingQuery.builder()
                 .ticker("83690")
                 .fromFiscalYear(2024)
-                .question("美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么")
+                .question("美团公司核心本地商业分部2025Q3经营利润率同比下降的原因是什么")
                 .build();
         FilingAnswer report = filingRagService.answer(query);
         assertNotNull(report);
