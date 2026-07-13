@@ -14,6 +14,9 @@ import io.agentscope.core.tool.file.ReadFileTool;
 import io.agentscope.core.tool.file.WriteFileTool;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.filesystem.local.LocalFilesystemWithShell;
+import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
+import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
 import io.invest.iagent.hook.AuditLoggingMiddleware;
 import io.invest.iagent.service.filingrag.FilingRagService;
 import io.invest.iagent.tools.web.WebSearchTool;
@@ -84,6 +87,13 @@ public class AgentConfig {
         toolkit.registerTool(new ReadFileTool());
         toolkit.registerTool(new WriteFileTool());
 
+        // large result eviction
+        ToolResultEvictionMiddleware toolResultEviction = new ToolResultEvictionMiddleware(
+                new LocalFilesystemWithShell(workspace),
+                ToolResultEvictionConfig.builder()
+                        .maxResultChars(1500)
+                        .previewChars(200).build()) ;
+
         // agent
         return HarnessAgent.builder()
                 .name("BossAgent")
@@ -129,12 +139,7 @@ public class AgentConfig {
 //                .abstractFilesystem(new LocalFilesystem(workspace))
                 .maxIters(50)
                 .middleware(new AuditLoggingMiddleware(10240))
-                // large result eviction
-//                .middleware(new ToolResultEvictionMiddleware(
-//                        new LocalFilesystemWithShell(workspace),
-//                        ToolResultEvictionConfig.builder()
-//                                .maxResultChars(1500)
-//                                .previewChars(200).build()))
+                .middleware(toolResultEviction)
                 .build();
     }
 

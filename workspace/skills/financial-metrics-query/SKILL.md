@@ -1,6 +1,6 @@
 ---
 name: financial-metrics-query
-description: 从 workspace/excels/ 中已提取好的财务报表 Excel 中查询公司损益与分部损益数据。两个入口：query_income.py（整体损益表，如营业收入/毛利/营业利润）与 query_segments.py（分部业务数据，含 EBITA / 分部收入及多层级）。自动挑最新版本文件，支持财年/财期/指标/分部名过滤。触发词：查财报数字、公司营收、分部收入、EBITA、季度损益、[fact] 数据源
+description: 从 workspace/excels/ 中已提取好的财务报表 Excel 中查询公司损益与分部损益数据。两个入口：query_income.py（整体损益表，如营业收入/毛利/营业利润）与 query_segments.py（分部业务数据，含 EBITA / 分部收入及多层级）。自动挑最新版本文件，支持财年/财期/分部名过滤。触发词：查财报数字、公司营收、分部收入、EBITA、季度损益、[fact] 数据源
 ---
 
 # Financial Excel Query Skill
@@ -66,10 +66,9 @@ pip install -r workspace/skills/financial-metrics-query/scripts/requirements.txt
 # 最简：取 BABA 最新一份 income excel，返回全部指标全部 period
 python workspace/skills/financial-metrics-query/scripts/query_income.py --ticker BABA --pretty
 
-# 只要营业总收入 + 营业利润，最近两年全部季度
+# 最近两年全部季度
 python workspace/skills/financial-metrics-query/scripts/query_income.py \
     --ticker BABA \
-    --metrics "营业总收入,营业利润" \
     --fiscal-years 2024-2025 \
     --pretty
 
@@ -87,7 +86,6 @@ python workspace/skills/financial-metrics-query/scripts/query_income.py \
 | 参数 | 说明 | 默认 |
 |---|---|---|
 | `--ticker` | 股票代码（自动 upper） | 必填 |
-| `--metrics` | 指标名子串（逗号分隔），任一命中即返回 | 全部 |
 | `--fiscal-years` | 财年过滤，`2024` 单年或 `2022-2025` 闭区间 | 不限 |
 | `--fiscal-periods` | 财期类型，如 `FY,Q3,Q4` | 不限 |
 | `--periods` | 精确 period 列表，如 `2024Q3,2025FY` | 不限 |
@@ -105,13 +103,13 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py --tick
 python workspace/skills/financial-metrics-query/scripts/query_segments.py \
     --ticker BABA --segment "Cloud" --pretty
 
-# 只要一级分部（level=1）的收入
+# 只要一级分部（level=1）
 python workspace/skills/financial-metrics-query/scripts/query_segments.py \
-    --ticker BABA --metric 收入 --max-level 1 --pretty
+    --ticker BABA  --max-level 1 --pretty
 
 # 结合财年过滤
 python workspace/skills/financial-metrics-query/scripts/query_segments.py \
-    --ticker BABA --metric EBITA --fiscal-years 2024-2025 --pretty
+    --ticker BABA  --fiscal-years 2024-2025 --pretty
 ```
 
 ### query_segments.py 参数
@@ -120,7 +118,6 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py \
 |---|---|---|
 | `--ticker` | 股票代码 | 必填 |
 | `--segment` | 分部名子串过滤（大小写不敏感） | 全部 |
-| `--metric` | 指标名子串过滤 | 全部 |
 | `--fiscal-years` / `--fiscal-periods` / `--periods` | 同 income | 不限 |
 | `--max-level` | 只返回层级 ≤ N 的分部（Level 1 = 顶层） | 不限 |
 
