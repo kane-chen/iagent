@@ -124,7 +124,7 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
         if (log.isDebugEnabled() && input.msgs() != null) {
             for (Msg msg : input.msgs()) {
                 log.debug("[AUDIT][AGENT] INPUT | role={}, content={}",
-                        msg.getRole(), truncate(msg.getTextContent()));
+                        msg.getRole(), truncate(JSON.toJSONString(msg)));
             }
         }
  
@@ -166,11 +166,15 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
         // 记录发送给模型的消息摘要
         if (log.isDebugEnabled() && input.messages() != null) {
             for (Msg msg : input.messages()) {
-                log.debug("[AUDIT][REASONING] INPUT | role={}, len={},input={}",
+                log.debug("[AUDIT][REASONING] INPUT | role={}, len={}",
                         msg.getRole(),
-                        msg.getTextContent() != null ? msg.getTextContent().length() : 0,
-                        JSON.toJSONString(msg)
+                        msg.getTextContent() != null ? msg.getTextContent().length() : 0
                 );
+//                log.debug("[AUDIT][REASONING] INPUT | role={}, len={},input={}",
+//                        msg.getRole(),
+//                        msg.getTextContent() != null ? msg.getTextContent().length() : 0,
+//                        JSON.toJSONString(msg)
+//                );
             }
         }
  
@@ -225,13 +229,15 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
  
         log.info("[AUDIT][MODEL] START | agent={}, model={}, messages={}, tools={}",
                 agentName, modelName, msgCount, toolCount);
- 
+//        log.info("[AUDIT][MODEL] START | agent={}, model={}, messages={}, tools={}, content={}",
+//                agentName, modelName, msgCount, toolCount, truncate(JSON.toJSONString(input.messages())));
+
         // 入参消息详情
         if (log.isDebugEnabled() && input.messages() != null) {
             for (int i = 0; i < input.messages().size(); i++) {
                 Msg msg = input.messages().get(i);
-                log.debug("[AUDIT][MODEL] INPUT | idx={}, role={}, content={}",
-                        i, msg.getRole(), truncate(JSON.toJSONString(msg)));
+                log.debug("[AUDIT][MODEL] INPUT | idx={}, role={}",
+                        i, msg.getRole());
             }
         }
  
@@ -245,6 +251,8 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                         responseText.append(tbd.getDelta());
                     } else if (ev instanceof ToolCallStartEvent tcs) {
                         toolCallNames.add(tcs.getToolCallName());
+                    }else{
+                        responseText.append(JSON.toJSONString(ev)) ;
                     }
                 })
                 .doOnComplete(() -> {
@@ -281,9 +289,8 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
         // 记录工具调用入参
         if (input.toolCalls() != null) {
             for (ToolUseBlock tu : input.toolCalls()) {
-                log.info("[AUDIT][TOOL] START | agent={}, id={}, name={}, args={}",
-                        agentName, tu.getId(), tu.getName(),
-                        truncate(JSON.toJSONString(tu.getInput())));
+                log.info("[AUDIT][TOOL] START | agent={}, id={}, name={}",
+                        agentName, tu.getId(), tu.getName());
  
                 if (log.isDebugEnabled()) {
                     log.debug("[AUDIT][TOOL] ARGS_FULL | id={}, input={}",
@@ -335,14 +342,14 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                                     .ifPresent(agentRecord -> agentRecord.toolCalls.add(toolRecord));
                         }
                         log.info("[AUDIT][TOOL] END | agent={}, id={}, name={}, " +
-                                "duration={}ms, state={}, resultLen={}, result={}",
+                                "duration={}ms, state={}, resultLen={}",
                                 agentName, id, toolName,
                                 startTs != null ? (System.currentTimeMillis() - startTs) : -1,
-                                toolRecord.state, result.length(),toolRecord.result);
+                                toolRecord.state, result.length());
  
                         if (log.isDebugEnabled()) {
                             log.debug("[AUDIT][TOOL] RESULT_FULL | id={}, result={}",
-                                    id, truncate(result));
+                                    id, toolRecord.result);
                         }
                     }
                 });

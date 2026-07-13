@@ -1,5 +1,6 @@
 package io.invest.iagent.skill;
 
+import com.alibaba.fastjson2.JSON;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -68,6 +69,12 @@ public class FinancialFillingQaSkillTest {
         Assertions.assertEquals(0,code);
     }
 
+    @Test
+    public void test_skill_direct_83690_2() throws Exception {
+        int code = this.runSkill("83690", "美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么","2024",360);
+        Assertions.assertEquals(0,code);
+    }
+
     private int runSkill(String ticker,String question,String fromPeriod, int timeoutSeconds) throws Exception {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/financial-filing-qa/scripts/qa.py");
@@ -80,6 +87,7 @@ public class FinancialFillingQaSkillTest {
                 "--from-period", fromPeriod
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
+        System.out.println(JSON.toJSONString(result));
         Assertions.assertEquals(0, result.getExitCode(),
                 "qa.py failed, stderr: " + result.getStderr());
         return result.getExitCode() ;

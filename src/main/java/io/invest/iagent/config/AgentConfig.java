@@ -3,6 +3,8 @@ package io.invest.iagent.config;
 import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.permission.PermissionContextState;
+import io.agentscope.core.permission.PermissionMode;
 import io.agentscope.core.skill.repository.FileSystemSkillRepository;
 import io.agentscope.core.state.JsonFileAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
@@ -107,11 +109,18 @@ public class AgentConfig {
                         1、严格禁止只输出计划或思路，但不去真正执行。
                         2、所有任务采用同步执行方式，一定不要使用异步方式执行。
                         3、调用技能时，直接按照skill.md调用方式执行即可。严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
-                        4、执行命令时，严格使用单条完整命令，禁止使用 &、&&、|、||、;、换行符等任何命令分隔符拼接多条命令；禁止通过管道符、后台运行符、重定向组合执行多个逻辑命令。
+                        4、执行命令时，严格使用单条命令，因为有的系统不支持一次执行多条命令。禁止使用 &、&&、|、换行符等任何命令分隔符拼接多条命令；禁止通过管道符、后台运行符、重定向组合执行多个逻辑命令。
+                        # 运行约定：
+                        1、执行过程中产生的临时文件放到.workspace/temp目录下。
+                        2、长期记忆只存储泛化的知识，不会记录某个特定公司的规则。
+                        # 反例（不要这么做）
+                        1、执行多步命令：比如[cd ~/iagent && python ./skills/scripts/query.py --ticker HK.83690 2>&1 | head -50] 存在拼接多条命令的行为（包含关键字 && & | ）
+                        2、执行过程中的临时文件放到workspace目录下。
                         """)
                 .workspace(workspace)
-                .stateStore(new JsonFileAgentStateStore(workspace.resolve("skills/state")))
+                .stateStore(new JsonFileAgentStateStore(workspace.resolve("states")))
                 .skillRepository(new FileSystemSkillRepository(workspace.resolve("skills")))
+                .permissionContext(PermissionContextState.builder().mode(PermissionMode.BYPASS).build())
 //                .disableMemoryHooks()
 //                .disableSessionPersistence()
 //                .skillRepository(new ClasspathSkillRepository("skill"))

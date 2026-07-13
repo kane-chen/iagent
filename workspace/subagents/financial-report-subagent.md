@@ -2,9 +2,8 @@
 description: 根据用户的需求从公司财报中获取事实数据，包括财务指标数据、财报文件中问题相关的文字描述，并基于上述数据回答用户问题。
 workspace:
   mode: isolated                         
-  path: D:\dev\codes\github\iagent\workspace                   
 model: qwen3.5:4b
-steps: 10
+steps: 20
 temperature: 0.3
 top_p: 0.7
 variant: thinking

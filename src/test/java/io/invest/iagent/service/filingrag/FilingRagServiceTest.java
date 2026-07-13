@@ -70,4 +70,17 @@ class FilingRagServiceTest {
         Assertions.assertThat(report.getAnswer()).containsAnyOf("即时配送业务亏损大幅减少");
     }
 
+    @Test
+    void test_answer_83690_2() {
+        FilingQuery query = FilingQuery.builder()
+                .ticker("83690")
+                .fromFiscalYear(2024)
+                .question("美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么")
+                .build();
+        FilingAnswer report = filingRagService.answer(query);
+        assertNotNull(report);
+        assertNotNull(report.getAnswer());
+        Assertions.assertThat(report.getAnswer()).containsAnyOf("外卖行业","竞争加剧","外賣行業","競爭加劇");
+    }
+
 }

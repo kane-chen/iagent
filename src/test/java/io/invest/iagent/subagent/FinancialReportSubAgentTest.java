@@ -37,15 +37,14 @@ public class FinancialReportSubAgentTest {
         String question = "美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么";
         String response = this.doCall(question);
         Assert.notNull(response, "question response");
-        Assertions.assertThat(response).containsAnyOf("即时配送业务亏损大幅减少");
+        Assertions.assertThat(response).containsAnyOf("外卖行业","竞争加剧","外賣行業","競爭加劇");
     }
 
     private String doCall(String question){
         String template = """
                 调用financial-report-subagent回答问题【%s】。
                 特别注意：
-                1、严格禁止只输出执行方式，但不去真正执行。
-                2、调用技能时，直接按照skill.md调用方式执行即可。严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
+                1、严格禁止直接访问workspace/目录下的文件，必须通过已有的工具或skill进行访问。
                 """;
         Msg qaMsg = Msg.builder().role(MsgRole.USER)
                 .textContent(String.format(template, question)).build();
