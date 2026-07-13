@@ -25,7 +25,7 @@ import java.util.Objects;
 public class FutuFinancialReportSkillTest {
 
     @Autowired
-    private HarnessAgent baseAgent ;
+    private HarnessAgent agent;
 
     private RuntimeContext context;
 
@@ -83,13 +83,11 @@ public class FutuFinancialReportSkillTest {
                 2、调用技能futu-financial-report生成财务报表。
                 3、检查财务报表文件是否创建成功。
                 特别注意：
-                1、严格禁止只输出执行方式，但不去真正执行。
-                2、严格禁止不通过stock-ticker技能获取股票代码。
-                3、调用技能时，直接按照skill.md调用方式执行即可。严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
+                1、严格禁止不通过stock-ticker技能获取股票代码。
                 """;
 
         Msg qaMsg = this.buildUserMsg(String.format(template, companyName, reportName));
-        Msg response = baseAgent.call(qaMsg).block();
+        Msg response = agent.call(qaMsg).block();
         return Objects.requireNonNull(response).getTextContent();
     }
 

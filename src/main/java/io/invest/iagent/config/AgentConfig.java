@@ -3,19 +3,17 @@ package io.invest.iagent.config;
 import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
-import io.agentscope.core.model.OpenAIChatModel;
-import io.agentscope.core.skill.SkillBox;
-import io.agentscope.core.skill.SkillHook;
+import io.agentscope.core.skill.repository.FileSystemSkillRepository;
+import io.agentscope.core.state.JsonFileAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.ToolkitConfig;
 import io.agentscope.core.tool.coding.ShellCommandTool;
-import io.agentscope.core.tracing.TracerRegistry;
+import io.agentscope.core.tool.file.ReadFileTool;
+import io.agentscope.core.tool.file.WriteFileTool;
+import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
-import io.agentscope.harness.agent.hook.AgentTraceHook;
-import io.invest.iagent.hook.DetailedTracingHook;
-import io.invest.iagent.hook.LoggingTracer;
+import io.invest.iagent.hook.AuditLoggingMiddleware;
 import io.invest.iagent.service.filingrag.FilingRagService;
-import io.invest.iagent.tools.filingrag.FilingQaTool;
 import io.invest.iagent.tools.web.WebSearchTool;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +39,6 @@ public class AgentConfig {
 
     @PostConstruct
     public void init() {
-        TracerRegistry.register(new LoggingTracer(102400));
         String workSpaceBaseDir = applicationProperties.getWorkspace().getBaseDir() ;
         if(StringUtils.isBlank(workSpaceBaseDir)){
             workspace = Paths.get(System.getProperty("user.dir")).resolve("workspace");
@@ -77,19 +74,14 @@ public class AgentConfig {
                                         .build()
                         ).build());
         toolkit.registerTool(new WebSearchTool());
-        if (filingRagService != null) {
-            toolkit.registerTool(new FilingQaTool(filingRagService));
-        }
+//        if (filingRagService != null) {
+//            toolkit.registerTool(new FilingQaTool(filingRagService));
+//        }
         // shell-command (python is allowed for futu_financial skill)
-        ShellCommandTool shellCommandTool = new ShellCommandTool(Set.of("python","python3"));
-        toolkit.registerTool(shellCommandTool);
-        SkillBox skillBox = new SkillBox(toolkit) ;
-        skillBox.setExposeAllSkillMetadata(false);
-        skillBox.codeExecution()
-                .withShell(shellCommandTool)
-                .withRead()
-                .withWrite()
-                .workDir(workspace.toAbsolutePath().toString());
+        toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
+        toolkit.registerTool(new ReadFileTool());
+        toolkit.registerTool(new WriteFileTool());
+
         // agent
         return HarnessAgent.builder()
                 .name("BossAgent")
@@ -107,21 +99,33 @@ public class AgentConfig {
                                 .maxAttempts(1)
                                 .build())
                 .sysPrompt("""
-                        你是一个理智严谨的工作助理，你的特点如下：
+                        你是一个理智严谨的工作助理.
+                        # 你的特点如下：
                         1、你可以在职责范围内独立自主进行工作，职责范围内不需要用户确认，直接执行即可。
                         2、你的风格是逻辑严谨、语言精炼，仅会就用户提到的问题进行回答，不会做问题的引申和发散。
+                        # 你的行为规范如下：
+                        1、严格禁止只输出计划或思路，但不去真正执行。
+                        2、所有任务采用同步执行方式，一定不要使用异步方式执行。
+                        3、调用技能时，直接按照skill.md调用方式执行即可。严格禁止查看技能的python代码，尝试了解其实现逻辑去探索执行方案。
+                        4、执行命令时，严格使用单条完整命令，禁止使用 &、&&、|、||、;、换行符等任何命令分隔符拼接多条命令；禁止通过管道符、后台运行符、重定向组合执行多个逻辑命令。
                         """)
                 .workspace(workspace)
-                .disableMemoryHooks()
-                .disableSessionPersistence()
+                .stateStore(new JsonFileAgentStateStore(workspace.resolve("skills/state")))
+                .skillRepository(new FileSystemSkillRepository(workspace.resolve("skills")))
+//                .disableMemoryHooks()
+//                .disableSessionPersistence()
 //                .skillRepository(new ClasspathSkillRepository("skill"))
 //                .skillRepository(new FileSystemSkillRepository(Paths.get(System.getProperty("user.dir")).resolve("workspace/skills")))
 //                .filesystem(new LocalFilesystemSpec())
 //                .abstractFilesystem(new LocalFilesystem(workspace))
                 .maxIters(50)
-                .hook(new DetailedTracingHook(102400))
-                .hook(new AgentTraceHook())
-                .hook(new SkillHook(skillBox))
+                .middleware(new AuditLoggingMiddleware(10240))
+                // large result eviction
+//                .middleware(new ToolResultEvictionMiddleware(
+//                        new LocalFilesystemWithShell(workspace),
+//                        ToolResultEvictionConfig.builder()
+//                                .maxResultChars(1500)
+//                                .previewChars(200).build()))
                 .build();
     }
 

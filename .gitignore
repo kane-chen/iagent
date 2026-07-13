@@ -48,6 +48,7 @@ workspace/portfolio
 workspace/excels
 workspace/logs
 workspace/temp
+workspace/states
 
 # deploy
 deploy/

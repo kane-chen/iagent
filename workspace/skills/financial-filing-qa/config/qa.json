@@ -28,14 +28,14 @@
     "baseUrl": "http://localhost:11434/v1",
     "apiKey": "local",
     "model": "qwen3.5:4b",
-    "temperature": 0.2,
-    "maxTokens": 2048,
+    "temperature": 0.3,
+    "maxTokens": 10240,
     "requestTimeoutSeconds": 180
   },
   "textsearch": {
-    "rerankTopN": 15,
+    "rerankTopN": 10,
     "fullTextMaxChunks": 50,
     "fullTextFallback": true,
-    "minKeywordScore": 0.01
+    "minKeywordScore": 0.1
   }
 }

@@ -5,7 +5,7 @@ description: 基于财报RAG索引回答关于财报原文的问题，支持milv
 
 # Financial Filing QA Skill
 
-**基于已构建的财报RAG索引回答问题**（Java 侧 `FilingRagService` 提供索引构建 `filing_qa_build`；本 skill 只做检索+问答，不做切片/建索引）。
+**基于已构建的财报RAG索引回答问题**。
 
 ## 应用场景
 

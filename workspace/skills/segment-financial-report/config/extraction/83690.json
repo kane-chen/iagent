@@ -22,15 +22,15 @@
     },
     {
       "segmentCode": "COMMISSION",
-      "segmentName": "佣金",
-      "aliases": ["佣金"],
+      "segmentName": "佣金或商家服务",
+      "aliases": ["佣金","商家服務"],
       "level": 2,
       "parentCode": "LOCAL_SERVICE"
     },
     {
       "segmentCode": "MARKETING",
-      "segmentName": "在線營銷服務",
-      "aliases": ["在線營銷服務"],
+      "segmentName": "在線營銷服務或商品销售",
+      "aliases": ["在線營銷服務","商品銷售"],
       "level": 2,
       "parentCode": "LOCAL_SERVICE"
     },

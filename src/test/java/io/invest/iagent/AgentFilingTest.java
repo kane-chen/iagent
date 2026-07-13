@@ -32,9 +32,6 @@ public class AgentFilingTest {
     @Autowired
     private HarnessAgent agent;
 
-    @Autowired
-    private HarnessAgent baseAgent ;
-
     private RuntimeContext context;
 
     @BeforeEach
@@ -63,7 +60,7 @@ public class AgentFilingTest {
     @Test
     public void test_query2() {
         Msg qaMsg = this.buildUserMsg("使用futu_financial skill获取谷歌最近4个季度的利润表数据。使用python执行scripts/get_financials_statements.py脚本");
-        Msg response = baseAgent.call(qaMsg).block();
+        Msg response = agent.call(qaMsg).block();
         String responseText = Objects.requireNonNull(response).getTextContent();
         System.out.println("2.question response:::" + responseText);
         Assert.notNull(responseText, "question response");
@@ -88,7 +85,7 @@ public class AgentFilingTest {
                 """;
 
         Msg qaMsg = this.buildUserMsg(String.format(template, companyName, reportName));
-        Msg response = baseAgent.call(qaMsg).block();
+        Msg response = agent.call(qaMsg).block();
         String responseText = Objects.requireNonNull(response).getTextContent();
         Assert.notNull(responseText, "question response");
     }

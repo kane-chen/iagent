@@ -4,6 +4,7 @@ import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,7 @@ import java.util.Objects;
 public class FinancialReportSubAgentTest {
 
     @Autowired
-    private HarnessAgent baseAgent ;
+    private HarnessAgent agent;
 
     @Test
     public void test_baba() {
@@ -31,6 +32,14 @@ public class FinancialReportSubAgentTest {
         Assert.notNull(responseText, "call response");
     }
 
+    @Test
+    public void test_excel_83690() {
+        String question = "美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么";
+        String response = this.doCall(question);
+        Assert.notNull(response, "question response");
+        Assertions.assertThat(response).containsAnyOf("即时配送业务亏损大幅减少");
+    }
+
     private String doCall(String question){
         String template = """
                 调用financial-report-subagent回答问题【%s】。
@@ -40,7 +49,7 @@ public class FinancialReportSubAgentTest {
                 """;
         Msg qaMsg = Msg.builder().role(MsgRole.USER)
                 .textContent(String.format(template, question)).build();
-        Msg response = baseAgent.call(qaMsg).block();
+        Msg response = agent.call(qaMsg).block();
         return Objects.requireNonNull(response).getTextContent();
     }
 
