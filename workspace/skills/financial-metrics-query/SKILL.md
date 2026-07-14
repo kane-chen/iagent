@@ -164,13 +164,6 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py \
       "values": {"2026Q1": 122220, "2025Q4": 159347, ...}
     },
     {
-      "segment": "China commerce retail",
-      "level": 2,
-      "parent_segment": "Taobao and Tmall Group",
-      "metric": "收入",
-      "values": {"2026Q1": 116280, ...}
-    },
-    {
       "segment": "Customer management",
       "level": 3,
       "parent_segment": "China commerce retail",
@@ -178,7 +171,7 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py \
       "values": {"2026Q1": 73024, ...}
     }
   ],
-  "count": 3
+  "count": 2
 }
 ```
 

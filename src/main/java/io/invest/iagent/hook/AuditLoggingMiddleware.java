@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import io.agentscope.core.model.Model;
+import io.agentscope.harness.agent.HarnessAgent;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +88,10 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
  
     private static String resolveModelName(Agent agent) {
         if (agent instanceof ReActAgent ra) {
-            return ra.getModel() != null ? ra.getModel().toString() : "<unknown>";
+            return Optional.ofNullable(ra.getModel()).map(Model::getModelName).orElse("unknown") ;
+        }
+        if (agent instanceof HarnessAgent ra) {
+            return Optional.ofNullable(ra.getModel()).map(Model::getModelName).orElse("unknown") ;
         }
         return agent.getClass().getSimpleName();
     }
@@ -216,11 +221,9 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                         msg.getRole(),
                         msg.getTextContent() != null ? msg.getTextContent().length() : 0
                 );
-//                log.debug("[AUDIT][REASONING] INPUT | role={}, len={},input={}",
-//                        msg.getRole(),
-//                        msg.getTextContent() != null ? msg.getTextContent().length() : 0,
-//                        JSON.toJSONString(msg)
-//                );
+                if(log.isDebugEnabled()){
+                    log.debug("[AUDIT][REASONING] INPUT | content={}", JSON.toJSONString(msg));
+                }
             }
         }
  
@@ -273,20 +276,12 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
         modelRecord.inputMessage = JSON.toJSONString(input.messages()) ;
         modelRecord.inputMessageCount = msgCount;
  
-        log.info("[AUDIT][MODEL] START | agent={}, model={}, messages={}, tools={}",
-                agentName, modelName, msgCount, toolCount);
-//        log.info("[AUDIT][MODEL] START | agent={}, model={}, messages={}, tools={}, content={}",
-//                agentName, modelName, msgCount, toolCount, truncate(JSON.toJSONString(input.messages())));
-
-        // 入参消息详情
-        if (log.isDebugEnabled() && input.messages() != null) {
-            for (int i = 0; i < input.messages().size(); i++) {
-                Msg msg = input.messages().get(i);
-                log.debug("[AUDIT][MODEL] INPUT | idx={}, role={}",
-                        i, msg.getRole());
-            }
+        log.info("[AUDIT][MODEL] START | agent={}, model={}, messages={}, tools={}, requestLen={}",
+                agentName, modelName, msgCount, toolCount, modelRecord.inputMessage.length());
+        if(log.isTraceEnabled()){
+            log.trace("[AUDIT][MODEL] START | content={}", truncate(modelRecord.inputMessage));
         }
- 
+
         // 收集模型输出
         StringBuilder responseText = new StringBuilder();
         List<String> toolCallNames = new ArrayList<>();
@@ -297,8 +292,6 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                         responseText.append(tbd.getDelta());
                     } else if (ev instanceof ToolCallStartEvent tcs) {
                         toolCallNames.add(tcs.getToolCallName());
-                    }else{
-                        responseText.append(JSON.toJSONString(ev)) ;
                     }
                 })
                 .doOnComplete(() -> {
@@ -314,10 +307,13 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                     }
 
                     log.info("[AUDIT][MODEL] END | agent={}, model={}, duration={}ms, " +
-                            "responseLen={}, toolCalls={},result={}",
+                            "responseLen={}, toolCalls={}",
                             agentName, modelName,
                             modelRecord.endTimeMs - modelRecord.startTimeMs,
-                            responseText.length(), toolCallNames, modelRecord.responseText);
+                            responseText.length(), toolCallNames);
+                    if(log.isDebugEnabled()){
+                        log.debug("[AUDIT][MODEL] END | content={}", modelRecord.responseText);
+                    }
                 });
     }
  
@@ -335,12 +331,10 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
         // 记录工具调用入参
         if (input.toolCalls() != null) {
             for (ToolUseBlock tu : input.toolCalls()) {
-                log.info("[AUDIT][TOOL] START | agent={}, id={}, name={}",
-                        agentName, tu.getId(), tu.getName());
+                log.info("[AUDIT][TOOL] START | agent={}, id={}, name={}", agentName, tu.getId(), tu.getName());
  
                 if (log.isDebugEnabled()) {
-                    log.debug("[AUDIT][TOOL] ARGS_FULL | id={}, input={}",
-                            tu.getId(), JSON.toJSONString(tu.getInput()));
+                    log.debug("[AUDIT][TOOL] ARGS_FULL | id={}, input={}", tu.getId(), JSON.toJSONString(tu.getInput()));
                 }
             }
         }
@@ -393,14 +387,12 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                                 startTs != null ? (System.currentTimeMillis() - startTs) : -1,
                                 toolRecord.state, result.length());
 
-//                        if (log.isDebugEnabled()) {
-//                            log.debug("[AUDIT][TOOL] RESULT_FULL | id={}, result={}",
-//                                    id, toolRecord.result);
-//                        }
+                        if (log.isTraceEnabled()) {
+                            log.trace("[AUDIT][TOOL] RESULT_FULL | id={}, result={}", id, toolRecord.result);
+                        }
 
                         // 撞墙循环检测：若本次 tool 结果里含 SecurityError，则按 session 累计
-                        checkSecurityErrorLoop(agentName, sessionId, toolName,
-                                lookupToolArgs(input, id), result);
+                        checkSecurityErrorLoop(agentName, sessionId, toolName, lookupToolArgs(input, id), result);
                     }
                 });
     }

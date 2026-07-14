@@ -71,11 +71,15 @@
     "  第 5 行 = L1 REVENUE 合计（跳过）",
     "  第 6 行 = L1 COST",
     "  第 7 行 = L1 OPERATING_INCOME（本期是虧損，字段名沿用 OPERATING_INCOME）",
-    "报里同一页出现两个同型表：当期（page2 t0）+ 上年同期（page2 t1），两条 mapping 依次消费。"
+    "报里同一页出现两个同型表：当期（page2 t0）+ 上年同期（page2 t1），两条 mapping 依次消费。",
+    "",
+    "2026Q1 起分部披露表结构变化：把 [銷售成本、經營開支及未分配項目] 一行拆成 [銷售成本 / 毛利 / 經營開支] 三行，共 9 行。",
+    "同时当期表在 page 2、上年同期表移到 page 3；因当前 filter 只按行数匹配，count 差异自然区分新旧布局。",
+    "新布局仅提取 REVENUE 明细 + OPERATING_INCOME；COST 语义与旧版不同（新版仅指銷售成本），暂不映射以避免跨期数据混杂。"
   ],
   "pdfColumnMappings": [
     {
-      "_comment": "当期分部表（page 2 第一张同型 5-col × 7-row 表）",
+      "_comment": "当期分部表（page 2 第一张同型 5-col × 7-row 表，2025Q1 及更早）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
@@ -91,7 +95,7 @@
       ]
     },
     {
-      "_comment": "上年同期分部表（page 2 第二张同型 5-col × 7-row 表）",
+      "_comment": "上年同期分部表（page 2 第二张同型 5-col × 7-row 表，2025Q1 及更早）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
@@ -103,6 +107,42 @@
         {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
         {"metricCode": "", "subSegmentCode": ""},
         {"metricCode": "COST", "subSegmentCode": "", "abs": true},
+        {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
+      ]
+    },
+    {
+      "_comment": "2026Q1+ 当期分部表（新布局 5-col × 9-row：REVENUE×4 / 合计 / 销售成本 / 毛利 / 经营开支 / 经营亏损）",
+      "layout": "SUBSEGMENT_MATRIX",
+      "columnCount": 4,
+      "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
+      "periodCode": "CURRENT_Q",
+      "rowDescriptors": [
+        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
+        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
+        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
+        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
+      ]
+    },
+    {
+      "_comment": "2026Q1+ 上年同期分部表（同 9-row 新布局，通常出现在 page 3）",
+      "layout": "SUBSEGMENT_MATRIX",
+      "columnCount": 4,
+      "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
+      "periodCode": "PRIOR_Q",
+      "rowDescriptors": [
+        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
+        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
+        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
+        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "", "subSegmentCode": ""},
         {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
       ]
     }

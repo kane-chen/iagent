@@ -48,9 +48,10 @@ workspace/logs
 workspace/temp
 workspace/states
 workspace/memory
+workspace/MEMORY.md
 workspace/.agentscope
-
-workspace/skills/financial-filing-qa/config/qa.json
+workspace/.skills-cache
+workspace/ironman
 
 # agentscope
 .agentscope

@@ -3,9 +3,12 @@ package io.invest.iagent.config;
 import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
+import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
+import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.skill.repository.FileSystemSkillRepository;
+import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.state.JsonFileAgentStateStore;
 import io.agentscope.core.tool.Toolkit;
 import io.agentscope.core.tool.ToolkitConfig;
@@ -14,9 +17,13 @@ import io.agentscope.core.tool.file.ReadFileTool;
 import io.agentscope.core.tool.file.WriteFileTool;
 import io.agentscope.extensions.model.openai.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.IsolationScope;
 import io.agentscope.harness.agent.filesystem.local.LocalFilesystemWithShell;
+import io.agentscope.harness.agent.filesystem.spec.LocalFilesystemSpec;
+import io.agentscope.harness.agent.memory.MemoryConfig;
 import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
+import io.agentscope.harness.agent.workspace.LocalFsMode;
 import io.invest.iagent.hook.AuditLoggingMiddleware;
 import io.invest.iagent.service.filingrag.FilingRagService;
 import io.invest.iagent.tools.web.WebSearchTool;
@@ -30,6 +37,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 @Configuration
 public class AgentConfig {
@@ -82,7 +90,7 @@ public class AgentConfig {
 //        if (filingRagService != null) {
 //            toolkit.registerTool(new FilingQaTool(filingRagService));
 //        }
-        // shell-command (python is allowed for futu_financial skill)
+        // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
         toolkit.registerTool(new ReadFileTool());
         toolkit.registerTool(new WriteFileTool());
@@ -145,20 +153,45 @@ public class AgentConfig {
 
     @Bean HarnessAgent qaAgent(Model model) {
         // tool-kit
-        ExecutionConfig toolExecutionConfig =ExecutionConfig.builder().timeout(Duration.ofSeconds(900)).build();
+        ExecutionConfig toolExecutionConfig = ExecutionConfig.builder()
+                .timeout(Duration.ofSeconds(900))
+                .maxAttempts(2)
+                .retryOn(error-> error.getMessage().contains("timeout") || error instanceof TimeoutException)
+                .build();
         Toolkit toolkit = new Toolkit(ToolkitConfig.builder().executionConfig(toolExecutionConfig).build());
         toolkit.registerTool(new WebSearchTool());
-        // shell-command (python is allowed for futu_financial skill)
+        // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
         toolkit.registerTool(new ReadFileTool());
         toolkit.registerTool(new WriteFileTool());
 
         // large result eviction
-//        ToolResultEvictionMiddleware toolResultEviction = new ToolResultEvictionMiddleware(
-//                new LocalFilesystemWithShell(workspace),
-//                ToolResultEvictionConfig.builder().maxResultChars(1500).previewChars(200).build()
-//        ) ;
-
+        ToolResultEvictionMiddleware toolResultEviction = new ToolResultEvictionMiddleware(
+                new LocalFilesystemWithShell(workspace),
+                ToolResultEvictionConfig.builder()
+                        .maxResultChars(1500)
+                        .previewChars(200)
+                        .build()
+        ) ;
+        // file-system
+        LocalFilesystemSpec filesystemSpec = new LocalFilesystemSpec()
+                .mode(LocalFsMode.ROOTED)
+                .addRoot(workspace)
+                .isolationScope(IsolationScope.USER)
+                .projectWritable(true);
+        // memory (MemoryFlushMiddleware 和 MemoryMaintenanceMiddleware 控制记忆流转)
+        MemoryConfig memoryConfig = MemoryConfig.builder()
+                .consolidationMaxTokens(5000)
+                .dailyFileRetentionDays(15)
+                .sessionRetentionDays(7)
+//                .flushTrigger(MemoryConfig.FlushTrigger.throttled(Duration.ofSeconds(30)))
+                .build() ;
+        // permission
+        PermissionContextState permissionContext = PermissionContextState.builder()
+                .mode(PermissionMode.BYPASS)
+                // deny remove-op
+//                .addDenyRule("shell_execute", new PermissionRule("shell_execute", "rm -rf", PermissionBehavior.DENY, "*"))
+                .build() ;
         // agent
         return HarnessAgent.builder()
                 .name("qaAgent")
@@ -248,11 +281,20 @@ public class AgentConfig {
                             - `[opinion]` 若 i6 占比稳定回落、L 系列新款放量，下季度毛利率有望修复至 12-15% 区间（假设与不确定性写明）。
                         """)
                 .workspace(workspace)
-                .stateStore(new JsonFileAgentStateStore(workspace.resolve("states")))
+//                .filesystem(filesystemSpec)
+                // agent状态保持
+                .stateStore(new InMemoryAgentStateStore())
+                // 记忆管理
+                .memory(memoryConfig)
+                // skill目录
                 .skillRepository(new FileSystemSkillRepository(workspace.resolve("skills")))
-                .permissionContext(PermissionContextState.builder().mode(PermissionMode.BYPASS).build())
+                // 权限管控
+                .permissionContext(permissionContext)
                 .maxIters(50)
+                // 审计中间件
                 .middleware(new AuditLoggingMiddleware(10240))
+                // 工具返回逐出
+                .middleware(toolResultEviction)
                 .build();
     }
 

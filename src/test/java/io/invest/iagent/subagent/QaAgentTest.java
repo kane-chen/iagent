@@ -41,6 +41,15 @@ public class QaAgentTest {
         Assertions.assertThat(response).containsAnyOf("市场竞争","骑手补贴","营销开支");
     }
 
+    @Test
+    public void test_excel_83690_2() {
+        String question = "美团公司核心本地商业分部2026Q1经营亏损环比改善的原因是什么";
+        String response = this.doCall(question);
+        Assert.notNull(response, "question response");
+        System.out.println(response);
+        Assertions.assertThat(response).containsAnyOf("竞争","毛利率","营销");
+    }
+
     private String doCall(String question){
         Msg qaMsg = Msg.builder().role(MsgRole.USER)
                 .textContent(question).build();
