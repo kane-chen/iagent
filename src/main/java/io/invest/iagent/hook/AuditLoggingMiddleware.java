@@ -12,6 +12,7 @@ import io.agentscope.core.middleware.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -92,8 +93,53 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
 
     private final int textPrintMaxLength;
 
+    // ==================== 撞墙循环保护 ====================
+    // 场景：LLM 在 ShellCommandTool 触发 SecurityError（管道/重定向/多命令）后不"投降"，
+    // 反复用同类命令重试，直到超时或 JVM 关掉（真实事故：AgentFilingTest#test_excel_83690）。
+    // 策略：按 session 记录 SecurityError；
+    //  - 同一命令签名（去参数化后）连续 sameCmdThreshold 次 → 抛异常打断本次 acting Flux；
+    //  - 累计 totalThreshold 次 → 抛异常打断本次 acting Flux。
+    // 抛出的异常会顺着 Flux 上浮到 agent 主循环，终止本轮任务，避免撞墙循环。
+
+    /** SecurityError 识别关键字（ShellCommandTool 拒绝命令时的错误文本）。 */
+    private static final Pattern SECURITY_ERROR_PATTERN =
+            Pattern.compile("SecurityError:.*(multiple command separators|approval callback)",
+                    Pattern.CASE_INSENSITIVE);
+
+    /** 命令参数占位：数字、单引号、双引号内内容替换后作为"命令模板"用于同类命令识别。 */
+    private static final Pattern CMD_ARG_PATTERN =
+            Pattern.compile("\"[^\"]*\"|'[^']*'|\\b\\d+\\b|\\s+");
+
+    /** 同一 session 的 SecurityError 计数 & 最近命令签名，用于识别撞墙循环。 */
+    private static class SecurityErrorTracker {
+        String lastCmdSignature;
+        int sameCmdStreak;
+        int totalCount;
+    }
+
+    private final ConcurrentHashMap<String, SecurityErrorTracker> securityErrorTrackers = new ConcurrentHashMap<>();
+
+    /** 同一命令签名连续触发 SecurityError 的次数上限；超过则中断 acting。 */
+    private final int sameCmdSecurityErrorThreshold;
+
+    /** 同一 session 内累计 SecurityError 次数上限；超过则中断 acting。 */
+    private final int totalSecurityErrorThreshold;
+
     public AuditLoggingMiddleware(int maxLength){
+        this(maxLength, 3, 8) ;
+    }
+
+    /**
+     * @param maxLength                     日志中截断的最大字符数
+     * @param sameCmdSecurityErrorThreshold 同一命令签名连续 SecurityError 次数上限（默认 3）
+     * @param totalSecurityErrorThreshold   同 session 累计 SecurityError 次数上限（默认 8）
+     */
+    public AuditLoggingMiddleware(int maxLength,
+                                  int sameCmdSecurityErrorThreshold,
+                                  int totalSecurityErrorThreshold){
         this.textPrintMaxLength = maxLength ;
+        this.sameCmdSecurityErrorThreshold = sameCmdSecurityErrorThreshold ;
+        this.totalSecurityErrorThreshold = totalSecurityErrorThreshold ;
     }
 
     // ==================== onAgent：整个 agent 调用 ====================
@@ -325,7 +371,7 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                         String result = toolResults.containsKey(id)
                                 ? toolResults.get(id).toString() : "";
                         Long startTs = toolStartTimes.get(id);
- 
+
                         // 记录结构化数据
                         ToolCallRecord toolRecord = new ToolCallRecord();
                         toolRecord.toolCallId = id;
@@ -334,7 +380,7 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                         toolRecord.endTimeMs = System.currentTimeMillis();
                         toolRecord.result = truncate(result);
                         toolRecord.state = end.getState() != null ? end.getState().name() : null;
- 
+
                         // 挂到 agent 级记录
                         String sessionId = ctx != null ? ctx.getSessionId() : "unknown";
                         if(StringUtils.isNotBlank(sessionId)) {
@@ -346,13 +392,110 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
                                 agentName, id, toolName,
                                 startTs != null ? (System.currentTimeMillis() - startTs) : -1,
                                 toolRecord.state, result.length());
- 
-                        if (log.isDebugEnabled()) {
-                            log.debug("[AUDIT][TOOL] RESULT_FULL | id={}, result={}",
-                                    id, toolRecord.result);
-                        }
+
+//                        if (log.isDebugEnabled()) {
+//                            log.debug("[AUDIT][TOOL] RESULT_FULL | id={}, result={}",
+//                                    id, toolRecord.result);
+//                        }
+
+                        // 撞墙循环检测：若本次 tool 结果里含 SecurityError，则按 session 累计
+                        checkSecurityErrorLoop(agentName, sessionId, toolName,
+                                lookupToolArgs(input, id), result);
                     }
                 });
     }
- 
+
+    // ==================== 撞墙循环保护辅助方法 ====================
+
+    /** 从 ActingInput 里取指定 toolCallId 的入参 JSON（用于生成命令签名）。 */
+    private String lookupToolArgs(ActingInput input, String toolCallId) {
+        if (input == null || input.toolCalls() == null || toolCallId == null) {
+            return "";
+        }
+        for (ToolUseBlock tu : input.toolCalls()) {
+            if (toolCallId.equals(tu.getId())) {
+                Object args = tu.getInput();
+                return args != null ? JSON.toJSONString(args) : "";
+            }
+        }
+        return "";
+    }
+
+    /**
+     * 从 shell 命令中抽出"命令签名"：去掉引号内内容、数字、多余空白，
+     * 让 "python xxx --ticker 83690 --question \"A\"" 与
+     * "python xxx --ticker 00700 --question \"B\"" 归为同一签名。
+     */
+    private String buildCmdSignature(String toolName, String argsJson) {
+        if (StringUtils.isBlank(argsJson)) {
+            return toolName + "|<no-args>";
+        }
+        String normalized = CMD_ARG_PATTERN.matcher(argsJson).replaceAll(" ").trim();
+        if (normalized.length() > 256) {
+            normalized = normalized.substring(0, 256);
+        }
+        return toolName + "|" + normalized;
+    }
+
+    /**
+     * 结果里出现 SecurityError 时累计计数；触发阈值则抛异常终止本次 acting。
+     * 抛出的 SecurityErrorLoopException 会通过 Flux 上浮，被 agent 主循环视为工具执行失败，
+     * 避免 LLM 在同一撞墙模式上继续重试。
+     */
+    private void checkSecurityErrorLoop(String agentName, String sessionId,
+                                        String toolName, String argsJson, String result) {
+        if (StringUtils.isBlank(result) || !SECURITY_ERROR_PATTERN.matcher(result).find()) {
+            // 非 SecurityError：不重置计数（其他失败可能夹在中间），只在阈值命中时才动作
+            return;
+        }
+        if (StringUtils.isBlank(sessionId)) {
+            sessionId = "unknown";
+        }
+        String signature = buildCmdSignature(toolName, argsJson);
+
+        SecurityErrorTracker tracker = securityErrorTrackers.computeIfAbsent(
+                sessionId, k -> new SecurityErrorTracker());
+
+        synchronized (tracker) {
+            tracker.totalCount++;
+            if (signature.equals(tracker.lastCmdSignature)) {
+                tracker.sameCmdStreak++;
+            } else {
+                tracker.lastCmdSignature = signature;
+                tracker.sameCmdStreak = 1;
+            }
+
+            log.warn("[AUDIT][GUARD] SecurityError observed | agent={}, session={}, tool={}, " +
+                            "sameCmdStreak={}/{}, total={}/{}, signature={}",
+                    agentName, sessionId, toolName,
+                    tracker.sameCmdStreak, sameCmdSecurityErrorThreshold,
+                    tracker.totalCount, totalSecurityErrorThreshold,
+                    signature);
+
+            boolean tripSameCmd = tracker.sameCmdStreak >= sameCmdSecurityErrorThreshold;
+            boolean tripTotal = tracker.totalCount >= totalSecurityErrorThreshold;
+            if (tripSameCmd || tripTotal) {
+                String reason = tripSameCmd
+                        ? "同一命令签名连续 " + tracker.sameCmdStreak + " 次触发 SecurityError"
+                        : "本次会话累计 " + tracker.totalCount + " 次 SecurityError";
+                log.error("[AUDIT][GUARD] Wall-hit loop detected, aborting acting flux | " +
+                                "agent={}, session={}, reason={}",
+                        agentName, sessionId, reason);
+                // 重置，避免同 session 下一次 acting 立刻再次抛出
+                tracker.sameCmdStreak = 0;
+                tracker.totalCount = 0;
+                tracker.lastCmdSignature = null;
+                throw new SecurityErrorLoopException(reason +
+                        "，工具调用已被审计中间件中止。请改换调用方式，或按 skill 规范传参。");
+            }
+        }
+    }
+
+    /** 用于向 agent 主循环上报"撞墙循环已被中断"，避免 LLM 继续重试。 */
+    public static class SecurityErrorLoopException extends RuntimeException {
+        public SecurityErrorLoopException(String message) {
+            super(message);
+        }
+    }
+
 }

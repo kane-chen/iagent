@@ -17,6 +17,20 @@ import sys
 import time
 from pathlib import Path
 
+# 强制 stdout/stderr 使用 UTF-8：Windows 上 Python 默认按系统 codepage（GBK/CP936）编码，
+# Java 侧 ShellCommandTool 按 UTF-8 解码字节流会产生乱码，导致上游 agent 误判"技能无法工作"
+# 并绕开 skill 直接读 workspace 文件（真实事故：FinancialReportSubAgentTest#test_excel_83690）。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")  # Python 3.7+
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, Exception):
+    # 兜底：老版本 Python 或已被替换的 stream
+    import io
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", line_buffering=True)
+    if hasattr(sys.stderr, "buffer"):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", line_buffering=True)
+
 # Allow running from any cwd by adding the scripts dir to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

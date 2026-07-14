@@ -96,7 +96,7 @@ python workspace/skills/financial-metrics-query/scripts/query_income.py \
 ## 用法：query_segments.py
 
 ```bash
-# BABA 全部分部全部指标（可能很大，建议加过滤）
+# BABA 全部分部全部指标（默认；调用方从返回 JSON 里按 segment/metric 名称自行筛选）
 python workspace/skills/financial-metrics-query/scripts/query_segments.py --ticker BABA --pretty
 
 # 只要一级分部（level=1）
@@ -115,6 +115,8 @@ python workspace/skills/financial-metrics-query/scripts/query_segments.py \
 | `--ticker` | 股票代码 | 必填 |
 | `--fiscal-years` / `--fiscal-periods` / `--periods` | 同 income | 不限 |
 | `--max-level` | 只返回层级 ≤ N 的分部（Level 1 = 顶层） | 不限 |
+
+> ⚠️ **不提供 `--segment` / `--metric` 过滤参数**。分部名与指标名以财报原文形式存在（中英文、缩进层级、翻译差异），调用方猜测的名称经常与实际不一致导致命中为空。本 skill 一次性返回全部分部/指标，调用方从 `rows[]` 中按 `segment` / `metric` 字段自行筛选。
 
 ## 输出格式
 

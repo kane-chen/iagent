@@ -95,3 +95,13 @@ def dump_json(payload: Any, pretty: bool) -> None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(json.dumps(payload, ensure_ascii=False))
+
+
+# 私有 helper 模块——被直接当命令执行时立即报错，避免 LLM 误当作 CLI 入口
+if __name__ == "__main__":
+    import sys
+    sys.stderr.write(
+        "ERROR: _common.py 是 financial-filing-qa skill 的内部 helper 模块，不是 CLI 入口。\n"
+        "正确用法：python workspace/skills/financial-filing-qa/scripts/qa.py --question <Q> --ticker <TICKER>\n"
+    )
+    sys.exit(2)

@@ -8,13 +8,14 @@
   2. 打开 sheet
   3. 第 1 行是 period 列头（'2026Q1' / '2024Q3' / ...）
   4. 第 2 行起每行是 (分部, 指标, 各 period 值)；分部名开头的 ├─ / 缩进表示层级
-  5. --segment 支持子串过滤；--metric 支持指标名子串过滤；period 三类过滤
+  5. 支持 period 三类过滤 + --max-level 层级过滤；分部名 / 指标名不再作为 CLI 过滤参数
+     （避免调用方提供不准确的名称导致命中为空）——调用方从返回的 JSON 中自行按名称筛选。
   6. 输出 JSON，保留层级信息（level + parent_segment）
 
 用法：
   python query_segments.py --ticker BABA
-  python query_segments.py --ticker BABA --segment "Taobao and Tmall Group" --pretty
-  python query_segments.py --ticker BABA --metric 收入 --fiscal-years 2024-2025
+  python query_segments.py --ticker BABA --max-level 1 --pretty
+  python query_segments.py --ticker BABA --fiscal-years 2024-2025
 
 原实现：io.invest.iagent.service.retrieve.FinancialMetricsQueryService（占位空壳）。
 """
@@ -41,16 +42,6 @@ def parse_args() -> argparse.Namespace:
         description="查询公司分部损益（segments excel）",
     )
     parser.add_argument("--ticker", required=True, help="股票代码，例如 BABA / 00700")
-    parser.add_argument(
-        "--segment",
-        default=None,
-        help="分部名子串过滤，例如 'Cloud'；留空返回全部分部",
-    )
-    parser.add_argument(
-        "--metric",
-        default=None,
-        help="指标名子串过滤，例如 '收入' / 'EBITA'；留空返回全部指标",
-    )
     parser.add_argument("--fiscal-years", default=None, help="财年过滤，如 '2024' 或 '2022-2025'")
     parser.add_argument("--fiscal-periods", default=None, help="财期类型，如 'FY,Q3'")
     parser.add_argument("--periods", default=None, help="精确 period 列表，如 '2024Q3,2025FY'")
@@ -159,12 +150,8 @@ def main() -> int:
 
             if args.max_level is not None and level > args.max_level:
                 continue
-            if args.segment and args.segment.lower() not in seg_name.lower():
-                continue
 
             metric_name = str(metric_raw).strip() if metric_raw else ""
-            if args.metric and args.metric.lower() not in metric_name.lower():
-                continue
 
             values: dict[str, Any] = {}
             for col, label in period_columns:

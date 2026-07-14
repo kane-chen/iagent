@@ -80,3 +80,13 @@ def _extract_embedding(payload: dict) -> list[float]:
         if isinstance(first, dict) and isinstance(first.get("embedding"), list):
             return [float(x) for x in first["embedding"]]
     raise RuntimeError("Embedding response missing embeddings/embedding/data[0].embedding")
+
+
+# 私有 helper 模块——被直接当命令执行时立即报错，避免 LLM 误当作 CLI 入口
+if __name__ == "__main__":
+    import sys
+    sys.stderr.write(
+        "ERROR: _ollama.py 是 financial-filing-qa skill 的内部 helper 模块（Ollama embed/chat 封装），不是 CLI 入口。\n"
+        "正确用法：python workspace/skills/financial-filing-qa/scripts/qa.py --question <Q> --ticker <TICKER>\n"
+    )
+    sys.exit(2)

@@ -840,3 +840,14 @@ def search(query: str, ticker: str, top_k: int, form_type: str | None,
         final_chunks = final_chunks[:top_k]
 
     return [_normalize_chunk(c) for c in final_chunks]
+
+
+# 私有 helper 模块——被直接当命令执行时立即报错，避免 LLM 误当作 CLI 入口
+if __name__ == "__main__":
+    import sys
+    sys.stderr.write(
+        "ERROR: _textsearch.py 是 financial-filing-qa skill 的内部 helper 模块，不是 CLI 入口。\n"
+        "正确用法：python workspace/skills/financial-filing-qa/scripts/qa.py "
+        "--question <Q> --ticker <TICKER> [--backend textsearch]\n"
+    )
+    sys.exit(2)

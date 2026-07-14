@@ -71,7 +71,7 @@ public class FinancialFillingQaSkillTest {
 
     @Test
     public void test_skill_direct_83690_2() throws Exception {
-        int code = this.runSkill("83690", "美团公司核心本地商业分部2025Q3相较于2025Q2、2024Q3经营利润率下降的原因是什么","2024",360);
+        int code = this.runSkill("83690", "核心本地商业分部2025Q3经营利润率同比下降的原因是什么","2025",360);
         Assertions.assertEquals(0,code);
     }
 
