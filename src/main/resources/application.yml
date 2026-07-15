@@ -7,6 +7,6 @@ logging:
     filing_query : debug
     io.invest.iagent.service.filingrag: debug
   file:
-    path: D:/dev/codes/github/iagent/workspace/logs/app
+    path: ~/project/github/iagent/workspace/logs/app
   console:
     enabled: true

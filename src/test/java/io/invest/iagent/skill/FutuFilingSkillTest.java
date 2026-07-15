@@ -135,7 +135,7 @@ public class FutuFilingSkillTest {
         Assertions.assertTrue(script.toFile().isFile(), "download script missing at " + script);
         // command
         List<String> cmd = List.of(
-                "python", script.toString(),
+                "python3", script.toString(),
                 "--ticker", ticker,
                 "--workspace", projectRoot.resolve("workspace").toString(),
                 "--fiscal-years", fiscalYears

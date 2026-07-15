@@ -164,7 +164,7 @@ public class SegmentFinancialReportSkillTest {
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
 
         List<String> cmd = List.of(
-                "python", script.toString(),
+                "python3", script.toString(),
                 "--ticker", ticker,
                 "--excel"
         );

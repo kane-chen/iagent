@@ -38,7 +38,9 @@ workspace/skills/futu-filing/
 ## 首次准备
 
 ```bash
-pip install -r workspace/skills/futu-filing/scripts/requirements.txt
+# 注意：harness 的 ShellCommandTool 只放行 `python`/`python3`，不允许直接调 `pip`。
+# 一律用 `python -m pip ...` 走 python 入口，避免 SecurityError: Command 'pip' is not in the allowed whitelist。
+python -m pip install -r workspace/skills/futu-filing/scripts/requirements.txt
 python -m playwright install chromium
 
 # 首次登录 —— 弹浏览器让你手动扫码/账密登录；成功后 cookies.json 落地

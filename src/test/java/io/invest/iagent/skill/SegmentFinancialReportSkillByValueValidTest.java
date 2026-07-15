@@ -166,7 +166,7 @@ public class SegmentFinancialReportSkillByValueValidTest {
 
         // 1) 调用 extract_segments.py （不加 --excel，输出 JSON；脚本默认写入 workspace/temp/ 并将 JSON 路径打印到 stdout）
         List<String> cmd = List.of(
-                "python", script.toString(),
+                "python3", script.toString(),
                 "--ticker", ticker
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);

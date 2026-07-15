@@ -30,6 +30,9 @@ replay_pid*
 # IntelliJ IDEA
 .idea/
 
+# python
+.venv
+
 # Maven/Gradle build output
 target/
 
@@ -51,6 +54,7 @@ workspace/memory
 workspace/MEMORY.md
 workspace/.agentscope
 workspace/.skills-cache
+workspace/.workspace
 workspace/ironman
 
 # agentscope

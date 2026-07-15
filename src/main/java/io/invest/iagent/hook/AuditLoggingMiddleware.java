@@ -265,7 +265,7 @@ public class AuditLoggingMiddleware implements MiddlewareBase {
             Function<ModelCallInput, Flux<AgentEvent>> next) {
  
         String agentName = agent.getName();
-        String modelName = input.model() != null ? input.model().toString() : "<unknown>";
+        String modelName = input.model() != null ? input.model().getModelName() : "<unknown>";
         int msgCount = input.messages() != null ? input.messages().size() : 0;
         int toolCount = input.tools() != null ? input.tools().size() : 0;
  

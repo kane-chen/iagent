@@ -310,8 +310,20 @@ def build_segment_metric_map(flat_metrics, periods):
 
 
 def has_any_data(values):
-    """检查是否有任何有效数据"""
-    return any(v is not None for v in values)
+    """检查是否有任何有效数据
+
+    None、空字符串、常见占位符（"-"、"—"、"N/A"、"NA"、"n/a"）均视为无数据。
+    只要有一个周期存在有效值，整行指标才会保留；否则整行（含派生的利润率/YoY）都会被过滤。
+    """
+    _PLACEHOLDERS = {"", "-", "—", "–", "N/A", "n/a", "NA", "None", "null", "nan", "NaN"}
+    for v in values:
+        if v is None:
+            continue
+        if isinstance(v, str):
+            if v.strip() in _PLACEHOLDERS:
+                continue
+        return True
+    return False
 
 
 def get_display_name(segment_info, level=None):

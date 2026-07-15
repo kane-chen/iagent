@@ -52,7 +52,7 @@ try:
     from urllib3.util.retry import Retry
 except ImportError:
     print("ERROR: requests not installed. Run:\n"
-          "  pip install -r workspace/skills/futu-filing/scripts/requirements.txt",
+          " python -m  pip install -r workspace/skills/futu-filing/scripts/requirements.txt",
           file=sys.stderr)
     sys.exit(2)
 
