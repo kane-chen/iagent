@@ -86,6 +86,8 @@ COLORS = {
     'ratio':    'FFF2CC',      # 其他一般比率-高亮黄
     'yoy':      None,          # YoY-无特殊背景
     'tax':      'FCE4D6',      # 税-浅红
+    'derived':  'BDD7EE',      # 加工指标(FCFF等)-中蓝
+    'fcf_ni':   'FFD9B3',      # 自由现金流净利润比(FCF/NI)-浅橙
     'default':  None,
 }
 
@@ -437,6 +439,233 @@ EXPENSE_ITEMS_MAP = {
 }
 
 # ─────────────────────────────────────────────────────────────
+# FCFF (公司自由现金流) 计算配置
+# ─────────────────────────────────────────────────────────────
+# 公式（原始）: FCFF = 净利润 + 利息费用×(1-所得税率) + 折旧摊销 - 营运资本增加 - 资本支出
+# 由现金流量表恒等式: OCF ≈ 净利润 + 折旧摊销 - 营运资本增加（忽略其他非现金项目）
+# 因此可将 FCFF 重排为可跨市场稳定计算的等价形式:
+#     FCFF = 经营活动现金流量净额 + 利息费用×(1-所得税率) - 资本支出
+# 该形式仅依赖 3 个字段（OCF / 利息费用 / CapEx），A股、港股、美股均可拉到，比原公式
+# 更稳定；并且当报表将 D&A 计入 OCF 加回项、把 ΔWC 计入 OCF 减项时，两式在数学上等价。
+#
+# 各市场的字段映射：{ 'ocf': 现金流表-经营活动现金流量净额, 'capex': 现金流表-资本支出（绝对值取正）,
+#                    'interest_expense': 利润表-利息费用/财务费用（绝对值取正）,
+#                    'net_profit': 利润表-净利润, 'ebt': 利润表-税前利润, 'tax': 利润表-所得税 }
+# capex 字段有多个候选（不同报表用不同字段），按顺序取第一个非空值并累加。
+FCFF_FIELD_MAP = {
+    'us': {
+        'ocf_fid':              8015,                # 经营活动现金流量净额
+        'capex_fids':           [8046],              # 固定资产交易净额（含PPE和无形资产投资净额）
+        # 部分公司季报（如 BABA 10-Q）不披露 8046 明细，仅有 8042 投资活动净额，回退使用
+        'capex_fallback_fids':  [8042],
+        'interest_expense_fid': 8020,                # 营业外利息费用
+        'net_profit_fid':       8043,                # 归属于母公司股东净利润（部分公司无 8037）
+        'ebt_fid':              8034,                # 税前利润
+        'tax_fid':              8035,                # 所得税
+    },
+    'hk': {
+        'ocf_fid':              5058,                # 经营活动现金流量净额（利润表 5058 与现金流表 5001 同义）
+        # 港股现金流表：购买固定资产(5071) + 购买无形资产(5073) - 出售固定资产(5070)
+        # 但 5058 是利润表口径，现金流表 OCF 为 5001（在利润表配置里 5058 不存在）
+        'capex_fids':           [5071, 5073],        # 购买固定资产 + 购买无形资产（取绝对值累加）
+        # Q1/Q9 累计季报港股 CF 不披露 5071/5073 明细，仅有 5069 投资活动净额，回退作为 CapEx 近似
+        'capex_fallback_fids':  [5069],
+        'interest_expense_fid': 5036,                # 财务成本（港股利润表口径）
+        'net_profit_fid':       5051,                # 归属于母公司股东净利润
+        'ebt_fid':              5040,                # 税前利润
+        'tax_fid':              5043,                # 所得税
+    },
+    'a_share': {
+        'ocf_fid':              3001,                # 现金流表：经营活动产生的现金流量净额
+        'capex_fids':           [3043],              # 购建固定资产、无形资产和其他长期资产支付的现金
+        'interest_expense_fid': 3016,                # 利润表：财务费用（利息费用为主要组成）
+        'net_profit_fid':       3043,                # 利润表：净利润
+        'ebt_fid':              3038,                # 利润表：利润总额
+        'tax_fid':              3039,                # 利润表：所得税费用
+    },
+}
+# 港股现金流表 OCF 使用 5001（与利润表 5058 不同数据来源）
+FCFF_CF_OCF_FID = {
+    'us':      8015,
+    'hk':      5001,
+    'a_share': 3001,
+}
+# 港股利润表中财务成本 5036 已计入营业利润前，直接使用（值多为负数表示费用）
+# 各市场利息费用符号约定：均取绝对值作为"利息费用"
+
+# ─────────────────────────────────────────────────────────────
+# ROA / ROE 计算配置
+# ─────────────────────────────────────────────────────────────
+# 公式：
+#   ROA = 年化净利润 / 资产合计 × 100%
+#   ROE = 年化归属母公司净利润 / 归属母公司股东权益合计 × 100%
+#
+# 关键点：
+#   - 分子取自利润表（年化后），分母取自资产负债表（时点数据，与利润表期次按 fiscal_year 对齐）
+#   - 由于富途资产负债表默认仅按年度披露 (financial_type=7)，interim（H1/Q9/Q1 等）期次
+#     若匹配不到同 fiscal_year 的年报数据，则使用最近一期的年报余额作为期末近似
+#   - 部分公司资产负债表返回的"股东权益合计"字段 ID 与预置映射不同（如 MSFT 用 8081 而非 8100），
+#     为提升适配性，同时尝试多个候选字段，取第一个非空值
+#
+# 字段候选（顺序 = 优先级）：
+ROA_ROE_FIELD_MAP = {
+    'us': {
+        'total_assets_fids':   [8001],                # 资产合计
+        'total_equity_fids':   [8085, 8081, 8100, 8101],  # 归属母公司/股东权益合计（顺序尝试）
+        'net_profit_fid':      8043,                  # 归属母公司股东净利润（利润表）
+        'total_ni_fid':        8037,                  # 净利润
+    },
+    'hk': {
+        'total_assets_fids':   [5001],
+        'total_equity_fids':   [5110, 5109],          # 归属母公司股东权益合计 / 股东权益合计
+        'net_profit_fid':      5051,                  # 归属母公司股东净利润
+        'total_ni_fid':        5045,                  # 本年利润
+    },
+    'a_share': {
+        'total_assets_fids':   [3001],
+        'total_equity_fids':   [3098, 3097],          # 归属母公司所有者权益合计 / 股东权益合计
+        'net_profit_fid':      3047,                  # 归属母公司净利润
+        'total_ni_fid':        3043,                  # 净利润
+    },
+}
+
+
+def _pick_first_non_null(items_by_fid, candidate_fids):
+    """按候选顺序返回第一个非空值；不同公司字段名不同时用于兜底"""
+    for fid in candidate_fids:
+        v = items_by_fid.get(fid)
+        if v is not None:
+            return float(v), fid
+    return None, None
+
+
+def _annualize_factor(period_text):
+    """将 period_text 映射为年化倍数
+
+    美股：Q1/Q2/Q3/Q4 均为单季，×4；H1 半年，×2；Q9 三季累计，×4/3；FY 年报 ×1
+    港股/A股：Q1（累计3月）×4；H1/Q6（累计6月）×2；Q9（累计9月）×4/3；FY ×1
+    """
+    if not period_text:
+        return 1.0
+    pt = period_text.upper()
+    if 'FY' in pt:
+        return 1.0
+    if 'Q9' in pt or '/9' in pt:
+        return 4.0 / 3.0
+    if 'H1' in pt or 'Q6' in pt:
+        return 2.0
+    if 'Q1' in pt or 'Q2' in pt or 'Q3' in pt or 'Q4' in pt:
+        return 4.0
+    return 1.0
+
+
+def compute_roa_roe_values(income_reports, bs_reports, market_type, logger=None):
+    """计算每期的 ROA 与 ROE
+
+    Args:
+        income_reports: 利润表期次列表
+        bs_reports:     资产负债表期次列表（优先与利润表同频率——季度维度精准对齐，
+                        比如 2026Q1 利润表 → 2026Q1 资产负债表 3/31 快照；仅年报数据时
+                        interim 期次回退到最近一年报余额）
+
+    Returns:
+        (roa_pcts, roe_pcts): 两个 list，长度与 income_reports 一致，元素为百分数或 None
+    """
+    cfg = ROA_ROE_FIELD_MAP.get(market_type)
+    if not cfg:
+        return [None] * len(income_reports), [None] * len(income_reports)
+
+    # 按 period_text 建索引（优先，季度级精准对齐）；同时按 fiscal_year 建回退索引
+    bs_by_period = {}
+    bs_by_year = {}
+    bs_sorted = []  # 按 (fiscal_year, period_text) 排序的兜底列表
+    for r in bs_reports:
+        pt = r.get('period_text', '')
+        fy = r.get('fiscal_year')
+        items = {i['field_id']: i.get('data') for i in r.get('item_list', [])}
+        if pt:
+            bs_by_period[pt] = items
+        # fiscal_year 索引记录该年最后出现的一条（迭代顺序通常是新→旧，覆盖后即最早一条）；
+        # 对回退语义（无同期次时用同 fy 的年报数据）没有强绑定，够用即可
+        if fy is not None:
+            # 只有 FY 期次才作为"年报余额"回退候选（interim 快照不宜替代其他 interim）
+            if 'FY' in pt.upper() or fy not in bs_by_year:
+                bs_by_year[fy] = items
+            bs_sorted.append((fy, pt, items))
+    bs_sorted.sort(key=lambda x: (x[0], x[1]))
+
+    def _pick_bs_items(period_text, fiscal_year):
+        """按 period_text 精确匹配；缺失时回退到同 fy 年报，再兜底最近一年"""
+        # 1) 优先按 period_text 精确匹配（季度对齐）
+        if period_text and period_text in bs_by_period:
+            return bs_by_period[period_text], period_text
+        # 2) 回退：使用同 fiscal_year 的年报余额（近似期初/期末快照）
+        if fiscal_year is not None and fiscal_year in bs_by_year:
+            return bs_by_year[fiscal_year], f"FY{fiscal_year}(回退)"
+        # 3) 再回退：<= 当前 fiscal_year 的最近一条 BS
+        if fiscal_year is not None:
+            candidates = [x for x in bs_sorted if x[0] <= fiscal_year]
+            if candidates:
+                _fy, _pt, items = candidates[-1]
+                return items, f"{_pt}(邻近回退)"
+        # 4) 最终兜底：取列表第一条
+        if bs_sorted:
+            _fy, _pt, items = bs_sorted[0]
+            return items, f"{_pt}(首条兜底)"
+        return None, None
+
+    roa_values = []
+    roe_values = []
+    for rpt in income_reports:
+        period = rpt.get('period_text', '')
+        fy = rpt.get('fiscal_year')
+        inc_items = {i['field_id']: i.get('data') for i in rpt.get('item_list', [])}
+
+        bs_items, bs_period_tag = _pick_bs_items(period, fy)
+        if not bs_items:
+            roa_values.append(None)
+            roe_values.append(None)
+            if logger:
+                logger.debug(f"ROA/ROE {period}: 无匹配资产负债表数据")
+            continue
+
+        total_assets, ta_fid = _pick_first_non_null(bs_items, cfg['total_assets_fids'])
+        total_equity, te_fid = _pick_first_non_null(bs_items, cfg['total_equity_fids'])
+
+        # 净利润：优先归母口径（与 ROE 匹配），若缺失回退到总净利润
+        np_raw = inc_items.get(cfg['net_profit_fid'])
+        total_ni_raw = inc_items.get(cfg['total_ni_fid'])
+        net_profit_attributable = float(np_raw) if np_raw is not None else None
+        total_net_income = float(total_ni_raw) if total_ni_raw is not None else net_profit_attributable
+
+        # 年化系数
+        factor = _annualize_factor(period)
+
+        # ROA = 年化净利润 / 资产合计
+        if total_net_income is not None and total_assets and total_assets != 0:
+            roa = (total_net_income * factor) / total_assets * 100
+            roa_values.append(round(roa, 2))
+        else:
+            roa_values.append(None)
+
+        # ROE = 年化归属母公司净利润 / 归属母公司股东权益合计
+        if net_profit_attributable is not None and total_equity and total_equity != 0:
+            roe = (net_profit_attributable * factor) / total_equity * 100
+            roe_values.append(round(roe, 2))
+        else:
+            roe_values.append(None)
+
+        if logger:
+            logger.debug(
+                f"ROA/ROE {period} (fy={fy}, bs={bs_period_tag}, ann×{factor:.2f}): "
+                f"assets[{ta_fid}]={total_assets}, equity[{te_fid}]={total_equity}, "
+                f"ROA={roa_values[-1]}%, ROE={roe_values[-1]}%"
+            )
+
+    return roa_values, roe_values
+
+
+# ─────────────────────────────────────────────────────────────
 # 辅助函数
 # ─────────────────────────────────────────────────────────────
 
@@ -598,28 +827,37 @@ def validate_stock_code(stock_code):
     return True, None
 
 
-def get_financial_data_with_structure(stock_code, statement_type, num=16, logger=None):
+def get_financial_data_with_structure(stock_code, statement_type, num=16, logger=None, financial_type_override=None):
     """从富途API获取财务数据及字段结构
 
-    根据报表类型 + 市场选择合适的 financial_type：
-    - 利润表：
-        - 美股 (US.)：10 = 单季报+年报（美股按 10-Q/10-K 发布独立季度报表）
-        - 港股 (HK.) / A 股 (SH./SZ.)：11 = 累计季报（Q1/Q6/Q9/年报）
-          H 股/A 股企业只发布"一季报/半年报/三季报/年报"，不发布独立 Q2/Q3/Q4 单季报，
-          因此用 11 才能拿到 Q6（半年报）与 Q9（三季报）；若继续用 10 会导致 Q2/Q3 全空、
-          Excel 只剩 Q1 和 FY。
-    - 资产负债表/现金流量表：7 = 年报（时点/年度快照）
+    三张表统一按季度维度拉取，让利润表 / 资产负债表 / 现金流量表期次严格对齐：
+    - 美股 (US.)：10 = 单季报+年报（美股按 10-Q/10-K 发布独立季度报表）
+    - 港股 (HK.) / A 股 (SH./SZ.)：11 = 累计季报（Q1/Q6/Q9/年报）
+      H 股/A 股企业只发布"一季报/半年报/三季报/年报"，不发布独立 Q2/Q3/Q4 单季报，
+      因此用 11 才能拿到 Q6（半年报）与 Q9（三季报）；若继续用 10 会导致 Q2/Q3 全空。
+
+    含义：
+    - 利润表：区间累计（美股单季，HK/A股累计）
+    - 现金流量表：与利润表同频，Q1/Q6/Q9/FY 为期初到该期末的累计口径；美股为单季
+    - 资产负债表：季度末时点快照（3/31、6/30、9/30、12/31）
+
+    对齐效果：利润表 2026Q1 ↔ 现金流量表 2026Q1（1–3 月累计）↔ 资产负债表 2026Q1
+    （3-31 快照），三表期次可通过 period_text 直接对应。
+
+    Args:
+        financial_type_override: 显式指定 financial_type，覆盖默认逻辑（保留给未来定制拉取用；
+                                 现在三张表的默认逻辑已一致，主流程一般不再需要 override）
 
     Raises:
         FetchError: 带用户可读信息的错误
     """
     st_code = STATEMENT_TYPES[statement_type][0]
 
-    if statement_type in ['balance', 'cashflow']:
-        financial_type = 7  # 年报
+    if financial_type_override is not None:
+        financial_type = financial_type_override
     else:
+        # 三张表默认统一按季度维度：港股 / A 股走累计季报 (Q1/Q6/Q9/FY)；美股走单季+年报
         market_type = get_market_type(stock_code)
-        # 港股 / A 股走累计季报 (Q1/Q6/Q9/FY)；美股走单季报+年报 (Q1/Q2/Q3/Q4/FY)。
         financial_type = 11 if market_type in ('hk', 'a_share') else 10
 
     if logger:
@@ -839,9 +1077,115 @@ def calculate_profit_margin_a_share(revenue_values, cost_values, num_quarters):
     return margin_values
 
 
+def compute_fcff_values(income_reports, cf_by_period, market_type, logger=None):
+    """计算 FCFF (公司自由现金流) 每期数值
+
+    实现公式（等价形式，跨市场稳定）:
+        FCFF = 经营活动现金流量净额 + 利息费用 × (1 - 所得税率) - 资本支出
+
+    Args:
+        income_reports:   利润表期次列表（顺序即列顺序）
+        cf_by_period:     {period_text: item_map_by_field_id} 现金流量表按期查询
+        market_type:      'us' / 'hk' / 'a_share'
+
+    Returns:
+        (fcff_list, capex_list): 两个 list，长度与 income_reports 一致，元素为原始金额（元）
+                                  或 None（关键项缺失）。CapEx 已取绝对值（正数表示流出规模）
+    """
+    cfg = FCFF_FIELD_MAP.get(market_type)
+    if not cfg:
+        return [None] * len(income_reports), [None] * len(income_reports)
+
+    cf_ocf_fid = FCFF_CF_OCF_FID.get(market_type, cfg.get('ocf_fid'))
+    interest_fid = cfg['interest_expense_fid']
+    net_profit_fid = cfg['net_profit_fid']
+    ebt_fid = cfg['ebt_fid']
+    tax_fid = cfg['tax_fid']
+    capex_fids = cfg['capex_fids']
+
+    results = []
+    capex_out = []
+    for rpt in income_reports:
+        period = rpt.get('period_text', '')
+        inc_items = {i['field_id']: i.get('data') for i in rpt.get('item_list', [])}
+        cf_items = cf_by_period.get(period, {})
+
+        # 1) OCF：来自现金流量表
+        ocf = cf_items.get(cf_ocf_fid)
+
+        # 2) 资本支出：现金流量表中多个字段（购建固定资产/无形资产等）累加取绝对值
+        capex_total = 0.0
+        capex_any = False
+        for fid in capex_fids:
+            v = cf_items.get(fid)
+            if v is not None:
+                capex_total += abs(float(v))
+                capex_any = True
+        # 回退：明细字段全缺失时使用总投资活动净额（用于 HK 累计季报 Q1/Q9）
+        if not capex_any:
+            for fid in cfg.get('capex_fallback_fids', []):
+                v = cf_items.get(fid)
+                if v is not None:
+                    capex_total += abs(float(v))
+                    capex_any = True
+        capex = capex_total if capex_any else None
+
+        # 3) 利息费用：来自利润表，取绝对值
+        interest_raw = inc_items.get(interest_fid)
+        interest = abs(float(interest_raw)) if interest_raw is not None else None
+
+        # 4) 所得税率：由利润表 所得税 / 税前利润 推算；若无有效值则回退 25%
+        ebt_raw = inc_items.get(ebt_fid)
+        tax_raw = inc_items.get(tax_fid)
+        tax_rate = None
+        if ebt_raw is not None and tax_raw is not None:
+            try:
+                ebt_f = float(ebt_raw)
+                tax_f = abs(float(tax_raw))
+                if ebt_f != 0:
+                    tr = tax_f / abs(ebt_f)
+                    # 约束在合理区间 [0, 0.5]
+                    if 0 <= tr <= 0.5:
+                        tax_rate = tr
+            except (TypeError, ValueError):
+                pass
+        if tax_rate is None:
+            tax_rate = 0.25  # 默认名义税率兜底
+
+        # 关键项缺失时该期无法计算
+        if ocf is None or capex is None:
+            results.append(None)
+            capex_out.append(capex)  # capex 若单独可用，仍然输出（用于单独展示）
+            if logger:
+                logger.debug(f"FCFF {period}: 关键项缺失 ocf={ocf} capex={capex}")
+            continue
+
+        interest_component = interest * (1 - tax_rate) if interest is not None else 0.0
+        fcff = float(ocf) + interest_component - capex
+        results.append(fcff)
+        capex_out.append(capex)
+
+        if logger:
+            logger.debug(
+                f"FCFF {period}: ocf={ocf} + interest={interest}×(1-{tax_rate:.3f}) "
+                f"- capex={capex} = {fcff:.0f}"
+            )
+
+    return results, capex_out
+
+
 def build_rows_with_ratios(reports, name_map, field_config, expense_items, divisor, unit_name,
-                            statement_type, market_type, ratio_config, logger=None):
-    """构建数据行，含财务比率计算（XX率紧跟XX后）"""
+                            statement_type, market_type, ratio_config, logger=None,
+                            fcff_values=None, capex_values=None,
+                            roa_values=None, roe_values=None):
+    """构建数据行，含财务比率计算（XX率紧跟XX后）
+
+    Args:
+        fcff_values:  FCFF 每期原始金额（未除以divisor），仅利润表使用
+        capex_values: 资本支出 CapEx 每期原始金额（已取绝对值，未除以divisor），仅利润表使用
+        roa_values:   ROA 百分数（已 ×100），仅利润表使用
+        roe_values:   ROE 百分数（已 ×100），仅利润表使用
+    """
     rows = []
     yoy_tracking = []  # 记录哪些行是YoY行，用于高亮：(row_idx, [value1, value2, ...])
 
@@ -1014,6 +1358,55 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
                             ratio_values = calculate_ratio(exp_raw_values, rev_raw, num_quarters, take_abs_numerator=False)
                             rows.append([ratio_name, '%'] + ratio_values)
 
+    # ── 加工指标：公司自由现金流 FCFF (仅利润表) ──
+    # 公式: FCFF = OCF + 利息费用 × (1 - 所得税率) - 资本支出
+    # （等价于 净利润 + 利息费用×(1-税率) + 折旧摊销 - 营运资本增加 - 资本支出，
+    #  但仅依赖现金流表 OCF/CapEx + 利润表 利息/税率，跨市场稳定）
+    if statement_type == 'income' and fcff_values is not None:
+        fcff_display = [format_value(v, divisor) for v in fcff_values]
+        rows.append(['公司自由现金流(FCFF)', unit_name] + fcff_display)
+
+        # ── 加工指标：自由现金流净利润比 FCF/NI (紧跟 FCFF 行) ──
+        # 公式：FCF/NI = FCFF / 净利润 × 100%
+        # 分母口径：与 FCFF 的"公司整体"口径对齐，优先使用总净利润 (US 8037 / HK 5045 / A股 3043)；
+        # 若总净利润缺失则回退到归母净利润 (US 8043 / HK 5051 / A股 3047)
+        # 语义：>100% 表示现金创造能力强于账面利润（如高折旧或客户预付款）；
+        #      <100% 或负值多因大额 CapEx / 应收拉长 / 存货堆积等现金流质量问题
+        ni_cfg = ROA_ROE_FIELD_MAP.get(market_type)
+        fcf_ni_values = []
+        for i in range(num_quarters):
+            fcff_raw = fcff_values[i] if i < len(fcff_values) else None
+            np_raw = None
+            if ni_cfg:
+                # 优先总净利润，缺失回退归母
+                total_ni = field_values_raw.get(ni_cfg['total_ni_fid'], [None]*num_quarters)
+                np_raw = total_ni[i] if i < len(total_ni) else None
+                if np_raw is None:
+                    attr_ni = field_values_raw.get(ni_cfg['net_profit_fid'], [None]*num_quarters)
+                    np_raw = attr_ni[i] if i < len(attr_ni) else None
+            if fcff_raw is not None and np_raw is not None and np_raw != 0:
+                fcf_ni_values.append(round(float(fcff_raw) / float(np_raw) * 100, 2))
+            else:
+                fcf_ni_values.append(None)
+        rows.append(['自由现金流净利润比(FCF/NI)', '%'] + fcf_ni_values)
+
+    # ── 加工指标：资本支出 CapEx (仅利润表) ──
+    # 数据来源：现金流量表（购建固定资产/无形资产等，取绝对值累加；无明细时回退到投资活动净额）
+    # 紧跟 FCF/NI 行之后，便于对照 FCFF = OCF + 利息税盾 - CapEx 的计算过程
+    if statement_type == 'income' and capex_values is not None:
+        capex_display = [format_value(v, divisor) for v in capex_values]
+        rows.append(['资本支出(CapEx)', unit_name] + capex_display)
+
+    # ── 加工指标：ROA / ROE (仅利润表) ──
+    # 公式：
+    #   ROA = 年化净利润 / 资产合计 × 100%
+    #   ROE = 年化归属母公司净利润 / 归属母公司股东权益合计 × 100%
+    # 分子来自利润表（interim 期次年化），分母来自资产负债表（按 fiscal_year 匹配）
+    if statement_type == 'income' and roa_values is not None:
+        rows.append(['ROA(总资产收益率, 年化)', '%'] + list(roa_values))
+    if statement_type == 'income' and roe_values is not None:
+        rows.append(['ROE(净资产收益率, 年化)', '%'] + list(roe_values))
+
     if logger:
         logger.info(f"构建完成，共 {len(rows)} 行数据，{len(yoy_tracking)} 个YoY行需要高亮检查")
 
@@ -1022,6 +1415,17 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
 
 def get_row_category(row_name):
     """根据行名称获取类别用于着色"""
+    # 0. 加工指标（FCFF / FCF-NI / CapEx / ROA / ROE 等）优先匹配 - 中蓝背景
+    # 注意：FCF/NI 单独分类为浅橙色，需在 FCFF 判断之前处理（否则"自由现金流"关键字会被 FCFF 抢先命中）
+    if 'FCF/NI' in row_name or '自由现金流净利润比' in row_name:
+        return 'fcf_ni'
+    if 'FCFF' in row_name or '自由现金流' in row_name:
+        return 'derived'
+    if 'CapEx' in row_name or '资本支出' in row_name:
+        return 'derived'
+    if 'ROA' in row_name or 'ROE' in row_name or '资产收益率' in row_name or '净资产收益率' in row_name:
+        return 'derived'
+
     # 1. 核心利润率优先匹配 - 橄榄绿背景
     core_ratios = ['毛利率', '营业利润率', '净利润率']
     for ratio in core_ratios:
@@ -1272,10 +1676,118 @@ def main():
         log_stdout(f"OK: Got {len(reports)} quarters data, {len(name_map)} fields")
         log_stdout(f"OK: Currency: {currency_code or currency_info or 'N/A'}, Unit: {unit_name}")
 
-        # 3. 构建数据行（含财务比率计算和YoY跟踪）
+        # 3. 若为利润表：额外拉取现金流量表以计算 FCFF (公司自由现金流) 与 资本支出 CapEx
+        fcff_values = None
+        capex_values = None
+        if args.type == 'income':
+            try:
+                # 利润表实际使用的 financial_type（复用 get_financial_data_with_structure 的默认逻辑）
+                income_ftype = 11 if market_type in ('hk', 'a_share') else 10
+                cf_reports, _cf_name_map = get_financial_data_with_structure(
+                    normalized_code, 'cashflow', args.num, logger,
+                    financial_type_override=income_ftype,
+                )
+                # 按 period_text 建索引: {period: {field_id: data}}
+                cf_by_period = {}
+                for r in cf_reports:
+                    pt = r.get('period_text', '')
+                    cf_by_period[pt] = {i['field_id']: i.get('data') for i in r.get('item_list', [])}
+                logger.info(f"配套现金流数据 {len(cf_by_period)} 期已就绪，开始计算 FCFF / CapEx")
+                fcff_values, capex_values = compute_fcff_values(reports, cf_by_period, market_type, logger)
+                valid_cnt = sum(1 for v in fcff_values if v is not None)
+                valid_capex = sum(1 for v in capex_values if v is not None)
+                log_stdout(f"OK: FCFF computed for {valid_cnt}/{len(fcff_values)} periods, "
+                           f"CapEx for {valid_capex}/{len(capex_values)} periods")
+            except FetchError as fe:
+                # 现金流拉取失败不影响利润表本体，仅跳过 FCFF/CapEx 加工指标
+                logger.warning(f"跳过 FCFF/CapEx: 现金流数据获取失败: {fe.message}")
+                log_stdout(f"WARN: 无法拉取现金流数据，跳过 FCFF/CapEx 加工指标（{fe.message}）")
+                fcff_values = None
+                capex_values = None
+            except Exception as e:
+                logger.warning(f"跳过 FCFF/CapEx: 未预期异常: {e}", exc_info=True)
+                log_stdout(f"WARN: FCFF/CapEx 计算失败，跳过该加工指标: {e}")
+                fcff_values = None
+                capex_values = None
+
+        # 3b. 若为利润表：额外拉取资产负债表以计算 ROA / ROE
+        # 使用与利润表相同的 financial_type，让每一期利润表精确匹配到同期末资产负债表快照
+        # （如 2026Q1 利润表 ↔ 2026-03-31 资产负债表），周期一致
+        # 同时，若 workspace/excels/ 下无近期资产负债表 Excel，则同步生成一份（便于用户查看/复用）
+        roa_values = None
+        roe_values = None
+        if args.type == 'income':
+            try:
+                # 与利润表同频（HK/A股=11 累计季报；美股=10 单季+年报），保证期次可精准对齐
+                income_ftype_for_bs = 11 if market_type in ('hk', 'a_share') else 10
+                bs_reports, bs_name_map = get_financial_data_with_structure(
+                    normalized_code, 'balance', args.num, logger,
+                    financial_type_override=income_ftype_for_bs,
+                )
+                logger.info(
+                    f"配套资产负债表数据 {len(bs_reports)} 期已就绪（financial_type={income_ftype_for_bs}"
+                    f"，与利润表同频），开始计算 ROA/ROE"
+                )
+                roa_values, roe_values = compute_roa_roe_values(reports, bs_reports, market_type, logger)
+                valid_roa = sum(1 for v in roa_values if v is not None)
+                valid_roe = sum(1 for v in roe_values if v is not None)
+                log_stdout(f"OK: ROA computed for {valid_roa}/{len(roa_values)} periods, "
+                           f"ROE computed for {valid_roe}/{len(roe_values)} periods")
+
+                # 若无近期资产负债表 Excel（7天内），自动生成一份
+                excels_dir = os.path.join(project_root, 'workspace', 'excels')
+                safe_code = normalized_code.replace('.', '_')
+                bs_cached = find_recent_excel(excels_dir, safe_code, 'balance')
+                if bs_cached is None:
+                    try:
+                        # 复用刚才拉到的 bs_reports 直接生成 Excel，避免二次调用 API
+                        bs_base_fields = (
+                            A_SHARE_FIELDS['balance'] if market_type == 'a_share'
+                            else HK_FIELDS['balance'] if market_type == 'hk'
+                            else US_FIELDS['balance']
+                        )
+                        bs_unit_name, bs_divisor, _cc, _ci = get_unit_config(bs_reports)
+                        bs_rows, bs_quarters, bs_yoy = build_rows_with_ratios(
+                            bs_reports, bs_name_map, bs_base_fields, None,
+                            bs_divisor, bs_unit_name, 'balance', market_type,
+                            A_SHARE_RATIO_CONFIG if market_type == 'a_share'
+                            else HK_RATIO_CONFIG if market_type == 'hk' else US_RATIO_CONFIG,
+                            logger,
+                        )
+                        if not os.path.exists(excels_dir):
+                            os.makedirs(excels_dir)
+                        bs_output = os.path.join(
+                            excels_dir, f"{safe_code}_balance_{timestamp}.xlsx"
+                        )
+                        generate_excel_with_styling(
+                            bs_rows, bs_quarters, bs_yoy, bs_output,
+                            STATEMENT_TYPES['balance'][1], logger,
+                        )
+                        log_stdout(f"OK: Balance sheet Excel generated (side-product): {bs_output}")
+                    except Exception as e:
+                        logger.warning(f"侧生成资产负债表 Excel 失败: {e}", exc_info=True)
+                        log_stdout(f"WARN: 未能生成资产负债表 Excel（不影响利润表主输出）: {e}")
+                else:
+                    log_stdout(f"OK: Reusing existing balance sheet Excel: {bs_cached[0]}")
+            except FetchError as fe:
+                logger.warning(f"跳过 ROA/ROE: 资产负债表数据获取失败: {fe.message}")
+                log_stdout(f"WARN: 无法拉取资产负债表数据，跳过 ROA/ROE 加工指标（{fe.message}）")
+                roa_values = None
+                roe_values = None
+            except Exception as e:
+                logger.warning(f"跳过 ROA/ROE: 未预期异常: {e}", exc_info=True)
+                log_stdout(f"WARN: ROA/ROE 计算失败，跳过该加工指标: {e}")
+                roa_values = None
+                roe_values = None
+
+        # 4. 构建数据行（含财务比率计算和YoY跟踪）
         rows, quarters, yoy_tracking = build_rows_with_ratios(
             reports, name_map, base_fields, expense_items,
-            divisor, unit_name, args.type, market_type, ratio_config, logger
+            divisor, unit_name, args.type, market_type, ratio_config, logger,
+            fcff_values=fcff_values,
+            capex_values=capex_values,
+            roa_values=roa_values,
+            roe_values=roe_values,
         )
 
         log_stdout(f"OK: Built {len(rows)} data rows with {len(yoy_tracking)} YoY comparison rows")

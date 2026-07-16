@@ -40,5 +40,26 @@
         "matchScore": 1.0
       }
     ]
+  },
+  "小米": {
+    "company": "小米",
+    "timestamp": 1783954019,
+    "timestampIso": "2026-07-13T14:46:59+00:00",
+    "results": [
+      {
+        "symbol": "01810",
+        "name": "小米集团",
+        "exchange": 116,
+        "exchangeName": "HKG",
+        "marketRegion": "HK",
+        "securityType": "港股",
+        "companyType": "HK_LISTED",
+        "annualReportType": "年报",
+        "quarterlyReportType": "季度业绩公告（自愿）",
+        "semiAnnualReportType": "中期报告",
+        "filingAuthority": "香港联交所",
+        "matchScore": 1.0
+      }
+    ]
   }
 }

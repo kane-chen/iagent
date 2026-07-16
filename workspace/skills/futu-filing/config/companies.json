@@ -249,6 +249,33 @@
       "titleKeyWords": [],
       "filingSuffixNames": [],
       "supportPeriodTypes": []
+    },
+    {
+      "ticker": "MU",
+      "market": "US",
+      "stockId": "206117",
+      "displayName": "Micron Technology",
+      "supportFileTypes": [
+        "10-K",
+        "10-Q"
+      ],
+      "titleKeyWords": [],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
+    },
+    {
+      "ticker": "01810",
+      "market": "HK",
+      "stockId": "76033806042898",
+      "displayName": "XIAOMI-W",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "季度报告",
+        "业绩公告",
+        "财报公告"
+      ],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     }
   ],
   "marketProfiles": {
