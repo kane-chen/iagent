@@ -136,25 +136,25 @@ public class FutuFinancialReportSkillTest {
 
     @Test
     public void test_skill_direct_beke() throws Exception {
-        int code = this.runSkill("US.BEKE", "income",8, 160);
+        int code = this.runSkill("US.BEKE", "income",32, 160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_jd() throws Exception {
-        int code = this.runSkill("US.JD", "income",8, 160);
+        int code = this.runSkill("US.JD", "income",32, 160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_nio() throws Exception {
-        int code = this.runSkill("US.NIO", "income",8, 160);
+        int code = this.runSkill("US.NIO", "income",32, 160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_xp() throws Exception {
-        int code = this.runSkill("US.XPEV", "income",8, 160);
+        int code = this.runSkill("US.XPEV", "income",32, 160);
         Assertions.assertEquals(0,code);
     }
 

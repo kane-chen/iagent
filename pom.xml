@@ -17,8 +17,7 @@
     <properties>
         <java.version>17</java.version>
         <junit.version>5.13.4</junit.version>
-        <agentscope.vision>2.0.0-RC5</agentscope.vision>
-        <agentscope.extendsion>1.1.0-RC2</agentscope.extendsion>
+        <agentscope.vision>2.0.0</agentscope.vision>
     </properties>
 
     <dependencyManagement>
@@ -128,12 +127,6 @@
             <artifactId>agentscope-extensions-rag-ragflow</artifactId>
             <version>${agentscope.vision}</version>
         </dependency>
-        <dependency>
-            <groupId>io.agentscope</groupId>
-            <artifactId>agentscope-extensions-autocontext-memory</artifactId>
-            <version>${agentscope.extendsion}</version>
-        </dependency>
-
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>

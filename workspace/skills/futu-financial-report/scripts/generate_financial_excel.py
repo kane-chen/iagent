@@ -86,7 +86,7 @@ COLORS = {
     'ratio':    'FFF2CC',      # 其他一般比率-高亮黄
     'yoy':      None,          # YoY-无特殊背景
     'tax':      'FCE4D6',      # 税-浅红
-    'derived':  'BDD7EE',      # 加工指标(FCFF等)-中蓝
+    'derived':  'BDD7EE',      # 加工指标(FCF等)-中蓝
     'fcf_ni':   'FFD9B3',      # 自由现金流净利润比(FCF/NI)-浅橙
     'default':  None,
 }
@@ -439,59 +439,42 @@ EXPENSE_ITEMS_MAP = {
 }
 
 # ─────────────────────────────────────────────────────────────
-# FCFF (公司自由现金流) 计算配置
+# FCF (自由现金流) 计算配置
 # ─────────────────────────────────────────────────────────────
-# 公式（原始）: FCFF = 净利润 + 利息费用×(1-所得税率) + 折旧摊销 - 营运资本增加 - 资本支出
-# 由现金流量表恒等式: OCF ≈ 净利润 + 折旧摊销 - 营运资本增加（忽略其他非现金项目）
-# 因此可将 FCFF 重排为可跨市场稳定计算的等价形式:
-#     FCFF = 经营活动现金流量净额 + 利息费用×(1-所得税率) - 资本支出
-# 该形式仅依赖 3 个字段（OCF / 利息费用 / CapEx），A股、港股、美股均可拉到，比原公式
-# 更稳定；并且当报表将 D&A 计入 OCF 加回项、把 ΔWC 计入 OCF 减项时，两式在数学上等价。
+# 公式:
+#     FCF = (调整后) 经营活动现金净流入 − 经营性资本开支
+#         = 经营活动现金流量净额 − 资本支出（CapEx）
 #
-# 各市场的字段映射：{ 'ocf': 现金流表-经营活动现金流量净额, 'capex': 现金流表-资本支出（绝对值取正）,
-#                    'interest_expense': 利润表-利息费用/财务费用（绝对值取正）,
-#                    'net_profit': 利润表-净利润, 'ebt': 利润表-税前利润, 'tax': 利润表-所得税 }
+# 两项均来自现金流量表，是各市场均披露的必有字段，可稳定跨 A/H/美股计算。
+# 各市场的字段映射：{ 'ocf_fid': 现金流表-经营活动现金流量净额,
+#                    'capex_fids': 现金流表-资本支出（绝对值取正，允许多字段累加）,
+#                    'capex_fallback_fids': 明细缺失时的回退字段（如投资活动净额） }
 # capex 字段有多个候选（不同报表用不同字段），按顺序取第一个非空值并累加。
-FCFF_FIELD_MAP = {
+FCF_FIELD_MAP = {
     'us': {
         'ocf_fid':              8015,                # 经营活动现金流量净额
         'capex_fids':           [8046],              # 固定资产交易净额（含PPE和无形资产投资净额）
         # 部分公司季报（如 BABA 10-Q）不披露 8046 明细，仅有 8042 投资活动净额，回退使用
         'capex_fallback_fids':  [8042],
-        'interest_expense_fid': 8020,                # 营业外利息费用
-        'net_profit_fid':       8043,                # 归属于母公司股东净利润（部分公司无 8037）
-        'ebt_fid':              8034,                # 税前利润
-        'tax_fid':              8035,                # 所得税
     },
     'hk': {
         'ocf_fid':              5058,                # 经营活动现金流量净额（利润表 5058 与现金流表 5001 同义）
-        # 港股现金流表：购买固定资产(5071) + 购买无形资产(5073) - 出售固定资产(5070)
-        # 但 5058 是利润表口径，现金流表 OCF 为 5001（在利润表配置里 5058 不存在）
-        'capex_fids':           [5071, 5073],        # 购买固定资产 + 购买无形资产（取绝对值累加）
+        # 港股现金流表：购买固定资产(5071) + 购买无形资产(5073) 取绝对值累加
+        'capex_fids':           [5071, 5073],
         # Q1/Q9 累计季报港股 CF 不披露 5071/5073 明细，仅有 5069 投资活动净额，回退作为 CapEx 近似
         'capex_fallback_fids':  [5069],
-        'interest_expense_fid': 5036,                # 财务成本（港股利润表口径）
-        'net_profit_fid':       5051,                # 归属于母公司股东净利润
-        'ebt_fid':              5040,                # 税前利润
-        'tax_fid':              5043,                # 所得税
     },
     'a_share': {
         'ocf_fid':              3001,                # 现金流表：经营活动产生的现金流量净额
         'capex_fids':           [3043],              # 购建固定资产、无形资产和其他长期资产支付的现金
-        'interest_expense_fid': 3016,                # 利润表：财务费用（利息费用为主要组成）
-        'net_profit_fid':       3043,                # 利润表：净利润
-        'ebt_fid':              3038,                # 利润表：利润总额
-        'tax_fid':              3039,                # 利润表：所得税费用
     },
 }
 # 港股现金流表 OCF 使用 5001（与利润表 5058 不同数据来源）
-FCFF_CF_OCF_FID = {
+FCF_CF_OCF_FID = {
     'us':      8015,
     'hk':      5001,
     'a_share': 3001,
 }
-# 港股利润表中财务成本 5036 已计入营业利润前，直接使用（值多为负数表示费用）
-# 各市场利息费用符号约定：均取绝对值作为"利息费用"
 
 # ─────────────────────────────────────────────────────────────
 # ROA / ROE 计算配置
@@ -1077,41 +1060,40 @@ def calculate_profit_margin_a_share(revenue_values, cost_values, num_quarters):
     return margin_values
 
 
-def compute_fcff_values(income_reports, cf_by_period, market_type, logger=None):
-    """计算 FCFF (公司自由现金流) 每期数值
+def compute_fcf_values(income_reports, cf_by_period, market_type, logger=None):
+    """计算 FCF (自由现金流) 每期数值
 
-    实现公式（等价形式，跨市场稳定）:
-        FCFF = 经营活动现金流量净额 + 利息费用 × (1 - 所得税率) - 资本支出
+    公式:
+        FCF = (调整后) 经营活动现金净流入 − 经营性资本开支
+            = 经营活动现金流量净额 − 资本支出
 
     Args:
-        income_reports:   利润表期次列表（顺序即列顺序）
+        income_reports:   利润表期次列表（顺序即列顺序），仅用于对齐 period_text
         cf_by_period:     {period_text: item_map_by_field_id} 现金流量表按期查询
         market_type:      'us' / 'hk' / 'a_share'
 
     Returns:
-        (fcff_list, capex_list): 两个 list，长度与 income_reports 一致，元素为原始金额（元）
+        (fcf_list, capex_list): 两个 list，长度与 income_reports 一致，元素为原始金额（元）
                                   或 None（关键项缺失）。CapEx 已取绝对值（正数表示流出规模）
     """
-    cfg = FCFF_FIELD_MAP.get(market_type)
+    cfg = FCF_FIELD_MAP.get(market_type)
     if not cfg:
-        return [None] * len(income_reports), [None] * len(income_reports)
+        n = len(income_reports)
+        return [None] * n, [None] * n, [None] * n
 
-    cf_ocf_fid = FCFF_CF_OCF_FID.get(market_type, cfg.get('ocf_fid'))
-    interest_fid = cfg['interest_expense_fid']
-    net_profit_fid = cfg['net_profit_fid']
-    ebt_fid = cfg['ebt_fid']
-    tax_fid = cfg['tax_fid']
+    cf_ocf_fid = FCF_CF_OCF_FID.get(market_type, cfg.get('ocf_fid'))
     capex_fids = cfg['capex_fids']
 
     results = []
     capex_out = []
+    ocf_out = []
     for rpt in income_reports:
         period = rpt.get('period_text', '')
-        inc_items = {i['field_id']: i.get('data') for i in rpt.get('item_list', [])}
         cf_items = cf_by_period.get(period, {})
 
         # 1) OCF：来自现金流量表
         ocf = cf_items.get(cf_ocf_fid)
+        ocf_out.append(float(ocf) if ocf is not None else None)
 
         # 2) 资本支出：现金流量表中多个字段（购建固定资产/无形资产等）累加取绝对值
         capex_total = 0.0
@@ -1130,59 +1112,34 @@ def compute_fcff_values(income_reports, cf_by_period, market_type, logger=None):
                     capex_any = True
         capex = capex_total if capex_any else None
 
-        # 3) 利息费用：来自利润表，取绝对值
-        interest_raw = inc_items.get(interest_fid)
-        interest = abs(float(interest_raw)) if interest_raw is not None else None
-
-        # 4) 所得税率：由利润表 所得税 / 税前利润 推算；若无有效值则回退 25%
-        ebt_raw = inc_items.get(ebt_fid)
-        tax_raw = inc_items.get(tax_fid)
-        tax_rate = None
-        if ebt_raw is not None and tax_raw is not None:
-            try:
-                ebt_f = float(ebt_raw)
-                tax_f = abs(float(tax_raw))
-                if ebt_f != 0:
-                    tr = tax_f / abs(ebt_f)
-                    # 约束在合理区间 [0, 0.5]
-                    if 0 <= tr <= 0.5:
-                        tax_rate = tr
-            except (TypeError, ValueError):
-                pass
-        if tax_rate is None:
-            tax_rate = 0.25  # 默认名义税率兜底
-
         # 关键项缺失时该期无法计算
         if ocf is None or capex is None:
             results.append(None)
             capex_out.append(capex)  # capex 若单独可用，仍然输出（用于单独展示）
             if logger:
-                logger.debug(f"FCFF {period}: 关键项缺失 ocf={ocf} capex={capex}")
+                logger.debug(f"FCF {period}: 关键项缺失 ocf={ocf} capex={capex}")
             continue
 
-        interest_component = interest * (1 - tax_rate) if interest is not None else 0.0
-        fcff = float(ocf) + interest_component - capex
-        results.append(fcff)
+        fcf = float(ocf) - capex
+        results.append(fcf)
         capex_out.append(capex)
 
         if logger:
-            logger.debug(
-                f"FCFF {period}: ocf={ocf} + interest={interest}×(1-{tax_rate:.3f}) "
-                f"- capex={capex} = {fcff:.0f}"
-            )
+            logger.debug(f"FCF {period}: ocf={ocf} - capex={capex} = {fcf:.0f}")
 
-    return results, capex_out
+    return results, capex_out, ocf_out
 
 
 def build_rows_with_ratios(reports, name_map, field_config, expense_items, divisor, unit_name,
                             statement_type, market_type, ratio_config, logger=None,
-                            fcff_values=None, capex_values=None,
+                            fcff_values=None, capex_values=None, ocf_values=None,
                             roa_values=None, roe_values=None):
     """构建数据行，含财务比率计算（XX率紧跟XX后）
 
     Args:
-        fcff_values:  FCFF 每期原始金额（未除以divisor），仅利润表使用
-        capex_values: 资本支出 CapEx 每期原始金额（已取绝对值，未除以divisor），仅利润表使用
+        fcff_values:  FCF 每期原始金额（未除以divisor），仅利润表使用（参数名保留兼容旧调用）
+        capex_values: 资本开支 CapEx 每期原始金额（已取绝对值，未除以divisor），仅利润表使用
+        ocf_values:   经营活动现金流量净额 每期原始金额（未除以divisor），仅利润表使用
         roa_values:   ROA 百分数（已 ×100），仅利润表使用
         roe_values:   ROE 百分数（已 ×100），仅利润表使用
     """
@@ -1358,24 +1315,37 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
                             ratio_values = calculate_ratio(exp_raw_values, rev_raw, num_quarters, take_abs_numerator=False)
                             rows.append([ratio_name, '%'] + ratio_values)
 
-    # ── 加工指标：公司自由现金流 FCFF (仅利润表) ──
-    # 公式: FCFF = OCF + 利息费用 × (1 - 所得税率) - 资本支出
-    # （等价于 净利润 + 利息费用×(1-税率) + 折旧摊销 - 营运资本增加 - 资本支出，
-    #  但仅依赖现金流表 OCF/CapEx + 利润表 利息/税率，跨市场稳定）
+    # ── 加工指标：经营活动现金流量净额 OCF (仅利润表) ──
+    # 数据来源：现金流量表，与利润表期次严格对齐
+    if statement_type == 'income' and ocf_values is not None:
+        ocf_display = [format_value(v, divisor) for v in ocf_values]
+        rows.append(['经营活动现金流量净额', unit_name] + ocf_display)
+
+    # ── 加工指标：资本开支 CapEx (仅利润表) ──
+    # 数据来源：现金流量表（购建固定资产/无形资产等，取绝对值累加；无明细时回退到投资活动净额）
+    # 位于 OCF 之后、FCF 之前，便于对照 FCF = OCF - CapEx 的计算过程
+    if statement_type == 'income' and capex_values is not None:
+        capex_display = [format_value(v, divisor) for v in capex_values]
+        rows.append(['资本开支(CapEx)', unit_name] + capex_display)
+
+    # ── 加工指标：自由现金流 FCF (仅利润表) ──
+    # 公式: FCF = (调整后) 经营活动现金净流入 − 经营性资本开支
+    #           = 经营活动现金流量净额 − 资本支出
+    # OCF 与 CapEx 均来自现金流量表；生成利润表时脚本已同步拉取当期现金流表数据。
     if statement_type == 'income' and fcff_values is not None:
         fcff_display = [format_value(v, divisor) for v in fcff_values]
-        rows.append(['公司自由现金流(FCFF)', unit_name] + fcff_display)
+        rows.append(['自由现金流(FCF)', unit_name] + fcff_display)
 
-        # ── 加工指标：自由现金流净利润比 FCF/NI (紧跟 FCFF 行) ──
-        # 公式：FCF/NI = FCFF / 净利润 × 100%
-        # 分母口径：与 FCFF 的"公司整体"口径对齐，优先使用总净利润 (US 8037 / HK 5045 / A股 3043)；
+        # ── 加工指标：自由现金流净利润比 FCF/NI (紧跟 FCF 行) ──
+        # 公式：FCF/NI = FCF / 净利润 × 100%
+        # 分母口径：与 FCF 的"公司整体"口径对齐，优先使用总净利润 (US 8037 / HK 5045 / A股 3043)；
         # 若总净利润缺失则回退到归母净利润 (US 8043 / HK 5051 / A股 3047)
         # 语义：>100% 表示现金创造能力强于账面利润（如高折旧或客户预付款）；
         #      <100% 或负值多因大额 CapEx / 应收拉长 / 存货堆积等现金流质量问题
         ni_cfg = ROA_ROE_FIELD_MAP.get(market_type)
         fcf_ni_values = []
         for i in range(num_quarters):
-            fcff_raw = fcff_values[i] if i < len(fcff_values) else None
+            fcf_raw = fcff_values[i] if i < len(fcff_values) else None
             np_raw = None
             if ni_cfg:
                 # 优先总净利润，缺失回退归母
@@ -1384,18 +1354,11 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
                 if np_raw is None:
                     attr_ni = field_values_raw.get(ni_cfg['net_profit_fid'], [None]*num_quarters)
                     np_raw = attr_ni[i] if i < len(attr_ni) else None
-            if fcff_raw is not None and np_raw is not None and np_raw != 0:
-                fcf_ni_values.append(round(float(fcff_raw) / float(np_raw) * 100, 2))
+            if fcf_raw is not None and np_raw is not None and np_raw != 0:
+                fcf_ni_values.append(round(float(fcf_raw) / float(np_raw) * 100, 2))
             else:
                 fcf_ni_values.append(None)
         rows.append(['自由现金流净利润比(FCF/NI)', '%'] + fcf_ni_values)
-
-    # ── 加工指标：资本支出 CapEx (仅利润表) ──
-    # 数据来源：现金流量表（购建固定资产/无形资产等，取绝对值累加；无明细时回退到投资活动净额）
-    # 紧跟 FCF/NI 行之后，便于对照 FCFF = OCF + 利息税盾 - CapEx 的计算过程
-    if statement_type == 'income' and capex_values is not None:
-        capex_display = [format_value(v, divisor) for v in capex_values]
-        rows.append(['资本支出(CapEx)', unit_name] + capex_display)
 
     # ── 加工指标：ROA / ROE (仅利润表) ──
     # 公式：
@@ -1415,13 +1378,15 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
 
 def get_row_category(row_name):
     """根据行名称获取类别用于着色"""
-    # 0. 加工指标（FCFF / FCF-NI / CapEx / ROA / ROE 等）优先匹配 - 中蓝背景
-    # 注意：FCF/NI 单独分类为浅橙色，需在 FCFF 判断之前处理（否则"自由现金流"关键字会被 FCFF 抢先命中）
+    # 0. 加工指标（FCF / FCF-NI / CapEx / ROA / ROE 等）优先匹配 - 中蓝背景
+    # 注意：FCF/NI 单独分类为浅橙色，需在 FCF 判断之前处理（否则"自由现金流"关键字会被 FCF 抢先命中）
     if 'FCF/NI' in row_name or '自由现金流净利润比' in row_name:
         return 'fcf_ni'
-    if 'FCFF' in row_name or '自由现金流' in row_name:
+    if 'FCF' in row_name or '自由现金流' in row_name:
         return 'derived'
-    if 'CapEx' in row_name or '资本支出' in row_name:
+    if 'CapEx' in row_name or '资本支出' in row_name or '资本开支' in row_name:
+        return 'derived'
+    if '经营活动现金流量净额' in row_name:
         return 'derived'
     if 'ROA' in row_name or 'ROE' in row_name or '资产收益率' in row_name or '净资产收益率' in row_name:
         return 'derived'
@@ -1676,14 +1641,17 @@ def main():
         log_stdout(f"OK: Got {len(reports)} quarters data, {len(name_map)} fields")
         log_stdout(f"OK: Currency: {currency_code or currency_info or 'N/A'}, Unit: {unit_name}")
 
-        # 3. 若为利润表：额外拉取现金流量表以计算 FCFF (公司自由现金流) 与 资本支出 CapEx
+        # 3. 若为利润表：额外拉取现金流量表以计算 FCF (自由现金流) 与 资本开支 CapEx
         fcff_values = None
         capex_values = None
+        ocf_values = None
+        cf_reports = None
+        cf_name_map = None
         if args.type == 'income':
             try:
                 # 利润表实际使用的 financial_type（复用 get_financial_data_with_structure 的默认逻辑）
                 income_ftype = 11 if market_type in ('hk', 'a_share') else 10
-                cf_reports, _cf_name_map = get_financial_data_with_structure(
+                cf_reports, cf_name_map = get_financial_data_with_structure(
                     normalized_code, 'cashflow', args.num, logger,
                     financial_type_override=income_ftype,
                 )
@@ -1692,23 +1660,64 @@ def main():
                 for r in cf_reports:
                     pt = r.get('period_text', '')
                     cf_by_period[pt] = {i['field_id']: i.get('data') for i in r.get('item_list', [])}
-                logger.info(f"配套现金流数据 {len(cf_by_period)} 期已就绪，开始计算 FCFF / CapEx")
-                fcff_values, capex_values = compute_fcff_values(reports, cf_by_period, market_type, logger)
+                logger.info(f"配套现金流数据 {len(cf_by_period)} 期已就绪，开始计算 FCF / CapEx")
+                fcff_values, capex_values, ocf_values = compute_fcf_values(reports, cf_by_period, market_type, logger)
                 valid_cnt = sum(1 for v in fcff_values if v is not None)
                 valid_capex = sum(1 for v in capex_values if v is not None)
-                log_stdout(f"OK: FCFF computed for {valid_cnt}/{len(fcff_values)} periods, "
-                           f"CapEx for {valid_capex}/{len(capex_values)} periods")
+                valid_ocf = sum(1 for v in ocf_values if v is not None)
+                log_stdout(f"OK: FCF computed for {valid_cnt}/{len(fcff_values)} periods, "
+                           f"CapEx for {valid_capex}/{len(capex_values)} periods, "
+                           f"OCF for {valid_ocf}/{len(ocf_values)} periods")
             except FetchError as fe:
-                # 现金流拉取失败不影响利润表本体，仅跳过 FCFF/CapEx 加工指标
-                logger.warning(f"跳过 FCFF/CapEx: 现金流数据获取失败: {fe.message}")
-                log_stdout(f"WARN: 无法拉取现金流数据，跳过 FCFF/CapEx 加工指标（{fe.message}）")
+                # 现金流拉取失败不影响利润表本体，仅跳过 FCF/CapEx 加工指标
+                logger.warning(f"跳过 FCF/CapEx: 现金流数据获取失败: {fe.message}")
+                log_stdout(f"WARN: 无法拉取现金流数据，跳过 FCF/CapEx 加工指标（{fe.message}）")
                 fcff_values = None
                 capex_values = None
+                ocf_values = None
             except Exception as e:
-                logger.warning(f"跳过 FCFF/CapEx: 未预期异常: {e}", exc_info=True)
-                log_stdout(f"WARN: FCFF/CapEx 计算失败，跳过该加工指标: {e}")
+                logger.warning(f"跳过 FCF/CapEx: 未预期异常: {e}", exc_info=True)
+                log_stdout(f"WARN: FCF/CapEx 计算失败，跳过该加工指标: {e}")
                 fcff_values = None
                 capex_values = None
+                ocf_values = None
+
+            # 若无近期现金流量表 Excel（7天内），复用刚拉到的 cf_reports 生成一份
+            # （与资产负债表侧生成逻辑一致，避免二次调用 API）
+            if cf_reports:
+                try:
+                    excels_dir = os.path.join(project_root, 'workspace', 'excels')
+                    safe_code = normalized_code.replace('.', '_')
+                    cf_cached = find_recent_excel(excels_dir, safe_code, 'cashflow')
+                    if cf_cached is None:
+                        cf_base_fields = (
+                            A_SHARE_FIELDS['cashflow'] if market_type == 'a_share'
+                            else HK_FIELDS['cashflow'] if market_type == 'hk'
+                            else US_FIELDS['cashflow']
+                        )
+                        cf_unit_name, cf_divisor, _cc, _ci = get_unit_config(cf_reports)
+                        cf_rows, cf_quarters, cf_yoy = build_rows_with_ratios(
+                            cf_reports, cf_name_map, cf_base_fields, None,
+                            cf_divisor, cf_unit_name, 'cashflow', market_type,
+                            A_SHARE_RATIO_CONFIG if market_type == 'a_share'
+                            else HK_RATIO_CONFIG if market_type == 'hk' else US_RATIO_CONFIG,
+                            logger,
+                        )
+                        if not os.path.exists(excels_dir):
+                            os.makedirs(excels_dir)
+                        cf_output = os.path.join(
+                            excels_dir, f"{safe_code}_cashflow_{timestamp}.xlsx"
+                        )
+                        generate_excel_with_styling(
+                            cf_rows, cf_quarters, cf_yoy, cf_output,
+                            STATEMENT_TYPES['cashflow'][1], logger,
+                        )
+                        log_stdout(f"OK: Cashflow Excel generated (side-product): {cf_output}")
+                    else:
+                        log_stdout(f"OK: Reusing existing cashflow Excel: {cf_cached[0]}")
+                except Exception as e:
+                    logger.warning(f"侧生成现金流量表 Excel 失败: {e}", exc_info=True)
+                    log_stdout(f"WARN: 未能生成现金流量表 Excel（不影响利润表主输出）: {e}")
 
         # 3b. 若为利润表：额外拉取资产负债表以计算 ROA / ROE
         # 使用与利润表相同的 financial_type，让每一期利润表精确匹配到同期末资产负债表快照
@@ -1786,6 +1795,7 @@ def main():
             divisor, unit_name, args.type, market_type, ratio_config, logger,
             fcff_values=fcff_values,
             capex_values=capex_values,
+            ocf_values=ocf_values,
             roa_values=roa_values,
             roe_values=roe_values,
         )
