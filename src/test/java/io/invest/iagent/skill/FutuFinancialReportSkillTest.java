@@ -164,6 +164,28 @@ public class FutuFinancialReportSkillTest {
         Assertions.assertEquals(0,code);
     }
 
+    @Test
+    public void test_skill_direct_baba() throws Exception {
+        String ticker = "US.BABA";
+        int code = this.runSkill(ticker, "income",32, 160);
+        Assertions.assertEquals(0,code);
+        code = this.runSkill(ticker, "balance",32, 160);
+        Assertions.assertEquals(0,code);
+        code = this.runSkill(ticker, "cashflow",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_tencent() throws Exception {
+        String ticker = "HK.00700";
+        int code = this.runSkill(ticker, "income",32, 160);
+        Assertions.assertEquals(0,code);
+        code = this.runSkill(ticker, "balance",32, 160);
+        Assertions.assertEquals(0,code);
+        code = this.runSkill(ticker, "cashflow",32, 160);
+        Assertions.assertEquals(0,code);
+    }
+
     private int runSkill(String ticker,String type,int limit, int timeoutSeconds) throws Exception {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/futu-financial-report/scripts/generate_financial_excel.py");

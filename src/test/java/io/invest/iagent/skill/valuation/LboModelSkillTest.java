@@ -26,17 +26,17 @@ public class LboModelSkillTest {
 
     @Test
     public void test_skill_direct_00700() throws Exception {
-        int code = this.runSkill("HK.00700","10.0","9.20", 160);
+        int code = this.runSkill("00700",160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_baba() throws Exception {
-        int code = this.runSkill("BABA","9.9","9.5", 120);
+        int code = this.runSkill("BABA", 120);
         Assertions.assertEquals(0,code);
     }
 
-    private int runSkill(String ticker,String entryRate,String exitRate, int timeoutSeconds) throws Exception {
+    private int runSkill(String ticker,int timeoutSeconds) throws Exception {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/lbo-model/scripts/build_lbo_model.py");
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
@@ -44,13 +44,11 @@ public class LboModelSkillTest {
         List<String> cmd = List.of(
                 "python3", script.toString(),
                 "--ticker", ticker,
-                "--workspace", workspace,
-                "--entry_multiple", entryRate,
-                "--exit_multiple", exitRate
+                "--workspace", workspace
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
         Assertions.assertEquals(0, result.getExitCode(),
-                "build_dcf_model.py failed, stderr: " + result.getStderr());
+                "build_lbo_model.py failed, stderr: " + result.getStderr());
         return result.getExitCode() ;
     }
 }

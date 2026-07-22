@@ -61,6 +61,11 @@ public class AgentConfig {
     }
 
     @Bean
+    public Path workspace(){
+        return workspace ;
+    }
+
+    @Bean
     public Model model() {
         return OpenAIChatModel.builder()
                 .baseUrl(applicationProperties.getLlm().getBaseUrl())

@@ -26,17 +26,22 @@ public class DcfModelSkillTest {
 
     @Test
     public void test_skill_direct_00700() throws Exception {
-        int code = this.runSkill("HK.00700","58","0.20", 160);
+        int code = this.runSkill("00700", 160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_baba() throws Exception {
-        int code = this.runSkill("BABA","118.9","0.15", 120);
+        int code = this.runSkill("BABA",120);
         Assertions.assertEquals(0,code);
     }
 
-    private int runSkill(String ticker,String currentPrice,String taxRate, int timeoutSeconds) throws Exception {
+    @Test
+    public void test_skill_direct_pdd() throws Exception {
+        int code = this.runSkill("PDD", 120);
+        Assertions.assertEquals(0,code);
+    }
+    private int runSkill(String ticker,int timeoutSeconds) throws Exception {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/dcf-model/scripts/build_dcf_model.py");
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
@@ -44,9 +49,7 @@ public class DcfModelSkillTest {
         List<String> cmd = List.of(
                 "python3", script.toString(),
                 "--ticker", ticker,
-                "--workspace", workspace,
-                "--current_price", currentPrice,
-                "--tax_rate", taxRate
+                "--workspace", workspace
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
         Assertions.assertEquals(0, result.getExitCode(),

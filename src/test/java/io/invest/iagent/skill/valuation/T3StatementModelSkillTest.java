@@ -44,8 +44,7 @@ public class T3StatementModelSkillTest {
         List<String> cmd = List.of(
                 "python3", script.toString(),
                 "--ticker", ticker,
-                "--workspace", workspace,
-                "--growth_rate", growthRate
+                "--workspace", workspace
         );
         ProcessRunner.Result result = ProcessRunner.run(cmd, projectRoot, timeoutSeconds);
         Assertions.assertEquals(0, result.getExitCode(),
