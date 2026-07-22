@@ -13,7 +13,7 @@ public final class WebSearchProviderFactory {
     private WebSearchProviderFactory() {}
 
     public static WebSearchProvider fromEnv(){
-        String provider = StringUtils.defaultIfBlank(System.getenv("WEB_SEARCH_PROVIDER"), "brave");
+        String provider = StringUtils.defaultIfBlank(System.getenv("WEB_SEARCH_PROVIDER"), "tavily");
         if(StringUtils.equalsIgnoreCase(provider, "brave")){
             return new BraveWebSearchProvider(
                     System.getenv("BRAVE_SEARCH_API_KEY"),
