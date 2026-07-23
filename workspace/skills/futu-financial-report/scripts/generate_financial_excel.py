@@ -278,6 +278,7 @@ A_SHARE_FIELDS = {
         (3005, '经营性应收项目的减少', 'cash_in'),         # 应收变动
         (3006, '经营性应付项目的增加', 'cash_in'),         # 应付变动
         (3033, '投资活动现金流量净额',  'cash_out'),
+        (3043, '购建固定资产、无形资产和其他长期资产支付的现金', 'cash_out'),   # CapEx 明细 (DCF 严格口径)
         (3051, '融资活动现金流量净额',  'cash_out'),
         (3068, '期末现金及现金等价物余额', 'cash_in'),
     ],
@@ -352,6 +353,7 @@ US_FIELDS = {
         (8020, '存货变动',              'cash_out'),
         (8021, '应付账款变动',           'cash_in'),
         (8042, '投资活动现金流量净额',    'cash_out'),
+        (8046, '购建固定资产及无形资产净额', 'cash_out'),   # CapEx 明细 (DCF 严格口径专用)
         (8056, '融资活动现金流量净额',    'cash_out'),
         (8067, '现金及现金等价物期末余额', 'cash_in'),
         (8068, '现金及现金等价物净增加额', 'cash_in'),
@@ -400,6 +402,7 @@ HK_FIELDS = {
         (5034, '无形资产',        'asset'),
         (5035, '商誉',          'asset'),
         (5036, '长期投资',        'asset'),
+        (5054, '定期存款-非流动资产', 'asset'),   # 港股: 长期定期存款 (DCF Net Cash 计入)
         (5037, '递延所得税资产',   'asset'),
         (5038, '其他非流动资产',  'asset'),
         (5060, '负债合计',       'liability'),
@@ -432,6 +435,8 @@ HK_FIELDS = {
         (5060, '应收账款减少', 'cash_in'),
         (5061, '存货减少', 'cash_out'),           # 存货增加视为现金占用
         (5062, '应付账款增加', 'cash_in'),
+        (5071, '购建固定资产', 'cash_out'),        # CapEx 明细 - PP&E (DCF 严格口径)
+        (5073, '购建无形资产', 'cash_out'),        # CapEx 明细 - 无形资产 (DCF 严格口径)
         (5076, '投资活动现金流量净额',    'cash_out'),
         (5086, '融资活动现金流量净额',    'cash_out'),
         (5100, '现金及现金等价物期末余额', 'cash_in'),
@@ -1390,6 +1395,34 @@ def build_rows_with_ratios(reports, name_map, field_config, expense_items, divis
         rows.append(['ROA(总资产收益率, 年化)', '%'] + list(roa_values))
     if statement_type == 'income' and roe_values is not None:
         rows.append(['ROE(净资产收益率, 年化)', '%'] + list(roe_values))
+
+    # ── 加工指标：资本开支 CapEx明细 (仅现金流量表) ──
+    # 与利润表侧的 CapEx 语义不同: 此处**只用现金流量表 CapEx 明细字段**,
+    # 不使用"投资活动现金流量净额"作为兜底 (兜底会含长期股权投资/有价证券买卖, 明显高估 CapEx)。
+    # DCF 估值模型专用, 避免 Base CapEx% 被失真值拖偏。
+    #   美股: 8046 (购建固定资产及无形资产净额)
+    #   港股: 5071 (购建固定资产) + 5073 (购建无形资产)
+    #   A股: 3043 (购建固定资产、无形资产和其他长期资产支付的现金)
+    if statement_type == 'cashflow':
+        capex_detail_fids = {
+            'us':      [8046],
+            'hk':      [5071, 5073],
+            'a_share': [3043],
+        }.get(market_type, [])
+        if capex_detail_fids:
+            capex_strict_values = []
+            for i in range(num_quarters):
+                total = 0.0
+                any_hit = False
+                for fid in capex_detail_fids:
+                    raw_list = field_values_raw.get(fid, [None] * num_quarters)
+                    v = raw_list[i] if i < len(raw_list) else None
+                    if v is not None:
+                        total += abs(float(v))
+                        any_hit = True
+                capex_strict_values.append(total if any_hit else None)
+            capex_display = [format_value(v, divisor) for v in capex_strict_values]
+            rows.append(['资本开支(CapEx明细)', unit_name] + capex_display)
 
     if logger:
         logger.info(f"构建完成，共 {len(rows)} 行数据，{len(yoy_tracking)} 个YoY行需要高亮检查")

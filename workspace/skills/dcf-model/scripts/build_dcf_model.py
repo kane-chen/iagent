@@ -72,13 +72,88 @@ FILL_VALUATION_ORANGE_DARK = PatternFill("solid", fgColor="F4B183")
 BOTTOM_BORDER = Border(bottom=Side(style="thin", color="000000"))
 
 # ==================== 数字格式 (对齐 schema.md) ====================
-FMT_CURRENCY   = "$#,##0;($#,##0);\"-\""    # 美元金额 (零值显示 -)
+# 注意: 由于 skill 需支持多币种 (USD/CNY/HKD/…), 数字格式统一去掉货币符号 ($),
+# 币种通过 A2 表头与行标签明示; 每股价格则用 FMT_PRICE (无货币符号)。
+FMT_CURRENCY   = "#,##0;(#,##0);\"-\""      # 金额 (通用, 零值显示 -)
 FMT_CURRENCY_M = "#,##0;(#,##0);\"-\""      # 百万单位金额
-FMT_PRICE      = "$#,##0.00"                # 每股价格
+FMT_PRICE      = "#,##0.00"                 # 每股价格 (币种在标签中明示)
 FMT_PERCENT    = "0.0%"                     # 百分比
 FMT_MULTIPLE   = "0.0\"x\""                 # 倍数
 FMT_SHARES     = "#,##0.00"                 # 股本 (百万股)
 FMT_DECIMAL    = "0.0000"                   # 贴现因子
+FMT_FX         = "0.0000"                   # FX 汇率 (4 位小数)
+
+# ==================== 币种识别 & FX ====================
+# 财报 Excel 第二列 "单位" 字符串 -> ISO 币种代码
+# 对齐 generate_financial_excel.py:745 currency_mapping 的反向表
+_UNIT_NAME_TO_CURRENCY = {
+    "百万人民币": "CNY",
+    "百万港元":   "HKD",
+    "百万美元":   "USD",
+    "百万欧元":   "EUR",
+    "百万英镑":   "GBP",
+    "百万日元":   "JPY",
+    "百万新加坡元": "SGD",
+    "百万澳元":   "AUD",
+    "百万加元":   "CAD",
+}
+
+# 交易所前缀 -> 股价 (交易) 币种
+_MARKET_PREFIX_TO_CURRENCY = {
+    "US": "USD",
+    "HK": "HKD",
+    "SH": "CNY",
+    "SZ": "CNY",
+}
+
+# Futu FX 快照代码候选 (顺序尝试): (from_ccy, to_ccy) -> [futu_code, ...]
+# 说明: 富途外汇代码可能因权限/上线状态不同, 这里给出候选, 逐个探测。
+_FX_FUTU_CODES = {
+    ("USD", "CNY"): ["HK.USDCNH", "HK.USDCNY"],
+    ("USD", "HKD"): ["HK.USDHKD"],
+    ("HKD", "CNY"): ["HK.HKDCNH", "HK.HKDCNY"],
+    ("EUR", "USD"): ["HK.EURUSD"],
+    ("GBP", "USD"): ["HK.GBPUSD"],
+    ("USD", "JPY"): ["HK.USDJPY"],
+}
+
+# 兜底汇率 (仅在 Futu FX 抓取失败时使用): 1 from_ccy = X to_ccy
+# 请在 Excel 中用户覆盖以获得实时价格 — 这些仅作应急默认值
+_FX_FALLBACKS = {
+    ("USD", "CNY"): 7.20,
+    ("USD", "HKD"): 7.80,
+    ("HKD", "CNY"): 0.92,
+    ("EUR", "USD"): 1.08,
+    ("GBP", "USD"): 1.27,
+    ("USD", "JPY"): 155.0,
+}
+
+# ==================== Beta 基准指数 & Rf/ERP 常量 ====================
+# 按交易场所前缀选择大盘基准 (用于计算个股 5Y monthly beta)
+_BENCHMARK_INDEX = {
+    "US": "US.SPY",       # S&P 500 ETF
+    "HK": "HK.800000",    # 恒生指数
+    "SH": "SH.000300",    # 沪深 300
+    "SZ": "SH.000300",    # A 股统一用沪深 300
+}
+
+# 按报表币种 (Reporting Currency) 决定 Rf 与 ERP:
+# - Rf: 10Y 主权债券收益率
+# - ERP: Damodaran country equity risk premium (年度更新, 2024/2025 数值)
+# 用户可在 Excel WACC Sheet 的蓝色输入格中直接覆盖为最新值
+_RF_ERP_BY_CURRENCY = {
+    "USD": {"rf": 0.043, "erp": 0.055, "rf_src": "10Y US Treasury",  "erp_src": "Damodaran US ERP"},
+    "HKD": {"rf": 0.040, "erp": 0.060, "rf_src": "HKGB 10Y",         "erp_src": "Damodaran HK country ERP"},
+    "CNY": {"rf": 0.025, "erp": 0.065, "rf_src": "中国 10Y 国债",     "erp_src": "Damodaran CN country ERP"},
+    "EUR": {"rf": 0.027, "erp": 0.050, "rf_src": "German Bund 10Y",  "erp_src": "Damodaran EU ERP"},
+    "GBP": {"rf": 0.040, "erp": 0.055, "rf_src": "UK Gilt 10Y",      "erp_src": "Damodaran UK ERP"},
+    "JPY": {"rf": 0.015, "erp": 0.055, "rf_src": "JGB 10Y",          "erp_src": "Damodaran JP ERP"},
+}
+_RF_ERP_DEFAULT = {"rf": 0.043, "erp": 0.055, "rf_src": "Fallback (USD)", "erp_src": "Fallback (USD)"}
+
+# Beta 默认兜底值 (当 Futu 历史行情不足或调用失败时使用)
+_BETA_FALLBACK = 1.20
+_BETA_MIN_SAMPLES = 24   # 最少 24 个月度收益率样本 (=25 期月线) 才计算 beta
 
 # ==================== Comment helper ====================
 _COMMENT_AUTHOR = "DCF Builder"
@@ -123,12 +198,18 @@ def _ensure_shared_strings(file_path: Path) -> Tuple[Path, bool]:
     except:
         return file_path, False
 
-def _read_excel_map(file_path: Path) -> dict:
+def _read_excel_map(file_path: Path) -> Tuple[dict, Optional[str]]:
+    """读取财报 Excel, 返回 (data_dict, currency_code)。
+
+    currency_code 从第二列 "单位" 字符串反向解析 (如 "百万人民币"->"CNY")。
+    若单位列缺失或为纯 "百万"/"%" 兜底则返回 None。
+    """
     fp, is_tmp = _ensure_shared_strings(file_path)
     try:
         wb = openpyxl.load_workbook(str(fp), read_only=True, data_only=True)
         sheet = wb.active
         data = {}
+        currency_code = None
         header_row = 1
         for r in range(1, 5):
             vals = [sheet.cell(r, c).value for c in range(1, sheet.max_column + 1) if sheet.cell(r, c).value]
@@ -138,6 +219,13 @@ def _read_excel_map(file_path: Path) -> dict:
             ind = sheet.cell(r, 1).value
             if not ind: continue
             ind = str(ind).strip()
+            # 从第二列单位字符串识别币种 (只取第一次成功匹配)
+            if currency_code is None:
+                unit_str = sheet.cell(r, 2).value
+                if isinstance(unit_str, str):
+                    mapped = _UNIT_NAME_TO_CURRENCY.get(unit_str.strip())
+                    if mapped:
+                        currency_code = mapped
             vals = {}
             for c, p in enumerate(periods):
                 v = sheet.cell(r, c + 3).value
@@ -149,7 +237,7 @@ def _read_excel_map(file_path: Path) -> dict:
                 vals[p] = num
             data[ind] = vals
         wb.close()
-        return data
+        return data, currency_code
     finally:
         if is_tmp and fp.exists(): os.remove(str(fp))
 
@@ -169,6 +257,16 @@ def normalize_stock_code(ticker: str) -> str:
         elif n >= 300000: return f"SZ.{ticker}"
         else: return f"HK.{ticker.zfill(5)}"
     return f"US.{ticker}"
+
+
+def infer_trading_currency(stock_code: str) -> str:
+    """从富途格式股票代码 (US.BABA / HK.00700 / SH.600519) 推断交易 (股价) 币种。
+
+    - 交易场所决定报价币种, 这一映射永远正确 (US.*→USD, HK.*→HKD, SH./SZ.*→CNY)
+    - 与财报币种可能不同 (ADR/H 股), 后者从财报 Excel 单位列读取
+    """
+    prefix = stock_code.split('.')[0] if '.' in stock_code else ""
+    return _MARKET_PREFIX_TO_CURRENCY.get(prefix, "USD")
 
 # ==================== Futu Market Data Fetching ====================
 def fetch_market_data_from_futu(stock_code: str) -> dict:
@@ -227,15 +325,173 @@ def fetch_market_data_from_futu(stock_code: str) -> dict:
 
     return result
 
+# ==================== FX Rate Fetching ====================
+def fetch_fx_rate_from_futu(from_ccy: str, to_ccy: str) -> Tuple[float, str]:
+    """获取 1 from_ccy = X to_ccy 的汇率。
+
+    优先尝试 Futu 外汇快照 (`get_market_snapshot(['HK.USDCNH', ...])`),
+    失败时使用 _FX_FALLBACKS 中的常量兜底。
+
+    Returns:
+        (rate, source): source 是数据来源标识, 用于 Excel 备注
+    """
+    from_ccy, to_ccy = from_ccy.upper(), to_ccy.upper()
+    if from_ccy == to_ccy:
+        return 1.0, "Same currency (no conversion)"
+
+    codes = _FX_FUTU_CODES.get((from_ccy, to_ccy), [])
+    inverse_codes = _FX_FUTU_CODES.get((to_ccy, from_ccy), [])
+    ctx = None
+    try:
+        if codes or inverse_codes:
+            logger.info(f"正在通过 FutuOpenD 获取 {from_ccy}->{to_ccy} 汇率...")
+            ctx = create_quote_context()
+            # 正向候选码
+            for fx_code in codes:
+                try:
+                    logger.info(f"[API 调用] ctx.get_market_snapshot([{fx_code}])")
+                    ret, data = ctx.get_market_snapshot([fx_code])
+                    if ret == 0 and not is_empty(data):
+                        row = data.iloc[0]
+                        px = row.get('last_price')
+                        if px is not None and float(px) > 0:
+                            logger.info(f"  -> 获取汇率成功 ({fx_code}): 1 {from_ccy} = {float(px):.4f} {to_ccy}")
+                            return float(px), f"Futu get_market_snapshot ({fx_code})"
+                    else:
+                        logger.warning(f"  -> {fx_code} 无有效数据: ret={ret}")
+                except Exception as e:
+                    logger.warning(f"  -> {fx_code} 调用失败: {e}")
+            # 反向候选码 (拿到 to->from, 求倒数)
+            for fx_code in inverse_codes:
+                try:
+                    logger.info(f"[API 调用] 尝试反向汇率 ctx.get_market_snapshot([{fx_code}])")
+                    ret, data = ctx.get_market_snapshot([fx_code])
+                    if ret == 0 and not is_empty(data):
+                        row = data.iloc[0]
+                        px = row.get('last_price')
+                        if px is not None and float(px) > 0:
+                            rate = 1.0 / float(px)
+                            logger.info(f"  -> 反向汇率成功 ({fx_code}={float(px):.4f}): 1 {from_ccy} = {rate:.4f} {to_ccy}")
+                            return rate, f"Futu get_market_snapshot ({fx_code}, inverse)"
+                except Exception as e:
+                    logger.warning(f"  -> {fx_code} 调用失败: {e}")
+    except Exception as e:
+        logger.warning(f"FX 获取过程发生异常: {e}")
+    finally:
+        if ctx:
+            safe_close(ctx)
+
+    # Fallback
+    if (from_ccy, to_ccy) in _FX_FALLBACKS:
+        rate = _FX_FALLBACKS[(from_ccy, to_ccy)]
+        logger.warning(f"FX API 失败, 使用回退常量 1 {from_ccy} = {rate} {to_ccy}")
+        return rate, f"Fallback constant (please override in Excel)"
+    if (to_ccy, from_ccy) in _FX_FALLBACKS:
+        rate = 1.0 / _FX_FALLBACKS[(to_ccy, from_ccy)]
+        logger.warning(f"FX API 失败, 使用反向回退常量: 1 {from_ccy} = {rate:.4f} {to_ccy}")
+        return rate, f"Fallback constant (inverse, please override in Excel)"
+    logger.warning(f"无 {from_ccy}->{to_ccy} 汇率映射, 使用 1.0 (可能不正确)")
+    return 1.0, f"NO MAPPING — please override in Excel"
+
+# ==================== Beta 计算 ====================
+def get_benchmark_for(stock_code: str) -> str:
+    """根据股票所属交易场所选择大盘基准指数, 用于计算个股 Beta。"""
+    prefix = stock_code.split('.')[0] if '.' in stock_code else ""
+    return _BENCHMARK_INDEX.get(prefix, "US.SPY")
+
+
+def _fetch_monthly_returns(ctx, code: str, months: int = 60):
+    """通过 Futu 获取月度前复权 K 线并计算月度收益率序列。
+
+    Returns:
+        list[float] 月度收益率 (可能为空); 失败时返回 []
+    """
+    try:
+        from futu.common.constant import KLType, AuType   # 延迟导入, 避免顶部依赖
+    except ImportError:
+        logger.warning("futu-api 未安装, 无法计算 Beta")
+        return []
+    end = date.today().isoformat()
+    # 多请求 ~1 年冗余, 避免遇到停牌导致样本不足
+    from datetime import timedelta
+    start = (date.today() - timedelta(days=int(365 * (months / 12 + 1)))).isoformat()
+    try:
+        ret, df, _ = ctx.request_history_kline(
+            code, start=start, end=end, ktype=KLType.K_MON, autype=AuType.QFQ, max_count=1000
+        )
+    except Exception as e:
+        logger.warning(f"  -> {code} request_history_kline 异常: {e}")
+        return []
+    if ret != 0 or df is None or df.empty:
+        logger.warning(f"  -> {code} 月线数据不可用 (ret={ret})")
+        return []
+    closes = [float(v) for v in df['close'].tolist() if v is not None]
+    if len(closes) < 2:
+        return []
+    return [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes)) if closes[i-1]]
+
+
+def compute_beta_from_futu(stock_code: str, benchmark_code: Optional[str] = None,
+                            months: int = 60) -> Tuple[Optional[float], str]:
+    """通过 Futu `request_history_kline` 拉取 5Y monthly K 线, 计算个股 Beta。
+
+    Beta = cov(stock_return, mkt_return) / var(mkt_return)
+
+    Returns:
+        (beta, source): beta 为 None 时表示计算失败, 调用方应用兜底值
+    """
+    benchmark = benchmark_code or get_benchmark_for(stock_code)
+    logger.info(f"正在通过 FutuOpenD 计算 {stock_code} 5Y monthly Beta (基准: {benchmark})...")
+    ctx = None
+    try:
+        ctx = create_quote_context()
+        stock_r = _fetch_monthly_returns(ctx, stock_code, months)
+        mkt_r = _fetch_monthly_returns(ctx, benchmark, months)
+        n = min(len(stock_r), len(mkt_r))
+        if n < _BETA_MIN_SAMPLES:
+            logger.warning(f"  -> 样本不足 ({n} < {_BETA_MIN_SAMPLES}), 无法计算 Beta")
+            return None, f"Insufficient history ({n} months)"
+        stock_r = stock_r[-n:]
+        mkt_r = mkt_r[-n:]
+        mean_s = sum(stock_r) / n
+        mean_m = sum(mkt_r) / n
+        cov = sum((s - mean_s) * (m - mean_m) for s, m in zip(stock_r, mkt_r)) / n
+        var_m = sum((m - mean_m) ** 2 for m in mkt_r) / n
+        if var_m <= 0:
+            logger.warning(f"  -> 基准方差为 0, 无法计算 Beta")
+            return None, "Zero market variance"
+        beta = cov / var_m
+        logger.info(f"  -> 成功: Beta({stock_code} vs {benchmark}) = {beta:.4f}, n={n} months")
+        return beta, f"Futu {n}M monthly kline (vs {benchmark}), computed {date.today().isoformat()}"
+    except SystemExit:
+        logger.error("Beta 计算触发 SystemExit (Futu 未连接?)")
+        return None, "Futu API failure"
+    except Exception as e:
+        logger.exception(f"Beta 计算异常: {e}")
+        return None, f"Exception: {e}"
+    finally:
+        if ctx:
+            safe_close(ctx)
+            logger.info("FutuOpenD 连接已关闭 (Beta 计算)。")
+
 # ==================== Financial Data Extraction ====================
 def extract_financial_data(workspace: Path, ticker: str) -> dict:
     excels_path = workspace / "excels"
     inc_file = find_local_file(excels_path, ticker, "income")
     bs_file = find_local_file(excels_path, ticker, "balance")
     cf_file = find_local_file(excels_path, ticker, "cashflow")
-    inc_data = _read_excel_map(inc_file) if inc_file else {}
-    bs_data = _read_excel_map(bs_file) if bs_file else {}
-    cf_data = _read_excel_map(cf_file) if cf_file else {}
+    inc_result = _read_excel_map(inc_file) if inc_file else ({}, None)
+    bs_result = _read_excel_map(bs_file) if bs_file else ({}, None)
+    cf_result = _read_excel_map(cf_file) if cf_file else ({}, None)
+    inc_data, inc_ccy = inc_result
+    bs_data, bs_ccy = bs_result
+    cf_data, cf_ccy = cf_result
+
+    # 报表币种: 以 income 为准, 三张表应一致, 不一致时警告
+    reporting_currency = inc_ccy or bs_ccy or cf_ccy
+    detected_ccys = [c for c in (inc_ccy, bs_ccy, cf_ccy) if c]
+    if len(set(detected_ccys)) > 1:
+        logger.warning(f"财报三张表币种不一致: income={inc_ccy}, balance={bs_ccy}, cashflow={cf_ccy} — 以 income 为准")
 
     all_fy = set()
     for d in [inc_data, bs_data, cf_data]:
@@ -262,7 +518,24 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
     ebit_series   = _series(inc_data, ["营业利润"])
     tax_series    = _series(inc_data, ["所得税"])
     ebt_series    = _series(inc_data, ["税前利润"])
-    capex_series  = [abs(v) for v in _series(inc_data, ["资本开支(CapEx)", "资本开支"])]
+    # CapEx: 严格来自现金流量表明细字段, 避免使用 income sheet 里含"投资活动净额"兜底的加工指标
+    # (兜底口径会把长期股权投资/有价证券买卖计入, 显著高估 CapEx)
+    capex_series  = [abs(v) for v in _series(cf_data, ["资本开支(CapEx明细)"])]
+    if all(v == 0.0 for v in capex_series):
+        # 旧版 cashflow Excel 无严格口径行 -> 直接尝试原始明细字段名
+        # (若 futu-financial-report 已升级但用户尚未重新生成 cashflow Excel)
+        capex_series = [abs(v) for v in _series(cf_data, [
+            "购建固定资产及无形资产净额",                      # 美股 8046
+            "购建固定资产",                                    # 港股 5071 (需另加 5073, 但至少不含兜底)
+            "购建固定资产、无形资产和其他长期资产支付的现金",   # A 股 3043
+        ])]
+    if all(v == 0.0 for v in capex_series):
+        # 最终回退: 使用 income sheet 的 CapEx (含投资活动净额兜底口径, 可能高估)
+        logger.warning(
+            "cashflow Excel 无 CapEx 明细字段, 回退到 income Excel 的 CapEx "
+            "(该口径可能因投资活动净额兜底而高估 CapEx, 请重新生成 cashflow Excel 获得严格口径)"
+        )
+        capex_series = [abs(v) for v in _series(inc_data, ["资本开支(CapEx)", "资本开支"])]
     da_series     = _series(cf_data, ["折旧摊销及损耗"])
     if all(v == 0.0 for v in da_series):
         da_series = _series(inc_data, ["折旧摊销及损耗"])
@@ -291,10 +564,74 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
     capex = capex_series[-1]
     da = da_series[-1]
 
+    # 合理性检查: CapEx% 超过 20% 通常是数据口径问题 (兜底到投资活动净额)
+    capex_ratio_check = safe_divide(capex, revenue)
+    if capex_ratio_check > 0.20:
+        logger.warning(
+            f"CapEx% = {capex_ratio_check:.1%} 超过 20%, 可能是数据源含投资活动净额, "
+            f"请核对 cashflow Excel 中的「资本开支(CapEx明细)」行 (capex={capex:,.0f}, revenue={revenue:,.0f})"
+        )
+
     rev_growth = rev_growth_series[-1] if rev_growth_series[-1] is not None else 0.0
     tax_rate = tax_rate_series[-1] if tax_rate_series[-1] > 0 else 0.25
-    debt = gv(bs_data, ["短期借款与融资租赁负债", "短期借款"], latest_fy)
-    cash = gv(bs_data, ["-现金和现金等价物", "现金及现金等价物"], latest_fy)
+
+    # ---- Net Debt 构成 ----
+    # 债务 = 短期借款 (含融资租赁) + 长期借款 (含长期融资租赁)
+    # 现金 = 现金及等价物 + 短期投资 + 定期存款 (流动 + 非流动)
+    # 富途报表结构:
+    #   美股: 短期借款与融资租赁负债 / -现金和现金等价物 / -短期投资 (无独立长期借款字段)
+    #   港股: 银行贷款及透支 / 长期银行贷款 / 长期融资租赁负债 / 现金及等价物
+    #         定期存款-流动资产 (fid 5005) + 定期存款-非流动资产 (fid 5054)
+    #   A 股: 短期借款 / 长期借款 / 货币资金
+    # 使用 "首项命中" 的加和法, 避免重复计入 (如"-现金和现金等价物"与"现金及等价物"只取其一)
+    # 注: 受限制现金 (港股"已抵押存款" / 美股"受限制现金") 按投行惯例不计入 Net Cash
+    def _sum_first_match(data, groups, col):
+        """对 groups 中每组 keys, 只取首项命中的值, 汇总。避免同类字段重复相加。"""
+        total = 0.0
+        for keys in groups:
+            for k in keys:
+                if k in data and col in data[k]:
+                    v = data[k][col]
+                    if v:
+                        total += v
+                        break   # 该组已命中, 跳到下一组
+        return total
+
+    # ---- 定期存款: 需要同时累加流动 + 非流动两个字段, 单独处理 ----
+    def _sum_all_matches(data, keys, col):
+        """对 keys 里所有命中的字段累加 (用于同一"类"下有多个独立子项的场景)。"""
+        total = 0.0
+        for k in keys:
+            if k in data and col in data[k]:
+                v = data[k][col]
+                if v:
+                    total += v
+        return total
+
+    debt = _sum_first_match(bs_data, [
+        # 短期借款 (港股 / 美股 / A 股 命名差异)
+        ["短期借款与融资租赁负债", "-短期借款", "短期借款", "银行贷款及透支"],
+        # 长期借款
+        ["长期借款", "长期银行贷款"],
+        # 长期融资租赁 (港股常见, 美股已含在"短期借款与融资租赁负债")
+        ["长期融资租赁负债"],
+    ], latest_fy)
+
+    cash = _sum_first_match(bs_data, [
+        # 现金及等价物
+        ["-现金和现金等价物", "现金及现金等价物", "现金及等价物", "货币资金"],
+        # 短期投资 (港股 fid 5005 若 display_name='短期投资' 时命中此组)
+        ["-短期投资", "短期投资"],
+    ], latest_fy)
+    # 定期存款: 流动 + 非流动 独立累加 (港股常见,
+    # 若 fid 5005 显示为"定期存款-流动资产"未被上面的"短期投资组"命中, 会在此组累加)
+    cash += _sum_all_matches(bs_data, [
+        "定期存款-流动资产",
+        "定期存款-非流动资产",
+        "长期定期存款",
+        "短期存款",
+        "定期存款",
+    ], latest_fy)
 
     # ===== 从 FutuOpenD 实时获取股票价格和总股本 =====
     stock_code = normalize_stock_code(ticker)
@@ -311,6 +648,34 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
         market_data["shares_outstanding"] = 8922.51
         market_data["shares_source"] = "Default Fallback (API Failed)"
 
+    # ===== 币种一致性: 交易币种 vs 报表币种 =====
+    trading_currency = infer_trading_currency(stock_code)
+    if not reporting_currency:
+        # 财报 Excel 未在单位列写入可识别的币种字符串 (兜底"百万"), 用交易币种猜测
+        logger.warning(f"财报 Excel 未提供币种标识, 回退为按 stock_code 前缀推断: {trading_currency}")
+        reporting_currency = trading_currency
+    fx_rate, fx_source = fetch_fx_rate_from_futu(trading_currency, reporting_currency)
+    logger.info(f"币种: trading={trading_currency}, reporting={reporting_currency}, "
+                f"fx=1 {trading_currency} = {fx_rate:.4f} {reporting_currency}")
+
+    # ===== WACC 输入个股化: Beta / Rf / ERP =====
+    # Beta: Futu 5Y monthly 自算, 失败回退到常量
+    benchmark = get_benchmark_for(stock_code)
+    beta_calc, beta_source = compute_beta_from_futu(stock_code, benchmark)
+    if beta_calc is None:
+        logger.warning(f"Beta 计算失败, 使用兜底值 {_BETA_FALLBACK}")
+        beta_calc = _BETA_FALLBACK
+        beta_source = f"Fallback constant ({beta_source})"
+
+    # Rf / ERP: 按报表币种查常量表 (用户可在 Excel WACC Sheet 覆盖)
+    rf_erp = _RF_ERP_BY_CURRENCY.get(reporting_currency, _RF_ERP_DEFAULT)
+    rf_rate = rf_erp["rf"]
+    erp     = rf_erp["erp"]
+    rf_src  = rf_erp["rf_src"]
+    erp_src = rf_erp["erp_src"]
+    logger.info(f"WACC 输入: beta={beta_calc:.4f} ({benchmark}), "
+                f"Rf={rf_rate:.2%} ({rf_src}), ERP={erp:.2%} ({erp_src})")
+
     return {
         "ticker": ticker, "revenue": revenue, "ebit": ebit, "da": da,
         "capex": capex, "rev_growth": rev_growth, "tax_rate": tax_rate,
@@ -319,6 +684,19 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
         "stock_price": market_data["stock_price"],
         "shares_outstanding": market_data["shares_outstanding"],
         "shares_source": market_data["shares_source"],
+        # 币种 & FX
+        "reporting_currency": reporting_currency,
+        "trading_currency": trading_currency,
+        "fx_rate": fx_rate,               # 1 trading_ccy = fx_rate reporting_ccy
+        "fx_source": fx_source,
+        # WACC 输入 (个股化)
+        "beta": beta_calc,
+        "beta_source": beta_source,
+        "benchmark": benchmark,
+        "rf_rate": rf_rate,
+        "rf_source": rf_src,
+        "erp": erp,
+        "erp_source": erp_src,
         # 历史序列 (按 hist_fys 正序，最多 5 期)
         "hist_fys": hist_fys,
         "hist_revenue": revenue_series,
@@ -415,11 +793,11 @@ class DCFBuilder:
             },
         }
 
-        # WACC Sheet 默认输入
+        # WACC Sheet 默认输入 (来自个股化数据源, 均可在 Excel 中用户覆盖)
         self.wacc_inputs = {
-            "risk_free_rate": 0.043,
-            "beta":           1.20,
-            "erp":            0.055,
+            "risk_free_rate": d.get("rf_rate", 0.043),
+            "beta":           d.get("beta", _BETA_FALLBACK),
+            "erp":            d.get("erp", 0.055),
             "pre_tax_kd":     0.045,
         }
 
@@ -448,9 +826,13 @@ class DCFBuilder:
         n_hist = len(hist_fys)
 
         # --------- Section 1: Header (Row 1-2) ---------
+        rep_ccy = d.get("reporting_currency") or "N/A"
+        trd_ccy = d.get("trading_currency") or "N/A"
         c = ws.cell(1, 1, f"{d['ticker']} Corporation DCF Model / {d['ticker']} 贴现现金流估值模型")
         c.fill = FILL_DARK_BLUE; c.font = FONT_WHITE_BOLD
-        ws.cell(2, 1, f"Ticker: {d['ticker']}  |  Date: {date.today().isoformat()}  |  Year End: FY  |  Currency: Million (Local)")
+        ws.cell(2, 1,
+                f"Ticker: {d['ticker']}  |  Date: {date.today().isoformat()}  |  Year End: FY  |  "
+                f"Reporting Currency: Million {rep_ccy}  |  Trading Currency: {trd_ccy}")
 
         # --------- Section 2: Case Selector (Row 4-5) ---------
         ws.cell(4, 1, "Case Selector (1=Bear 悲观 / 2=Base 基准 / 3=Bull 乐观)")
@@ -461,32 +843,72 @@ class DCFBuilder:
         add_comment(c, "公式: =CHOOSE($B$4, \"Bear\", \"Base\", \"Bull\")\n根据 B4 情景编号显示情景名。")
 
         # 数据来源标注
-        c = ws.cell(6, 1, f"Data Source 数据来源: {d['shares_source']}"); c.font = FONT_GREEN
+        c = ws.cell(6, 1,
+                    f"Data Source 数据来源: {d['shares_source']}  |  "
+                    f"FX: {d.get('fx_source', 'N/A')}  |  "
+                    f"Beta: {d.get('beta_source', 'N/A')}")
+        c.font = FONT_GREEN
 
-        # --------- Section 3: Market Data (Row 8-12) ---------
+        # --------- Section 3: Market Data ---------
+        # 由于财报币种与股价币种可能不同 (ADR/H 股), 引入 FX Rate 把股价换算到报表币种,
+        # 保证 EV → Equity → Implied Price 与 Current Price 全部在报表币种下比对。
         c = ws.cell(8, 1, "MARKET DATA -- 市场数据 (非情景依赖)"); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
 
-        self._apply_input(ws.cell(9, 2), d["stock_price"], FMT_PRICE, "Futu get_market_snapshot", "last_price")
-        ws.cell(9, 1, "Current Stock Price -- 当前股价")
+        # Row 9: Trading Price (原始股价, 交易币种)
+        self._apply_input(ws.cell(9, 2), d["stock_price"], FMT_PRICE,
+                          "Futu get_market_snapshot", "last_price")
+        ws.cell(9, 1, f"Current Stock Price ({trd_ccy}) -- 当前股价(交易币种)")
 
-        self._apply_input(ws.cell(10, 2), d["shares_outstanding"], FMT_SHARES, "Futu get_market_snapshot", "issued_shares (÷1M)")
-        ws.cell(10, 1, "Diluted Shares Outstanding (M) -- 稀释后总股本(百万)")
+        # Row 10: FX Rate (1 trading_ccy = X reporting_ccy)
+        fx_lock = trd_ccy == rep_ccy
+        fx_cell = ws.cell(10, 2, d.get("fx_rate", 1.0))
+        fx_cell.font = FONT_BLUE if not fx_lock else FONT_BLACK
+        fx_cell.fill = FILL_INPUT_GREY
+        fx_cell.number_format = FMT_FX
+        fx_comment_text = (
+            f"FX 汇率: 1 {trd_ccy} = X {rep_ccy}\n"
+            f"来源: {d.get('fx_source', 'N/A')}\n"
+            f"日期: {date.today().isoformat()}\n"
+            f"用户可覆盖此单元格以使用实时/自定义汇率。"
+        )
+        if fx_lock:
+            fx_comment_text = (
+                f"交易币种 = 报表币种 = {trd_ccy}, 无需汇率换算 (锁定为 1.0)。\n" + fx_comment_text
+            )
+        add_comment(fx_cell, fx_comment_text)
+        ws.cell(10, 1, f"FX Rate: 1 {trd_ccy} = X {rep_ccy} -- 汇率")
 
-        ws.cell(11, 1, "Market Capitalization (M) -- 市值(百万)")
-        c = ws.cell(11, 2, "=B9*B10"); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M
-        add_comment(c, "计算公式:\n  Market Cap = 当前股价 × 稀释后总股本\n  = B9 × B10")
+        # Row 11: Reporting Stock Price = Trading Price × FX
+        ws.cell(11, 1, f"Current Stock Price ({rep_ccy}) -- 当前股价(报表币种)")
+        c = ws.cell(11, 2, "=B9*B10"); c.font = FONT_BLACK; c.number_format = FMT_PRICE
+        add_comment(c, f"计算公式:\n  Stock Price ({rep_ccy}) = Stock Price ({trd_ccy}) × FX Rate\n  = B9 × B10")
 
-        self._apply_input(ws.cell(12, 2), d["debt"] - d["cash"], FMT_CURRENCY_M, "富途「资产负债表」最新一年",
-                          "短期借款 + 长期借款 - 现金及等价物")
-        ws.cell(12, 1, "Net Debt / (Net Cash) (M) -- 净债务/(净现金)(百万)")
+        # Row 12: Shares Outstanding
+        self._apply_input(ws.cell(12, 2), d["shares_outstanding"], FMT_SHARES,
+                          "Futu get_market_snapshot", "issued_shares (÷1M)")
+        ws.cell(12, 1, "Diluted Shares Outstanding (M) -- 稀释后总股本(百万)")
 
-        # 关键行号索引 (供后续区块引用)
+        # Row 13: Market Cap (in reporting currency)
+        ws.cell(13, 1, f"Market Capitalization ({rep_ccy} M) -- 市值(报表币种,百万)")
+        c = ws.cell(13, 2, "=B11*B12"); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M
+        add_comment(c, f"计算公式:\n  Market Cap ({rep_ccy} M) = Stock Price ({rep_ccy}) × Shares\n  = B11 × B12")
+
+        # Row 14: Net Debt (already in reporting currency, from financial statements)
+        # Net Debt = 短期借款 + 长期借款 (含融资租赁) − 现金及等价物 (含短期投资/定期存款流动+非流动)
+        self._apply_input(ws.cell(14, 2), d["debt"] - d["cash"], FMT_CURRENCY_M,
+                          f"富途「资产负债表」最新一年 ({rep_ccy})",
+                          "短期借款 + 长期借款 − (现金及等价物 + 短期投资 + 定期存款(流动+非流动))")
+        ws.cell(14, 1, f"Net Debt / (Net Cash) ({rep_ccy} M) -- 净债务/(净现金)")
+
+        # 关键行号索引 (供后续区块引用) — 用命名字典让下游公式不必硬编码行号
         rows = {
             "case_selector": 4,
-            "stock_price": 9,
-            "shares": 10,
-            "market_cap": 11,
-            "net_debt": 12,
+            "stock_price_trading": 9,      # 交易币种股价 (Futu 原始)
+            "fx_rate": 10,                 # FX
+            "stock_price": 11,             # 报表币种股价 (用于 Upside 比对)
+            "shares": 12,
+            "market_cap": 13,
+            "net_debt": 14,
         }
 
         # --------- Section 4: 3 Scenario Blocks + Consolidation ---------
@@ -500,7 +922,7 @@ class DCFBuilder:
         hist_series_offset = n_hist - n_hist_capped           # 若历史多于 5 期, 只取最近 5 期
         latest_hist_col = get_column_letter(HIST_COLS[-1]) if HIST_COLS else "B"
 
-        row_ptr = 14
+        row_ptr = 16   # Net Debt 位于 Row 14, 留空一行开始三情景块
         scenario_rows = {}  # {scenario_name: {assumption_key: excel_row}}
 
         # 历史列可展示的假设 key (Terminal Growth / WACC / NWC% 无历史数据)
@@ -897,7 +1319,7 @@ class DCFBuilder:
 
         # Enterprise Value
         ev_row = row_ptr
-        ws.cell(ev_row, 1, "  Enterprise Value -- 企业价值 (=)").font = FONT_BOLD
+        ws.cell(ev_row, 1, f"  Enterprise Value ({rep_ccy} M) -- 企业价值 (=)").font = FONT_BOLD
         c = ws.cell(ev_row, 2, f"=B{pv_sum_row}+B{pv_tv_row}")
         c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = FMT_CURRENCY_M
         add_comment(c, f"计算公式:\n  EV = PV of Explicit FCFs + PV of Terminal Value\n  = B{pv_sum_row} + B{pv_tv_row}")
@@ -920,7 +1342,7 @@ class DCFBuilder:
 
         # Equity Value
         eq_row = row_ptr
-        ws.cell(eq_row, 1, "  Equity Value -- 股权价值 (=)").font = FONT_BOLD
+        ws.cell(eq_row, 1, f"  Equity Value ({rep_ccy} M) -- 股权价值 (=)").font = FONT_BOLD
         c = ws.cell(eq_row, 2, f"=B{ev_row}-B{nd_row}")
         c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = FMT_CURRENCY_M
         add_comment(c, f"计算公式:\n  Equity Value = EV - Net Debt\n  = B{ev_row} - B{nd_row}")
@@ -935,16 +1357,17 @@ class DCFBuilder:
 
         # Implied Price per Share
         implied_row = row_ptr
-        ws.cell(implied_row, 1, "  Implied Price per Share -- 每股内在价值 (=)").font = FONT_BOLD
+        ws.cell(implied_row, 1, f"  Implied Price per Share ({rep_ccy}) -- 每股内在价值 (=)").font = FONT_BOLD
         c = ws.cell(implied_row, 2, f"=B{eq_row}/B{shares_row}")
         c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = FMT_PRICE
         add_comment(c, f"计算公式:\n  Implied Price = Equity Value / Shares\n  = B{eq_row} / B{shares_row}")
         row_ptr += 1
 
-        # Current Price + Upside
+        # Current Price + Upside (使用报表币种口径以保证与 Implied Price 同币比对)
         cur_row = row_ptr
-        ws.cell(cur_row, 1, "Current Stock Price -- 当前股价")
+        ws.cell(cur_row, 1, f"Current Stock Price ({rep_ccy}) -- 当前股价(报表币种)")
         c = ws.cell(cur_row, 2, f"=B{rows['stock_price']}"); c.font = FONT_PURPLE; c.number_format = FMT_PRICE
+        add_comment(c, f"同 Sheet 引用: 报表币种下的当前股价 (Trading Price × FX)\n  = B{rows['stock_price']}")
         row_ptr += 1
 
         upside_row = row_ptr
@@ -1276,17 +1699,23 @@ class DCFBuilder:
         c = ws.cell(1, 1, "COST OF EQUITY (CAPM) -- 股权成本"); c.font = FONT_WHITE_BOLD; c.fill = FILL_DARK_BLUE
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=2)
 
+        rep_ccy = d.get("reporting_currency") or "N/A"
+        rf_source = d.get("rf_source", "10Y sovereign yield")
+        beta_source = d.get("beta_source", "5Y Monthly Beta")
+        erp_source = d.get("erp_source", "Damodaran ERP")
+        benchmark = d.get("benchmark", "N/A")
+
         self._apply_input(ws.cell(2, 2), self.wacc_inputs["risk_free_rate"], FMT_PERCENT,
-                          "US Treasury", "10Y Treasury Yield")
-        ws.cell(2, 1, "Risk-Free Rate (10Y Treasury) -- 无风险利率")
+                          f"{rf_source} ({rep_ccy})", "10Y 主权债券收益率")
+        ws.cell(2, 1, f"Risk-Free Rate ({rep_ccy} 10Y) -- 无风险利率")
 
         self._apply_input(ws.cell(3, 2), self.wacc_inputs["beta"], "0.00",
-                          "Bloomberg / Yahoo Finance", "5Y Monthly Beta")
-        ws.cell(3, 1, "Beta (5Y Monthly) -- 贝塔系数")
+                          beta_source, f"基准: {benchmark}")
+        ws.cell(3, 1, f"Beta (5Y Monthly, vs {benchmark}) -- 贝塔系数")
 
         self._apply_input(ws.cell(4, 2), self.wacc_inputs["erp"], FMT_PERCENT,
-                          "Damodaran ERP (annual)", "Equity Risk Premium")
-        ws.cell(4, 1, "Equity Risk Premium -- 股权风险溢价")
+                          f"{erp_source} ({rep_ccy})", "股权风险溢价 (国家/地区口径)")
+        ws.cell(4, 1, f"Equity Risk Premium ({rep_ccy} country) -- 股权风险溢价")
 
         c = ws.cell(5, 1, "Cost of Equity -- 股权成本")
         c = ws.cell(5, 2, "=B2+B3*B4"); c.font = FONT_BLACK; c.number_format = FMT_PERCENT
@@ -1313,12 +1742,12 @@ class DCFBuilder:
         ws.merge_cells(start_row=12, start_column=1, end_row=12, end_column=2)
 
         c = ws.cell(13, 1, "Market Capitalization (M) -- 市值")
-        c = ws.cell(13, 2, "=DCF!B11"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
-        add_comment(c, "跨 Sheet 引用:\n  = DCF!B11 (Market Cap)")
+        c = ws.cell(13, 2, "=DCF!B13"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
+        add_comment(c, "跨 Sheet 引用:\n  = DCF!B13 (Market Cap, 报表币种)")
 
         c = ws.cell(14, 1, "Net Debt / (Net Cash) (M) -- 净债务")
-        c = ws.cell(14, 2, "=DCF!B12"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
-        add_comment(c, "跨 Sheet 引用:\n  = DCF!B12 (Net Debt)")
+        c = ws.cell(14, 2, "=DCF!B14"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
+        add_comment(c, "跨 Sheet 引用:\n  = DCF!B14 (Net Debt, 报表币种)")
 
         c = ws.cell(15, 1, "Enterprise Capital (M) -- 企业资本")
         c = ws.cell(15, 2, "=B13+B14"); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M

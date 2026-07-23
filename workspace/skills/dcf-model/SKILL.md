@@ -14,6 +14,10 @@ description: 生成投行标准的 DCF (Discounted Cash Flow) Excel 估值模型
 
 **核心设计**: 用户在 `DCF!B4` 修改 Case Selector (1/2/3), CHOOSE 公式立即将所有下游计算切换到对应情景, 无需重跑脚本。
 
+**币种一致性**: 财报币种 (Reporting, 如 CNY) 与股价币种 (Trading, 如 USD) 常不同 (ADR/H 股场景),
+通过 `DCF!B10` 的 FX Rate (`1 Trading = X Reporting`) 把股价换算到报表币种下,
+Enterprise Value → Equity Value → Implied Price → Current Price 全部在 Reporting 币种下计算与对比, Upside% 才有意义。
+
 ## 运行方式
 
 ```bash
@@ -95,11 +99,32 @@ python scripts/build_dcf_model.py --ticker BABA --workspace /path/to/workspace
 | Revenue | `总收入` / `营业总收入` | 最近 5 期 |
 | EBIT | `营业利润` | |
 | D&A | `折旧摊销及损耗` (Cash Flow 优先, Income 备选) | |
-| CapEx | `资本开支(CapEx)` / `资本开支` | |
+| CapEx | 现金流量表加工行 `资本开支(CapEx明细)` (仅明细字段, 无投资活动净额兜底) | 美股 8046 / 港股 5071+5073 / A 股 3043; 缺失时回退到明细字段名, 再回退到 income 的兜底口径 (会告警) |
 | Tax Rate | `所得税 / 税前利润` | 亏损时用 25% |
-| Debt | `短期借款(含融资租赁负债)` | |
-| Cash | `-现金和现金等价物` / `现金及现金等价物` | |
+| Debt | 短期借款 (`短期借款与融资租赁负债` / `银行贷款及透支`) + 长期借款 (`长期借款` / `长期银行贷款` / `长期融资租赁负债`) | 港股/美股/A 股字段命名差异, 每类取首项命中 |
+| Cash | 现金及等价物 (`-现金和现金等价物` / `现金及等价物` / `货币资金`) + 短期投资 (`-短期投资` / `短期投资`) + 定期存款 (`定期存款-流动资产` + `定期存款-非流动资产` + `长期定期存款` + `短期存款` + `定期存款`, 全部累加) | 港股腾讯类公司常同时持有流动/非流动定期存款; 受限制现金 (港股"已抵押存款"/美股"受限制现金") **不**计入 |
 | Stock Price / Shares | `Futu get_market_snapshot` | 实时行情 |
+| Reporting Currency | 财报 Excel `col B` 单位字符串 (如"百万人民币"→CNY) | 反向映射 `_UNIT_NAME_TO_CURRENCY` |
+| Trading Currency | 从 stock_code 前缀推断 (`US.*→USD, HK.*→HKD, SH./SZ.*→CNY`) | Futu snapshot 无此字段 |
+| FX Rate | Futu FX snapshot (`HK.USDCNH` / `HK.USDHKD` / …) | 失败回退到 `_FX_FALLBACKS` 常量, 用户可在 `DCF!B10` 覆盖 |
+| Beta (5Y Monthly) | Futu `request_history_kline` 拉 60 个月月线, `cov(个股, 基准) / var(基准)` | 基准按交易场所选: US.SPY / HK.800000 恒生 / SH.000300 沪深 300; 失败回退 `_BETA_FALLBACK=1.20` |
+| Risk-Free Rate | 按报表币种查 `_RF_ERP_BY_CURRENCY` 常量表 | USD 4.3% / HKD 4.0% / CNY 2.5% / …; 用户可在 `WACC!B2` 覆盖 |
+| Equity Risk Premium | 按报表币种查 `_RF_ERP_BY_CURRENCY` (Damodaran country ERP) | USD 5.5% / HKD 6.0% / CNY 6.5% / …; 用户可在 `WACC!B4` 覆盖 |
+
+## Market Data 布局 (DCF Sheet 前 14 行)
+
+| Row | 内容 |
+|---|---|
+| 1-2 | Header (含 Reporting/Trading Currency 标注) |
+| 4-5 | Case Selector |
+| 6 | Data Source 标注 (含 FX 来源) |
+| 8 | MARKET DATA section header |
+| 9 | Current Stock Price ({Trading}) — Futu 原始价 |
+| 10 | **FX Rate: 1 {Trading} = X {Reporting}** — 蓝色输入, 用户可覆盖 |
+| 11 | Current Stock Price ({Reporting}) = B9 × B10 (下游 Upside 比对基准) |
+| 12 | Diluted Shares Outstanding (M) |
+| 13 | Market Cap ({Reporting} M) = B11 × B12 (WACC Sheet 引用此格) |
+| 14 | Net Debt / (Net Cash) ({Reporting} M) — 已在报表币种下 |
 
 ## 场景假设默认值
 
@@ -132,6 +157,15 @@ python scripts/build_dcf_model.py --ticker BABA --workspace /path/to/workspace
 
 **Q: BABA 生成的 Base 情景 Implied Price 为负?**
 A: 因为 BABA 最近一年 (2026FY) 的 EBIT Margin 骤降至 5.83% (2025FY 为 14.76%), CapEx 占营收 12.3%, 导致 FCF 深度为负。这是真实数据信号, 用户可切换 Bull 情景 (调整增长/毛利假设) 得到正的估值。
+
+**Q: BABA / PDD / JD 等 ADR 或港股 (HK.00700) 的 Upside% 数值离谱?**
+A: 检查 `DCF!B10` 的 FX Rate 是否合理。ADR (US.BABA) 报表币种是 CNY 而股价是 USD, FX Rate 应约 7.2 (1 USD = 7.2 CNY); 港股 (HK.00700) 报表也常是 CNY 而股价是 HKD, FX 应约 0.92。若脚本运行时 Futu FX 快照失败, 会使用 `_FX_FALLBACKS` 常量, 请手动覆盖为实时汇率。
+
+**Q: WACC Sheet 的 Beta / Rf / ERP 从哪里来?**
+A: 三个都是个股/地区差异化:
+- **Beta**: 用 Futu `request_history_kline` 拉 60 个月月线, `cov(个股月度收益, 大盘月度收益) / var(大盘月度收益)`。基准指数按交易场所选择: US → S&P 500 ETF (SPY), HK → 恒生指数 (HK.800000), A 股 → 沪深 300 (SH.000300)。若样本 < 24 个月或 Futu 不可用, 回退到默认 1.20。
+- **Rf**: 按**报表币种**查 `_RF_ERP_BY_CURRENCY` 常量表 (10Y 主权债券收益率); 例如 CNY→2.5%, USD→4.3%。用户可在 `WACC!B2` 手工覆盖为实时数值。
+- **ERP**: 同样按报表币种查 Damodaran country equity risk premium; CNY→6.5%, USD→5.5% 等。用户可在 `WACC!B4` 覆盖。
 
 **Q: WACC Sheet 的 We > 100%, Wd < 0?**
 A: 当公司持有 Net Cash (Net Debt 为负) 时, 债务权重为负是数学上正确的。此时 WACC = Cost of Equity × (1 + |Net Cash|/EV Cap) - Kd × Net Cash Portion, 略高于 Cost of Equity — 反映净现金公司的机会成本。

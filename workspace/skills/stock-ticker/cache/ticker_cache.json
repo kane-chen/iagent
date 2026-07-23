@@ -82,5 +82,26 @@
         "matchScore": 1.0
       }
     ]
+  },
+  "goog": {
+    "company": "GOOG",
+    "timestamp": 1784792254,
+    "timestampIso": "2026-07-23T07:37:34+00:00",
+    "results": [
+      {
+        "symbol": "GOOG",
+        "name": "谷歌-C",
+        "exchange": 105,
+        "exchangeName": "NASDAQ",
+        "marketRegion": null,
+        "securityType": "美股",
+        "companyType": null,
+        "annualReportType": null,
+        "quarterlyReportType": null,
+        "semiAnnualReportType": null,
+        "filingAuthority": null,
+        "matchScore": 1.0
+      }
+    ]
   }
 }

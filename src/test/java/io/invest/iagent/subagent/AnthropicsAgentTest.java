@@ -88,6 +88,38 @@ public class AnthropicsAgentTest {
         Assert.notNull(response, "question response");
     }
 
+    @Test
+    public void test_skill_direct_00700() {
+        String result = this.doExecute("00700", "2026Q1");
+        org.junit.jupiter.api.Assertions.assertNotNull(result);
+    }
+
+    @Test
+    public void test_skill_direct_google() {
+        String result = this.doExecute("GOOG", "2026Q2");
+        org.junit.jupiter.api.Assertions.assertNotNull(result);
+    }
+
+    private String doExecute( String companyName ,String fiscalPeriod){
+        String template = """
+                使用技能'earnings-analysis'分析下%s公司%s的财报，并输出分析报告。
+                # 特别提醒：
+                1、你会根据问题先做计划，然后依据计划执行。
+                2、严格禁止只输出计划但不实际执行。
+                3、严格禁止直行计划未完成，就中途返回结果。
+                4、使用中文作答。
+        
+                # 注意：
+                1、skill中有用到workspace输入参数的地方，使用绝对路径%s
+                2、skill中有用到python命令的时候请使用python3
+                3、skill的脚本根目录在%s
+                """;
+        String path = workspace.toAbsolutePath().toString() ;
+        String skillPath = workspace.resolve("skills").toAbsolutePath().toString() ;
+        String question = String.format(template, companyName, fiscalPeriod,path,skillPath) ;
+        return this.doCall(question );
+    }
+
     private String doCall(String question){
         Msg qaMsg = Msg.builder().role(MsgRole.USER)
                 .textContent(question).build();
