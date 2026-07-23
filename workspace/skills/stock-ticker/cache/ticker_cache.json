@@ -61,5 +61,26 @@
         "matchScore": 1.0
       }
     ]
+  },
+  "拼多多": {
+    "company": "拼多多",
+    "timestamp": 1784695691,
+    "timestampIso": "2026-07-22T04:48:11+00:00",
+    "results": [
+      {
+        "symbol": "PDD",
+        "name": "拼多多",
+        "exchange": 105,
+        "exchangeName": "NASDAQ",
+        "marketRegion": null,
+        "securityType": "美股",
+        "companyType": null,
+        "annualReportType": null,
+        "quarterlyReportType": null,
+        "semiAnnualReportType": null,
+        "filingAuthority": null,
+        "matchScore": 1.0
+      }
+    ]
   }
 }
