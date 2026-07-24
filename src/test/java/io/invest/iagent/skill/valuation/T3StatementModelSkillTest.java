@@ -26,17 +26,17 @@ public class T3StatementModelSkillTest {
 
     @Test
     public void test_skill_direct_00700() throws Exception {
-        int code = this.runSkill("HK.00700","0.20", 160);
+        int code = this.runSkill("00700", 160);
         Assertions.assertEquals(0,code);
     }
 
     @Test
     public void test_skill_direct_baba() throws Exception {
-        int code = this.runSkill("BABA","0.15", 120);
+        int code = this.runSkill("PDD", 120);
         Assertions.assertEquals(0,code);
     }
 
-    private int runSkill(String ticker,String growthRate, int timeoutSeconds) throws Exception {
+    private int runSkill(String ticker, int timeoutSeconds) throws Exception {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
         Path script = projectRoot.resolve("workspace/skills/3-statement-model/scripts/build_3_statement_model.py");
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
