@@ -32,7 +32,7 @@ public class T3StatementModelSkillTest {
 
     @Test
     public void test_skill_direct_baba() throws Exception {
-        int code = this.runSkill("PDD", 120);
+        int code = this.runSkill("BABA", 120);
         Assertions.assertEquals(0,code);
     }
 
