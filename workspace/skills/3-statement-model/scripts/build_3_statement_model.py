@@ -295,12 +295,38 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
         logger.warning(f"三张表币种不一致: inc={inc_ccy}, bs={bs_ccy}, cf={cf_ccy}")
 
     # 抽取所有 FY, 按时间倒序; 取最近 5 期正序
+    # 关键: 只保留 BS 有数据的 FY 年份, 避免历史列大面积零值
+    # (富途 API 对旧年度的 BS 覆盖常不足, 而 income/cashflow 可能覆盖更长历史)
+    def _has_bs_coverage(fy: str) -> bool:
+        """判定该 FY 是否有 BS 核心字段 (资产合计/负债合计/股东权益/现金 至少 2 项非零)"""
+        core_keys = [
+            "资产合计", "负债合计", "股东权益合计", "归属于母公司股东权益合计",
+            "-现金和现金等价物", "现金及现金等价物", "现金及等价物", "货币资金",
+        ]
+        hits = 0
+        for k in core_keys:
+            if k in bs_data and fy in bs_data[k]:
+                v = bs_data[k][fy]
+                if v and abs(v) > 0:
+                    hits += 1
+        return hits >= 2
+
     all_fy = set()
     for d in [inc_data, bs_data, cf_data]:
         for k, v in d.items(): all_fy.update([p for p in v.keys() if "FY" in p])
-    fy_cols = sorted(list(all_fy), reverse=True)
-    if not fy_cols:
+    fy_cols_all = sorted(list(all_fy), reverse=True)
+    if not fy_cols_all:
         raise RuntimeError(f"未找到 {ticker} 的历史财报数据, 请先运行 futu-financial-report")
+    # 过滤: 只保留 BS 有覆盖的 FY, 避免 BS/CF 表出现大面积 0 值
+    fy_cols_bs = [fy for fy in fy_cols_all if _has_bs_coverage(fy)]
+    if not fy_cols_bs:
+        logger.warning(f"{ticker}: BS 无任何 FY 覆盖, 回退到全部 income FY (BS 列可能大量 0)")
+        fy_cols_bs = fy_cols_all
+    n_bs = len(fy_cols_bs)
+    if n_bs < len(fy_cols_all):
+        logger.info(f"{ticker}: 全部 FY {len(fy_cols_all)} 期, BS 覆盖 {n_bs} 期; "
+                    f"限制历史列到 {min(n_bs, 5)} 期以避免空值")
+    fy_cols = fy_cols_bs
     hist_fys = list(reversed(fy_cols[:5]))
     prior_fy = fy_cols[5] if len(fy_cols) > 5 else None
 
@@ -348,20 +374,56 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
     finance_cost_series     = _series(inc_data, ["融资成本", "利息费用", "财务费用"])
     equity_affiliate_series = _series(inc_data, ["应占联营公司利润", "应占联营公司盈利", "应占联营及合营公司损益", "投资收益"])
 
-    # ---- CapEx 严格口径 ----
-    capex_series = [abs(v) for v in _series(cf_data, ["资本开支(CapEx明细)"])]
-    if all(v == 0.0 for v in capex_series):
-        capex_series = [abs(v) for v in _series(cf_data, [
-            "购建固定资产及无形资产净额", "购建固定资产",
-            "购建固定资产、无形资产和其他长期资产支付的现金",
-        ])]
-    if all(v == 0.0 for v in capex_series):
-        logger.warning("cashflow Excel 无 CapEx 明细字段, 回退到 income Excel")
-        capex_series = [abs(v) for v in _series(inc_data, ["资本开支(CapEx)", "资本开支"])]
+    def _series_first_nonzero(*sources):
+        """按候选源顺序, 每年取第一个非零值 (逐年 fallback)。
+        每个 source 是 (data_dict, keys_list) 二元组。"""
+        out = []
+        for fy in hist_fys:
+            v = 0.0
+            for data, keys in sources:
+                candidate = gv(data, keys, fy)
+                if candidate and abs(candidate) > 0:
+                    v = candidate
+                    break
+            out.append(v)
+        return out
 
-    da_series = _series(cf_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销"])
-    if all(v == 0.0 for v in da_series):
-        da_series = _series(inc_data, ["折旧摊销及损耗", "折旧与摊销"])
+    # ---- CapEx 逐年优先级 fallback (income 覆盖长, cashflow 明细更严格) ----
+    # 由于 CF 明细字段 (资本开支(CapEx明细)) 常只覆盖近 2-4 年,
+    # 而 income 的 "资本开支(CapEx)" 是 Futu 加工过的 TTM 值, 覆盖全部 FY,
+    # 优先用 income (取绝对值), 再用 CF 明细做兜底 (若某年 income 缺则用 CF)
+    capex_series = [abs(v) for v in _series_first_nonzero(
+        (inc_data, ["资本开支(CapEx)", "资本开支"]),
+        (cf_data,  ["资本开支(CapEx明细)"]),
+        (cf_data,  ["购建固定资产及无形资产净额", "购建固定资产",
+                     "购建固定资产、无形资产和其他长期资产支付的现金"]),
+        (cf_data,  ["固定资产交易净额"]),
+    )]
+    if all(v == 0.0 for v in capex_series):
+        logger.warning(f"{ticker}: 所有源均无 CapEx 数据 (income/cashflow 全空), CapEx 序列为 0")
+
+    # ---- D&A: 两个口径分开抽取 ----
+    # CF-side D&A (广口径): 现金流表"折旧摊销及损耗", 涵盖固定资产折旧 + 无形资产摊销 + 使用权资产
+    #   摊销 + 减值等所有非现金 D&A, 用于 CF OCF 加回 (NI + D&A + ΔWC = OCF)
+    # IS-side D&A (窄口径): 利润表"折旧摊销及损耗", 仅固定资产折旧 (计入营业成本/费用的部分),
+    #   用于 IS EBITDA 计算 (EBITDA = EBIT + IS-D&A), 保证与 EBIT 口径一致
+    # BABA 2026FY 示例: IS-D&A = 5,079, CF-D&A = 47,118 (差额 42,039 主要为无形资产摊销与
+    #   使用权资产摊销, 已计入 EBIT 但不在利润表单独列示的 fid 8011)
+    #
+    # 逐年 fallback: CF 缺失时用 IS 补位 (CF 明细字段常只覆盖近 2-4 年);
+    #                IS 缺失时用 CF 补位
+    da_series_cf = _series_first_nonzero(
+        (cf_data,  ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销"]),
+        (inc_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销", "-折旧及摊销"]),
+    )
+    da_series_is = _series_first_nonzero(
+        (inc_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销", "-折旧及摊销"]),
+        (cf_data,  ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销"]),
+    )
+    if all(v == 0.0 for v in da_series_cf) and all(v == 0.0 for v in da_series_is):
+        logger.warning(f"{ticker}: 所有源均无 D&A 数据, EBITDA 可能明显低估")
+    da_series = da_series_cf  # 默认导出 CF-side (保留原字段名, 供 D&A Schedule 使用)
+
 
     # ---- 资产负债表历史 (与 dcf-model 一致的 Cash / Debt 口径) ----
     cash_series = []
@@ -378,10 +440,27 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
     ar_series  = _series(bs_data, ["-应收账款净额", "应收账款净额", "应收账款", "应收款项"])
     ap_series  = _series(bs_data, ["应付账款", "-应付账款"])
     inv_series = _series(bs_data, ["存货", "-存货"])
-    ppe_series = _series(bs_data, ["固定资产净额", "物业厂房及设备", "固定资产"])
-    intangible_series = _series(bs_data, ["无形资产"])
+    # PPE: 兼容各市场命名; 港股腾讯类用 "物业厂房及设备"; 美股 8024 "固定资产净额"; A股 3026 "固定资产合计"
+    ppe_series = _series(bs_data, ["固定资产净额", "物业厂房及设备", "固定资产合计", "固定资产"])
+    # Intangible: 港股腾讯用 "土地使用权" (无独立"无形资产"字段);
+    # 美股/A股用 "无形资产"; 部分港股还有独立"商誉"字段
+    intangible_series = []
+    for fy in hist_fys:
+        v = _sum_first_match(bs_data, [
+            ["无形资产", "土地使用权"],
+            ["商誉"],
+        ], fy)
+        intangible_series.append(v)
     equity_series = _series(bs_data, ["归属于母公司股东权益合计", "股东权益合计"])
-    re_series    = _series(bs_data, ["留存收益", "未分配利润"])
+    # Retained Earnings: 港股腾讯类无独立"留存收益"字段, 用 归属母公司权益 - 股本溢价 近似
+    re_series = _series(bs_data, ["留存收益", "未分配利润"])
+    if all(v == 0.0 for v in re_series):
+        # 港股场景: 权益 - 股本溢价 ≈ 留存收益
+        re_series = []
+        for fy in hist_fys:
+            eq = gv(bs_data, ["归属于母公司股东权益合计", "股东权益合计"], fy)
+            cs = gv(bs_data, ["股本溢价", "股本", "实收资本", "普通股", "股本及资本公积"], fy)
+            re_series.append(max(0.0, eq - cs) if eq else 0.0)
     total_assets_series = _series(bs_data, ["资产合计"])
     total_liab_series   = _series(bs_data, ["负债合计"])
 
@@ -465,6 +544,7 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
         "hist_revenue": revenue_series, "hist_cogs": cogs_series, "hist_opex": opex_series,
         "hist_ebit": ebit_series, "hist_tax": tax_series, "hist_ebt": ebt_series,
         "hist_ni": ni_series, "hist_da": da_series, "hist_capex": capex_series,
+        "hist_da_is": da_series_is, "hist_da_cf": da_series_cf,
         "hist_cash": cash_series, "hist_ar": ar_series, "hist_ap": ap_series,
         "hist_inv": inv_series, "hist_ppe": ppe_series, "hist_intangible": intangible_series,
         "hist_equity": equity_series, "hist_re": re_series, "hist_debt": debt_series,
@@ -919,8 +999,12 @@ class ThreeStatementBuilder:
         r["capex"] = row; row += 1
 
         # ---- Depreciation & Amortization ----
-        ws.cell(row, 1, "(-) Depreciation & Amortization / 减: 折旧摊销"); ws.cell(row, 2, "M")
-        self._write_hist_input(ws, row, self.d["hist_da"], source="富途 CF", ref="折旧摊销及损耗")
+        # 采用 CF-side D&A (广口径): 涵盖固定资产折旧 + 无形资产摊销 + 使用权资产摊销 + 减值
+        # 用途: CF 加回 (NI + D&A + ΔWC = OCF) 与 PP&E 滚动折算
+        # IS "Less: D&A" 用 IS-side (窄口径, 仅固定资产折旧, 与 EBIT 口径一致)
+        ws.cell(row, 1, "(-) Depreciation & Amortization / 减: 折旧摊销 (CF 广口径, 含无形/使用权)"); ws.cell(row, 2, "M")
+        self._write_hist_input(ws, row, self.d["hist_da"],
+                                source="富途现金流表", ref="折旧摊销及损耗 (广口径, 含无形/使用权/减值)")
         for col in self.FCST_COLS:
             cL = get_column_letter(col)
             f = f"='Income Statement'!{cL}{is_layout['revenue']}*Assumptions!{cL}{assump['da_pct']}"
@@ -1135,15 +1219,31 @@ class ThreeStatementBuilder:
             cc.number_format = FMT_CURRENCY_M
         r["opex"] = row; row += 1
 
-        # ---- D&A (from D&A Schedule, 送 IS) ----
-        ws.cell(row, 1, "Less: D&A / 减: 折旧摊销"); ws.cell(row, 2, "M")
+        # ---- D&A ----
+        # 历史列: 直接引用 IS-side D&A (窄口径, 仅固定资产折旧), 与 EBIT 口径一致
+        #         保证 EBITDA = EBIT + |D&A_IS| 不重复扣除或高估
+        # 预测列: 从 D&A Schedule 拉取 (Schedule 用 CF-side 广口径滚动 PP&E)
+        # 注意: 历史 IS-D&A (5,079) 与 CF-D&A (47,118) 可能有较大差异
+        #       差额 = 无形资产摊销 + 使用权资产摊销 + 减值 等, 已包含在 EBIT 但富途利润表未单列
         da_row = self.rows["da"]["da"]
-        for col in self.HIST_COLS + self.FCST_COLS:
+        ws.cell(row, 1, "Less: D&A / 减: 折旧摊销 (IS 窄口径, 仅固定资产折旧)"); ws.cell(row, 2, "M")
+        for i, col in enumerate(self.HIST_COLS):
+            v_is = self.d["hist_da_is"][self.hist_offset + i]
+            v_cf = self.d["hist_da_cf"][self.hist_offset + i]
+            cc = ws.cell(row, col, -abs(v_is) if v_is else 0)
+            cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+            cc.number_format = FMT_CURRENCY_M
+            gap = abs(v_cf) - abs(v_is)
+            note = (f"IS-side D&A (富途利润表 '折旧摊销及损耗', 窄口径, 仅固定资产折旧). "
+                    f"CF-side D&A = {v_cf:.0f} (广口径, 含无形/使用权/减值). "
+                    f"差额 = {gap:.0f} 已包含在 EBIT 内但不单列; CF Statement 加回 D&A 用广口径")
+            add_source_comment(cc, "富途利润表", note)
+        for col in self.FCST_COLS:
             cL = get_column_letter(col)
             c = ws.cell(row, col, f"=-'D&A Schedule'!{cL}{da_row}")
             c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
-            if col in self.FCST_COLS: c.fill = FILL_FORECAST_GREEN
-            add_comment(c, f"跨表引用: -'D&A Schedule'!{cL}{da_row}")
+            c.fill = FILL_FORECAST_GREEN
+            add_comment(c, f"跨表引用: -'D&A Schedule'!{cL}{da_row} (预测期 IS-D&A 与 CF-D&A 假设一致)")
         r["da"] = row; row += 1
 
         # ---- EBIT ----
@@ -1183,98 +1283,136 @@ class ThreeStatementBuilder:
             cc = ws.cell(row, col, f); cc.font = FONT_BLACK_BOLD; cc.number_format = FMT_CURRENCY_M
         r["ebitda"] = row; row += 1
 
-        # ---- 分市场展示: Finance Income / Finance Cost / Equity in Affiliates / Other Income ----
-        # 港股: 独立展示 5035/5036/5037 明细; 美股/A股: 仅保留 Other Income plug (含所有非营业项)
+        # ---- 分市场展示: EBITDA → EBT 中间项 ----
+        # 港股 (HK): 独立展示 5035 融资收入 / 5036 融资成本 / 5037 应占联营公司利润 + Other Income 残差
+        # 美股/A股 (US/CN): 富途利润表无对应明细字段, 合并为单行"Non-Operating Items (Net)"
+        #   = hist_ebt - hist_ebit (含利息费用/投资净收益/汇兑等所有营业外净额)
+        #   预测列 = Revenue x Other Income % - Debt Schedule Interest (显式扣除利息)
         market_type = self.d.get("market_type", "us")
-        # (+) Finance Income (港股 5035 融资收入; 其他市场 0)
-        ws.cell(row, 1, "(+) Finance Income / 加: 融资收入"); ws.cell(row, 2, "M")
-        for i, col in enumerate(self.HIST_COLS):
-            v = self.d["hist_finance_income"][self.hist_offset + i]
-            cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
-            cc.number_format = FMT_CURRENCY_M
-            if market_type == "hk":
+
+        if market_type == "hk":
+            # ---- 港股: 4 行明细展示 ----
+            # (+) Finance Income (港股 5035 融资收入)
+            ws.cell(row, 1, "(+) Finance Income / 加: 融资收入"); ws.cell(row, 2, "M")
+            for i, col in enumerate(self.HIST_COLS):
+                v = self.d["hist_finance_income"][self.hist_offset + i]
+                cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+                cc.number_format = FMT_CURRENCY_M
                 add_source_comment(cc, "富途利润表", "融资收入 (港股 fid 5035)")
-            else:
-                add_source_comment(cc, "N/A", f"{market_type.upper()} market: no separate finance income (rolled into Other Income)")
-        for col in self.FCST_COLS:
-            prev_cL = get_column_letter(col - 1)
-            cc = ws.cell(row, col, f"={prev_cL}{row}"); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
-            cc.number_format = FMT_CURRENCY_M
-        r["fin_income"] = row; row += 1
+            for col in self.FCST_COLS:
+                prev_cL = get_column_letter(col - 1)
+                cc = ws.cell(row, col, f"={prev_cL}{row}"); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
+                cc.number_format = FMT_CURRENCY_M
+            r["fin_income"] = row; row += 1
 
-        # (-) Finance Cost / Interest Expense
-        # 港股: 历史 = 5036 融资成本, 预测 = Debt Schedule Interest
-        # 其他市场: 历史 blank/0, 预测 = Debt Schedule Interest
-        ws.cell(row, 1, "(-) Finance Cost / Interest Expense / 减: 融资成本 / 利息费用"); ws.cell(row, 2, "M")
-        for i, col in enumerate(self.HIST_COLS):
-            v = self.d["hist_finance_cost"][self.hist_offset + i]
-            cc = ws.cell(row, col, -abs(v) if v else 0); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
-            cc.number_format = FMT_CURRENCY_M
-            if market_type == "hk":
+            # (-) Finance Cost / Interest Expense (港股 5036 融资成本)
+            ws.cell(row, 1, "(-) Finance Cost / Interest Expense / 减: 融资成本 / 利息费用"); ws.cell(row, 2, "M")
+            for i, col in enumerate(self.HIST_COLS):
+                v = self.d["hist_finance_cost"][self.hist_offset + i]
+                cc = ws.cell(row, col, -abs(v) if v else 0); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+                cc.number_format = FMT_CURRENCY_M
                 add_source_comment(cc, "富途利润表", "融资成本 (港股 fid 5036)")
-            else:
-                add_source_comment(cc, "N/A", f"{market_type.upper()} market: no separate finance cost (rolled into Other Income)")
-        for col in self.FCST_COLS:
-            cL = get_column_letter(col)
-            c = ws.cell(row, col, f"=-'Debt Schedule'!{cL}{debt['interest']}")
-            c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
-            c.fill = FILL_FORECAST_GREEN
-            add_comment(c, "预测 Interest 从 Debt Schedule (Beg x Rate)")
-        r["interest"] = row; row += 1
+            for col in self.FCST_COLS:
+                cL = get_column_letter(col)
+                c = ws.cell(row, col, f"=-'Debt Schedule'!{cL}{debt['interest']}")
+                c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
+                c.fill = FILL_FORECAST_GREEN
+                add_comment(c, "预测 Interest 从 Debt Schedule (Beg x Rate)")
+            r["interest"] = row; row += 1
 
-        # (+) Equity in Affiliates (港股 5037; 其他市场 0)
-        ws.cell(row, 1, "(+) Equity in Affiliates / 加: 应占联营公司利润"); ws.cell(row, 2, "M")
-        for i, col in enumerate(self.HIST_COLS):
-            v = self.d["hist_equity_affiliate"][self.hist_offset + i]
-            cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
-            cc.number_format = FMT_CURRENCY_M
-            if market_type == "hk":
+            # (+) Equity in Affiliates (港股 5037 应占联营公司利润)
+            ws.cell(row, 1, "(+) Equity in Affiliates / 加: 应占联营公司利润"); ws.cell(row, 2, "M")
+            for i, col in enumerate(self.HIST_COLS):
+                v = self.d["hist_equity_affiliate"][self.hist_offset + i]
+                cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+                cc.number_format = FMT_CURRENCY_M
                 add_source_comment(cc, "富途利润表", "应占联营公司利润 (港股 fid 5037)")
-            else:
-                add_source_comment(cc, "N/A", f"{market_type.upper()} market: no separate affiliate income (rolled into Other Income)")
-        for col in self.FCST_COLS:
-            prev_cL = get_column_letter(col - 1)
-            cc = ws.cell(row, col, f"={prev_cL}{row}"); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
-            cc.number_format = FMT_CURRENCY_M
-        r["eq_aff"] = row; row += 1
+            for col in self.FCST_COLS:
+                prev_cL = get_column_letter(col - 1)
+                cc = ws.cell(row, col, f"={prev_cL}{row}"); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
+                cc.number_format = FMT_CURRENCY_M
+            r["eq_aff"] = row; row += 1
 
-        # (+) Other Income / (Loss) — plug 项
-        # 港股: hist_ebt − hist_ebit − Fin Inc + Fin Cost − Eq Aff (剩余非明细项, 通常小额)
-        # 美股/A股: hist_ebt − hist_ebit (吞并所有非营业项, 含 Interest 与 Investment Income)
-        ws.cell(row, 1, "(+) Other Income / (Loss) / 加: 其他非营业净收益"); ws.cell(row, 2, "M")
-        for i, col in enumerate(self.HIST_COLS):
-            v = self.d["hist_other_income"][self.hist_offset + i]
-            cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
-            cc.number_format = FMT_CURRENCY_M
-            if market_type == "hk":
+            # (+) Other Income / (Loss) — 明细外的残差
+            ws.cell(row, 1, "(+) Other Income / (Loss) / 加: 其他非营业净收益"); ws.cell(row, 2, "M")
+            for i, col in enumerate(self.HIST_COLS):
+                v = self.d["hist_other_income"][self.hist_offset + i]
+                cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+                cc.number_format = FMT_CURRENCY_M
                 add_source_comment(cc, "Plug", "hist EBT - EBIT - FinInc + FinCost - EqAff (余量)")
-            else:
-                add_source_comment(cc, "Plug", "hist EBT - EBIT (含 Interest / Investment Income / 汇兑等)")
-        for col in self.FCST_COLS:
-            cL = get_column_letter(col)
-            f = f"={cL}{r['revenue']}*Assumptions!{cL}{assump['other_income_pct']}"
-            cc = ws.cell(row, col, f); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
-            cc.number_format = FMT_CURRENCY_M
-            add_comment(cc, "Other Income = Revenue x Other Income % (from Assumptions)")
-        r["other_income"] = row; row += 1
+            for col in self.FCST_COLS:
+                cL = get_column_letter(col)
+                f = f"={cL}{r['revenue']}*Assumptions!{cL}{assump['other_income_pct']}"
+                cc = ws.cell(row, col, f); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
+                cc.number_format = FMT_CURRENCY_M
+                add_comment(cc, "Other Income = Revenue x Other Income % (from Assumptions)")
+            r["other_income"] = row; row += 1
 
-        # ---- EBT (= EBIT + Fin Inc + Fin Cost + Eq Aff + Other Income; Fin Cost 已带负号) ----
-        c = ws.cell(row, 1, "EBT / 税前利润"); c.font = FONT_BOLD
-        ws.cell(row, 2, "M")
-        for col in self.HIST_COLS + self.FCST_COLS:
-            cL = get_column_letter(col)
-            f = f"={cL}{r['ebit']}+{cL}{r['fin_income']}+{cL}{r['interest']}+{cL}{r['eq_aff']}+{cL}{r['other_income']}"
-            cc = ws.cell(row, col, f); cc.font = FONT_BLACK_BOLD; cc.number_format = FMT_CURRENCY_M
-            add_comment(cc, "EBT = EBIT + Finance Income - Finance Cost + Equity Affiliates + Other Income")
-        r["ebt"] = row; row += 1
+            # ---- EBT (港股: EBIT + Fin Inc - Fin Cost + Eq Aff + Other Income) ----
+            c = ws.cell(row, 1, "EBT / 税前利润"); c.font = FONT_BOLD
+            ws.cell(row, 2, "M")
+            for col in self.HIST_COLS + self.FCST_COLS:
+                cL = get_column_letter(col)
+                f = (f"={cL}{r['ebit']}+{cL}{r['fin_income']}+{cL}{r['interest']}"
+                     f"+{cL}{r['eq_aff']}+{cL}{r['other_income']}")
+                cc = ws.cell(row, col, f); cc.font = FONT_BLACK_BOLD; cc.number_format = FMT_CURRENCY_M
+                add_comment(cc, "EBT = EBIT + Finance Income - Finance Cost + Equity Affiliates + Other Income")
+            r["ebt"] = row; row += 1
+        else:
+            # ---- 美股/A股: 合并单行 "Non-Operating Items (Net)" ----
+            # 富途 US/CN 利润表在 EBIT 与 EBT 之间无明细拆分 (利息费用/投资净收益/汇兑损益等
+            # 全部收纳入"营业外收支净额"或直接从"营业利润→税前利润"跳跃), 故本模型:
+            #   历史列 = hist_ebt - hist_ebit (即 hist_other_income, 直接读为 plug)
+            #   预测列 = Revenue x Other Income % - Debt Schedule Interest
+            #     (显式扣除新增有息负债的利息费用, 保证 Debt Schedule 与 IS 联动)
+            ws.cell(row, 1, "(+/-) Non-Operating Items (Net) / 营业外净收支 (含利息/投资收益/汇兑等)")
+            ws.cell(row, 2, "M")
+            for i, col in enumerate(self.HIST_COLS):
+                v = self.d["hist_other_income"][self.hist_offset + i]
+                cc = ws.cell(row, col, v); cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+                cc.number_format = FMT_CURRENCY_M
+                add_source_comment(cc, "富途利润表 (合并口径)",
+                                   f"hist EBT - EBIT = {v:.0f} "
+                                   f"(涵盖 利息费用 / 投资净收益 / 汇兑 / 公允价值变动 等全部非营业项; "
+                                   f"{market_type.upper()} 利润表无独立子项字段, 故合并为单行展示)")
+            for col in self.FCST_COLS:
+                cL = get_column_letter(col)
+                f = (f"={cL}{r['revenue']}*Assumptions!{cL}{assump['other_income_pct']}"
+                     f"-'Debt Schedule'!{cL}{debt['interest']}")
+                cc = ws.cell(row, col, f); cc.font = FONT_BLACK; cc.fill = FILL_FORECAST_GREEN
+                cc.number_format = FMT_CURRENCY_M
+                add_comment(cc, "预测: Revenue x Other Income % (from Assumptions) - Debt Schedule Interest")
+            # 为下游 EBT 公式统一, 把这一行同时登记为 fin_income / interest / eq_aff / other_income
+            # (4 个 key 都指向本行, EBT 公式聚合时相当于只加一次)
+            r["non_op"] = row
+            row += 1
+
+            # ---- EBT (美股/A股: 直接 = EBIT + Non-Operating Items) ----
+            c = ws.cell(row, 1, "EBT / 税前利润"); c.font = FONT_BOLD
+            ws.cell(row, 2, "M")
+            for col in self.HIST_COLS + self.FCST_COLS:
+                cL = get_column_letter(col)
+                f = f"={cL}{r['ebit']}+{cL}{r['non_op']}"
+                cc = ws.cell(row, col, f); cc.font = FONT_BLACK_BOLD; cc.number_format = FMT_CURRENCY_M
+                add_comment(cc, "EBT = EBIT + Non-Operating Items (Net)")
+            r["ebt"] = row; row += 1
+
 
         # ---- Taxes ----
+        # 历史列: 直接引用富途"所得税" (蓝色输入, 负号展示), 与富途原始数据一致
+        # 预测列: 公式 = -MAX(0, EBT) x Assumptions!Tax Rate (亏损时不计税)
         ws.cell(row, 1, "Less: Taxes / 减: 所得税 (亏损不缴)"); ws.cell(row, 2, "M")
-        for col in self.HIST_COLS + self.FCST_COLS:
+        for i, col in enumerate(self.HIST_COLS):
+            v = self.d["hist_tax"][self.hist_offset + i]
+            cc = ws.cell(row, col, -abs(v) if v else 0)
+            cc.font = FONT_BLUE; cc.fill = FILL_INPUT_GREY
+            cc.number_format = FMT_CURRENCY_M
+            add_source_comment(cc, "富途利润表", "所得税 (以负数展示)")
+        for col in self.FCST_COLS:
             cL = get_column_letter(col)
             f = f"=-MAX(0,{cL}{r['ebt']})*Assumptions!{cL}{assump['tax_rate']}"
             c = ws.cell(row, col, f); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M
-            if col in self.FCST_COLS: c.fill = FILL_FORECAST_GREEN
+            c.fill = FILL_FORECAST_GREEN
             add_comment(c, "Tax = -MAX(0, EBT) x Tax Rate")
         r["tax"] = row; row += 1
 

@@ -124,7 +124,8 @@ python scripts/build_dcf_model.py --ticker BABA --workspace /path/to/workspace
 | 11 | Current Stock Price ({Reporting}) = B9 × B10 (下游 Upside 比对基准) |
 | 12 | Diluted Shares Outstanding (M) |
 | 13 | Market Cap ({Reporting} M) = B11 × B12 (WACC Sheet 引用此格) |
-| 14 | Net Debt / (Net Cash) ({Reporting} M) — 已在报表币种下 |
+| 14 | Net Debt / (Net Cash) ({Reporting} M) — 已在报表币种下, 用于 EV → Equity Value bridge |
+| 15 | Total Gross Debt ({Reporting} M) — 短期借款 + 长期借款 (不减现金), 用于 WACC 权重计算 |
 
 ## 场景假设默认值
 
@@ -168,7 +169,13 @@ A: 三个都是个股/地区差异化:
 - **ERP**: 同样按报表币种查 Damodaran country equity risk premium; CNY→6.5%, USD→5.5% 等。用户可在 `WACC!B4` 覆盖。
 
 **Q: WACC Sheet 的 We > 100%, Wd < 0?**
-A: 当公司持有 Net Cash (Net Debt 为负) 时, 债务权重为负是数学上正确的。此时 WACC = Cost of Equity × (1 + |Net Cash|/EV Cap) - Kd × Net Cash Portion, 略高于 Cost of Equity — 反映净现金公司的机会成本。
+A: 已修复 — 现使用 **Gross Debt (不减现金)** 计算 WACC 权重, 保证 `Wd ∈ [0, 67%]`, `We ∈ [33%, 100%]`:
+- `WACC!B14` = `DCF!B15` (Gross Debt = 短期借款 + 长期借款, 不含现金抵减)
+- `WACC!B15` (Enterprise Capital) = `MAX(Market Cap + Gross Debt, Market Cap × 0.5)` — 下限保护避免极端情景分母坍缩
+- `WACC!B18` (WACC) = `IF(Gross Debt ≤ 0.1% × Market Cap, Ke, We×Ke + Wd×Kd)` — 无债公司自动退化为 unlevered Cost of Equity, 避免负 WACC / WACC 爆炸
+- Net Debt 仍保留在 `DCF!B14` (以及 `WACC!B19` 显示行), **仅用于 EV → Equity Value bridge** (Valuation Summary 中作为减项), 不参与 WACC 权重计算
+
+这样在净现金公司 (BABA / 腾讯 / 苹果类, Cash ≈ Market Cap) 场景下, WACC 不再出现失真甚至负值, DCF 估值保持可用。
 
 **Q: 敏感性表 Table 2 (Growth×Margin) 中心格与主模型完全一致吗?**
 A: 是的 — 用 `formulas` 库验证 (E109 = B92 = $-77.62)。Table 2 仅让 FY1 的 Growth/Margin 变化, FY2-FY5 保持 base FCF, 所以中心格 (Growth=base, Margin=base) 精确等于主模型。

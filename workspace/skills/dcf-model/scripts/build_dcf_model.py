@@ -895,10 +895,18 @@ class DCFBuilder:
 
         # Row 14: Net Debt (already in reporting currency, from financial statements)
         # Net Debt = 短期借款 + 长期借款 (含融资租赁) − 现金及等价物 (含短期投资/定期存款流动+非流动)
+        # 用途: EV → Equity Value bridge (在 Valuation Summary 中作为减项)
         self._apply_input(ws.cell(14, 2), d["debt"] - d["cash"], FMT_CURRENCY_M,
                           f"富途「资产负债表」最新一年 ({rep_ccy})",
                           "短期借款 + 长期借款 − (现金及等价物 + 短期投资 + 定期存款(流动+非流动))")
         ws.cell(14, 1, f"Net Debt / (Net Cash) ({rep_ccy} M) -- 净债务/(净现金)")
+
+        # Row 15: Total Gross Debt (Short-Term + Long-Term Debt, 不减现金)
+        # 用途: WACC 权重计算 (避免净现金公司产生负 Wd / We > 100%)
+        self._apply_input(ws.cell(15, 2), d["debt"], FMT_CURRENCY_M,
+                          f"富途「资产负债表」最新一年 ({rep_ccy})",
+                          "短期借款 + 长期借款 (含融资租赁, 不减现金) — WACC 权重专用")
+        ws.cell(15, 1, f"Total Gross Debt ({rep_ccy} M) -- 债务总额 (WACC 权重用)")
 
         # 关键行号索引 (供后续区块引用) — 用命名字典让下游公式不必硬编码行号
         rows = {
@@ -908,7 +916,8 @@ class DCFBuilder:
             "stock_price": 11,             # 报表币种股价 (用于 Upside 比对)
             "shares": 12,
             "market_cap": 13,
-            "net_debt": 14,
+            "net_debt": 14,                # EV → Equity bridge 用
+            "gross_debt": 15,              # WACC 权重用
         }
 
         # --------- Section 4: 3 Scenario Blocks + Consolidation ---------
@@ -922,7 +931,7 @@ class DCFBuilder:
         hist_series_offset = n_hist - n_hist_capped           # 若历史多于 5 期, 只取最近 5 期
         latest_hist_col = get_column_letter(HIST_COLS[-1]) if HIST_COLS else "B"
 
-        row_ptr = 16   # Net Debt 位于 Row 14, 留空一行开始三情景块
+        row_ptr = 17   # Net Debt 位于 Row 14, Gross Debt 位于 Row 15, 留空一行开始三情景块
         scenario_rows = {}  # {scenario_name: {assumption_key: excel_row}}
 
         # 历史列可展示的假设 key (Terminal Growth / WACC / NWC% 无历史数据)
@@ -1745,27 +1754,50 @@ class DCFBuilder:
         c = ws.cell(13, 2, "=DCF!B13"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
         add_comment(c, "跨 Sheet 引用:\n  = DCF!B13 (Market Cap, 报表币种)")
 
-        c = ws.cell(14, 1, "Net Debt / (Net Cash) (M) -- 净债务")
-        c = ws.cell(14, 2, "=DCF!B14"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
-        add_comment(c, "跨 Sheet 引用:\n  = DCF!B14 (Net Debt, 报表币种)")
+        # 用 Gross Debt (不减现金) 计算权重, 避免净现金公司产生负 Wd
+        c = ws.cell(14, 1, "Total Gross Debt (M) -- 债务总额 (含现金前)")
+        c = ws.cell(14, 2, "=DCF!B15"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
+        add_comment(c, "跨 Sheet 引用:\n  = DCF!B15 (Gross Debt = 短期借款 + 长期借款, 不减现金)\n\n"
+                       "为什么用 Gross Debt 而非 Net Debt?\n"
+                       "净现金公司 (BABA 类) Net Debt < 0 会导致 Wd < 0 / We > 100%, WACC 数值失真甚至变负。\n"
+                       "标准做法: 用 Gross Debt 保证 Wd ∈ [0, 100%], Net Cash 单独在 EV → Equity 桥梁中扣除。")
 
-        c = ws.cell(15, 1, "Enterprise Capital (M) -- 企业资本")
-        c = ws.cell(15, 2, "=B13+B14"); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M
-        add_comment(c, "计算公式:\n  Enterprise Capital = Market Cap + Net Debt\n  = B13 + B14")
+        # Enterprise Capital 加保护: MAX(Mkt Cap + Gross Debt, Mkt Cap × 0.5)
+        # 下限 Mkt Cap × 0.5 避免极端情况分母坍缩 (实操中 Wd 不会 > 67%)
+        c = ws.cell(15, 1, "Enterprise Capital (M) -- 企业资本 (含下限保护)")
+        c = ws.cell(15, 2, "=MAX(B13+B14, B13*0.5)"); c.font = FONT_BLACK; c.number_format = FMT_CURRENCY_M
+        add_comment(c, "计算公式:\n  Enterprise Capital = MAX(Market Cap + Gross Debt, Market Cap × 0.5)\n"
+                       "\n下限保护: 极端情景避免 Wd > 67% 导致 WACC 发散")
 
         c = ws.cell(16, 1, "Equity Weight (We) -- 股权权重")
         c = ws.cell(16, 2, "=B13/B15"); c.font = FONT_BLACK; c.number_format = FMT_PERCENT
-        add_comment(c, "计算公式:\n  We = Market Cap / Enterprise Capital\n  = B13 / B15")
+        add_comment(c, "计算公式:\n  We = Market Cap / Enterprise Capital\n  = B13 / B15\n\n"
+                       "范围: [33%, 100%] (受 B15 下限保护)")
 
         c = ws.cell(17, 1, "Debt Weight (Wd) -- 债务权重")
         c = ws.cell(17, 2, "=B14/B15"); c.font = FONT_BLACK; c.number_format = FMT_PERCENT
-        add_comment(c, "计算公式:\n  Wd = Net Debt / Enterprise Capital\n  = B14 / B15")
+        add_comment(c, "计算公式:\n  Wd = Gross Debt / Enterprise Capital\n  = B14 / B15\n\n"
+                       "范围: [0, 67%] (使用 Gross Debt, 保证 ≥ 0)")
 
-        # WACC
+        # WACC: 无债公司自动退化为 Ke (unlevered), 有债公司用标准 We×Ke + Wd×Kd 公式
         c = ws.cell(18, 1, "WACC -- 加权平均资本成本"); c.font = FONT_BOLD
-        c = ws.cell(18, 2, "=B16*B5+B17*B10"); c.font = FONT_BLACK_BOLD; c.fill = FILL_VALUATION_ORANGE_DARK
+        c = ws.cell(18, 2, "=IF(B14<=0.001*B13, B5, B16*B5+B17*B10)")
+        c.font = FONT_BLACK_BOLD; c.fill = FILL_VALUATION_ORANGE_DARK
         c.number_format = FMT_PERCENT
-        add_comment(c, "计算公式:\n  WACC = We × Ke + Wd × Kd(after-tax)\n  = B16 × B5 + B17 × B10")
+        add_comment(c, "计算公式:\n"
+                       "  若 Gross Debt ≤ 0.1% × Market Cap (视为无债):\n"
+                       "    WACC = Cost of Equity (Ke, unlevered case)\n"
+                       "  否则:\n"
+                       "    WACC = We × Ke + Wd × Kd(after-tax)\n"
+                       "    = B16 × B5 + B17 × B10\n\n"
+                       "净现金公司通常走 unlevered 分支, WACC ≈ Ke, 符合"
+                       "'无杠杆则 WACC = 股权成本' 的金融学原则")
+
+        # (可选) Net Debt / (Net Cash) 显示行, 供用户查阅 EV→Equity bridge 用值
+        c = ws.cell(19, 1, "Net Debt / (Net Cash) (M) -- 净债务 (仅显示, EV→Equity 用)")
+        c = ws.cell(19, 2, "=DCF!B14"); c.font = FONT_GREEN; c.number_format = FMT_CURRENCY_M
+        add_comment(c, "跨 Sheet 引用:\n  = DCF!B14 (Net Debt / Net Cash)\n\n"
+                       "此行仅显示, 不参与 WACC 计算。\nNet Debt 在 EV → Equity Value bridge 中扣除 (DCF!Valuation Summary)。")
 
         ws.column_dimensions["A"].width = 46
         ws.column_dimensions["B"].width = 16

@@ -167,11 +167,19 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
     ebit = gv(inc_data, ["营业利润"], latest_fy)
     tax = gv(inc_data, ["所得税"], latest_fy)
     ebt = gv(inc_data, ["税前利润"], latest_fy)
+    # CapEx: 优先从 income "资本开支(CapEx)" 拉取 (LTM 加工口径, 与 EBITDA/Revenue 对齐);
+    #        缺失时回退到 cashflow (可能是 fiscal-year 快照, 与 LTM 不一致)
     capex = abs(gv(inc_data, ["资本开支(CapEx)", "资本开支"], latest_fy))
     if capex == 0.0:
-        capex = abs(gv(cf_data, ["资本开支(CapEx)", "资本开支", "购建固定资产、无形资产和其他长期资产支付的现金"], latest_fy))
-    da = gv(cf_data, ["折旧摊销及损耗"], latest_fy)
-    if da == 0.0: da = gv(inc_data, ["折旧摊销及损耗"], latest_fy)
+        capex = abs(gv(cf_data, [
+            "资本开支(CapEx明细)", "资本开支(CapEx)", "资本开支",
+            "固定资产交易净额", "购建固定资产、无形资产和其他长期资产支付的现金",
+        ], latest_fy))
+    # D&A 字段名跨市场兼容: 美股 5059 -> "折旧摊销及损耗"; A股 3002 -> "折旧与摊销"; 港股 5059 -> "折旧及摊销"
+    da = gv(cf_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销"], latest_fy)
+    if da == 0.0:
+        # 回退到利润表 (部分公司在 IS 而非 CF 列示)
+        da = gv(inc_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销", "-折旧及摊销"], latest_fy)
 
     # EBITDA = EBIT + D&A, 若 D&A 缺失则以 CapEx 的 70% 估算
     if da == 0.0 and capex > 0:
@@ -305,7 +313,7 @@ class LBOBuilder:
         self._sec_header(ws, 1, 1, 5, "SOURCES & USES -- 资金来源与用途")
 
         d = self.d
-        # ---- 输入区 (row 3-8) ----
+        # ---- 输入区 (row 3-10) ----
         ws.cell(3, 1, "TRANSACTION ASSUMPTIONS -- 交易假设").font = FONT_BOLD
         rows = [
             (4, "LTM EBITDA (M) -- 过去12个月EBITDA", d["ebitda"], "#,##0", None),
@@ -313,8 +321,8 @@ class LBOBuilder:
             (6, "Enterprise Value (M) -- 企业价值(购买价)", "=B4*B5", "#,##0", "EV = LTM EBITDA × Entry Multiple\n  = B4 × B5"),
             (7, "Transaction Fees % -- 交易费率", self.transaction_fee_pct, "0.0%", None),
             (8, "Financing Fees % -- 融资费率(占债务)", self.financing_fee_pct, "0.0%", None),
-            (9, "Cash to Balance Sheet % of EV", self.cash_to_bs_pct, "0.0%", None),
-            (10, "Leverage % (Debt / Purchase Price)", self.leverage_ratio, "0.0%", None),
+            (9, "Cash to Balance Sheet % of EV -- 留存现金比例(占EV)", self.cash_to_bs_pct, "0.0%", None),
+            (10, "Leverage % (Debt / Purchase Price) -- 杠杆率(债务/购买价)", self.leverage_ratio, "0.0%", None),
         ]
         for r, label, val, fmt, note in rows:
             ws.cell(r, 1, label)
@@ -329,15 +337,20 @@ class LBOBuilder:
 
         # ---- SOURCES 区 (row 12-19) ----
         self._sec_header(ws, 12, 1, 5, "SOURCES -- 资金来源")
-        self._col_headers(ws, 13, ["Amount (M)", "% of Cap"], col_start=2)
-        ws.cell(13, 1, "Item").fill = FILL_LIGHT_BLUE; ws.cell(13, 1).font = FONT_BOLD
+        self._col_headers(ws, 13, ["Amount (M) -- 金额", "% of Cap -- 占资本比"], col_start=2)
+        ws.cell(13, 1, "Item -- 项目").fill = FILL_LIGHT_BLUE; ws.cell(13, 1).font = FONT_BOLD
 
-        # 债务分档
-        # Total Debt = B10 (leverage) × B6 (EV); tranche = share × Total Debt
-        total_debt_row = 18  # 稍后填 Total Debt 位置
+        # 债务分档 (显示中英文档名)
+        tranche_cn_names = {
+            "Revolver":     "循环信贷",
+            "Term Loan A":  "定期贷款A",
+            "Term Loan B":  "定期贷款B",
+            "Senior Notes": "优先债券",
+        }
         for i, (name, share, rate, amort) in enumerate(self.tranches):
             r = 14 + i
-            ws.cell(r, 1, f"{name} ({share*100:.0f}%)")
+            cn = tranche_cn_names.get(name, name)
+            ws.cell(r, 1, f"{name} ({share*100:.0f}%) -- {cn}")
             c = ws.cell(r, 2, f"=$B$10*$B$6*{share}"); c.font = FONT_BLACK; c.number_format = "#,##0"
             add_comment(c, f"计算公式:\n  {name} = Total Debt × 档位占比 ({share:.0%})\n  = Leverage × EV × {share}\n  利率 {rate:.1%}, 年强制摊销 {amort:.0%}")
             c2 = ws.cell(r, 3, f"=B{r}/$B$19"); c2.font = FONT_BLACK; c2.number_format = "0.0%"
@@ -349,16 +362,16 @@ class LBOBuilder:
         ws.cell(r_eq, 3, f"=B{r_eq}/$B$19").font = FONT_BLACK; ws.cell(r_eq, 3).number_format = "0.0%"
 
         r_total = r_eq + 1
-        ws.cell(r_total, 1, "Total Sources").font = FONT_BOLD
+        ws.cell(r_total, 1, "Total Sources -- 资金来源合计").font = FONT_BOLD
         c = ws.cell(r_total, 2, f"=SUM(B14:B{r_eq})"); c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = "#,##0"
         add_comment(c, f"Total Sources = SUM(Revolver..Sponsor Equity)\n  = SUM(B14:B{r_eq})")
         ws.cell(r_total, 3, 1.0).font = FONT_BOLD
         ws.cell(r_total, 3).number_format = "0.0%"; ws.cell(r_total, 3).fill = FILL_MEDIUM_BLUE
 
-        # ---- USES 区 (row 21-25) ----
+        # ---- USES 区 (row 21-27) ----
         self._sec_header(ws, 21, 1, 5, "USES -- 资金用途")
-        self._col_headers(ws, 22, ["Amount (M)", "% of Cap"], col_start=2)
-        ws.cell(22, 1, "Item").fill = FILL_LIGHT_BLUE; ws.cell(22, 1).font = FONT_BOLD
+        self._col_headers(ws, 22, ["Amount (M) -- 金额", "% of Cap -- 占资本比"], col_start=2)
+        ws.cell(22, 1, "Item -- 项目").fill = FILL_LIGHT_BLUE; ws.cell(22, 1).font = FONT_BOLD
 
         c = ws.cell(23, 1, "Purchase Enterprise Value -- 企业价值 (购买价)")
         c = ws.cell(23, 2, "=B6"); c.font = FONT_PURPLE; c.number_format = "#,##0"
@@ -368,8 +381,6 @@ class LBOBuilder:
         c = ws.cell(24, 2, "=B6*B7"); c.font = FONT_BLACK; c.number_format = "#,##0"
         add_comment(c, "计算公式:\n  Transaction Fees = EV × Fee%\n  = B6 × B7")
 
-        # Financing Fees = Total Debt (SUM B14..) × Financing Fee%
-        # Cash to BS = EV × cash_pct
         c = ws.cell(25, 1, "Financing Fees -- 融资费用")
         total_debt_range = f"B14:B{r_eq-1}"
         c = ws.cell(25, 2, f"=SUM({total_debt_range})*B8"); c.font = FONT_BLACK; c.number_format = "#,##0"
@@ -379,8 +390,7 @@ class LBOBuilder:
         c = ws.cell(26, 2, "=B6*B9"); c.font = FONT_BLACK; c.number_format = "#,##0"
         add_comment(c, "计算公式:\n  Cash to BS = EV × Cash %\n  = B6 × B9")
 
-        # 需要 Total Uses 放在固定行 B25 之前 — 调整: 让 Purchase EV 从 row 23, Uses total = row 27
-        ws.cell(27, 1, "Total Uses").font = FONT_BOLD
+        ws.cell(27, 1, "Total Uses -- 资金用途合计").font = FONT_BOLD
         c = ws.cell(27, 2, "=SUM(B23:B26)"); c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = "#,##0"
         add_comment(c, "Total Uses = Purchase EV + Transaction Fees + Financing Fees + Cash to BS\n  = SUM(B23:B26)")
 
@@ -393,8 +403,8 @@ class LBOBuilder:
         add_comment(c, "Sources - Uses (必须为 0)\n  = Total Sources - Total Uses")
 
         # 列宽
-        ws.column_dimensions["A"].width = 46
-        for col_letter, w in [("B", 16), ("C", 12), ("D", 4), ("E", 4)]:
+        ws.column_dimensions["A"].width = 50
+        for col_letter, w in [("B", 18), ("C", 16), ("D", 4), ("E", 4)]:
             ws.column_dimensions[col_letter].width = w
 
     # ==================== Tab 2: Operating Model ====================
@@ -410,8 +420,12 @@ class LBOBuilder:
         self._sec_header(ws, 1, 1, 7, "OPERATING MODEL -- 经营模型")
 
         # 列布局: A=Label, B=Closing (LTM), C..G = Year 1..5
-        self._col_headers(ws, 3, ["Closing (LTM)", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"], col_start=2)
-        ws.cell(3, 1, "Line Item (M)").fill = FILL_LIGHT_BLUE; ws.cell(3, 1).font = FONT_BOLD
+        self._col_headers(ws, 3,
+                          ["Closing (LTM) -- 过去12个月",
+                           "Year 1 -- 第1年", "Year 2 -- 第2年", "Year 3 -- 第3年",
+                           "Year 4 -- 第4年", "Year 5 -- 第5年"], col_start=2)
+        ws.cell(3, 1, "Line Item (M) -- 项目 (百万)").fill = FILL_LIGHT_BLUE
+        ws.cell(3, 1).font = FONT_BOLD
 
         d = self.d
 
@@ -426,6 +440,9 @@ class LBOBuilder:
 
         # Row 5: Revenue Growth %
         ws.cell(5, 1, "Revenue Growth % -- 营收增长率")
+        # Closing 列 (col B) 展示 LTM 实际增长 (作为参考基准, 蓝色输入)
+        c = ws.cell(5, 2, self.rev_growth); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
+        add_comment(c, "LTM 实际增长率 (基于最近两期营收), 仅作参考")
         for i in range(1, 6):
             c = ws.cell(5, 2+i, self.rev_growth); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
 
@@ -436,7 +453,7 @@ class LBOBuilder:
         add_comment(ws.cell(6, 7), "EBITDA Margin:\n  可逐年调整以体现 PE 经营改善假设\n  (蓝色输入, 用户可修改)")
 
         # Row 7: EBITDA = Revenue × Margin
-        ws.cell(7, 1, "EBITDA").font = FONT_BOLD
+        ws.cell(7, 1, "EBITDA -- 息税折旧摊销前利润").font = FONT_BOLD
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(7, 2+i, f"={col}4*{col}6"); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = "#,##0"
@@ -448,7 +465,7 @@ class LBOBuilder:
             c = ws.cell(8, 2+i, max(self.da_pct, 0.03)); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
 
         # Row 9: D&A (负值)
-        ws.cell(9, 1, "Less: D&A -- 折旧与摊销 (负值)")
+        ws.cell(9, 1, "Less: D&A -- 减: 折旧与摊销 (负值)")
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(9, 2+i, f"=-{col}4*{col}8"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
@@ -462,8 +479,9 @@ class LBOBuilder:
             add_comment(c, f"计算公式:\n  EBIT = EBITDA + D&A = {col}7 + {col}9\n  (D&A 已带负号)")
 
         # Row 11: Interest Expense (来自 Debt Schedule Total Interest)
-        ws.cell(11, 1, "Less: Interest Expense -- 利息支出 (跨 Sheet)")
-        ws.cell(11, 2, 0).number_format = "#,##0"
+        ws.cell(11, 1, "Less: Interest Expense -- 减: 利息支出 (跨 Sheet)")
+        c0 = ws.cell(11, 2, 0); c0.number_format = "#,##0;(#,##0)"; c0.font = FONT_BLACK
+        add_comment(c0, "Closing 期 (交易关闭前) 无 LBO 债务利息, 填 0")
         interest_row = self.debt_rows["total_interest"]
         for i in range(1, 6):
             col = get_column_letter(2+i)
@@ -483,7 +501,7 @@ class LBOBuilder:
             c = ws.cell(13, 2+i, self.tax_rate); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
 
         # Row 14: Taxes (负值, 亏损不缴税)
-        ws.cell(14, 1, "Less: Taxes -- 所得税 (负值)")
+        ws.cell(14, 1, "Less: Taxes -- 减: 所得税 (亏损不缴)")
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(14, 2+i, f"=-MAX(0,{col}12)*{col}13"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
@@ -497,31 +515,36 @@ class LBOBuilder:
             add_comment(c, f"Net Income = EBT + Taxes = {col}12 + {col}14\n(Taxes 已带负号)")
 
         # Row 16: Add-back D&A (非现金)
-        ws.cell(16, 1, "Plus: D&A (Add back non-cash)")
+        ws.cell(16, 1, "Plus: D&A (Add back non-cash) -- 加回: 折旧摊销 (非现金)")
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(16, 2+i, f"=-{col}9"); c.font = FONT_BLACK; c.number_format = "#,##0"
             add_comment(c, f"加回非现金项:\n  = -{col}9 (D&A 原为负号, 加回)")
 
         # Row 17: CapEx %
-        ws.cell(17, 1, "CapEx % of Revenue")
+        ws.cell(17, 1, "CapEx % of Revenue -- 资本开支占营收比")
         for i in range(0, 6):
             c = ws.cell(17, 2+i, max(self.capex_pct, 0.03)); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
 
         # Row 18: CapEx (负值)
-        ws.cell(18, 1, "Less: CapEx -- 资本开支 (负值)")
+        ws.cell(18, 1, "Less: CapEx -- 减: 资本开支 (负值)")
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(18, 2+i, f"=-{col}4*{col}17"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
             add_comment(c, f"计算公式:\n  CapEx = -Revenue × CapEx%\n  = -{col}4 × {col}17")
 
         # Row 19: NWC %
-        ws.cell(19, 1, "NWC % of Δ Revenue")
+        ws.cell(19, 1, "NWC % of Δ Revenue -- 营运资本占营收变化比")
         c = ws.cell(19, 2, self.nwc_pct_of_delta_rev); c.font = FONT_BLUE; c.fill = FILL_INPUT_GREY; c.number_format = "0.0%"
+        # 明确其他列不使用 (仅 B 列输入), 用灰色 dash 展示以避免视觉空白
+        for i in range(1, 6):
+            col = get_column_letter(2+i)
+            ws.cell(19, 2+i, "").font = FONT_BLACK
 
         # Row 20: ΔNWC
-        ws.cell(20, 1, "Less: Δ Working Capital -- 营运资本变动")
-        ws.cell(20, 2, 0).number_format = "#,##0"
+        ws.cell(20, 1, "Less: Δ Working Capital -- 减: 营运资本变动")
+        c0 = ws.cell(20, 2, 0); c0.number_format = "#,##0;(#,##0)"; c0.font = FONT_BLACK
+        add_comment(c0, "Closing 期无 Δ NWC (交易关闭前基准点)")
         for i in range(1, 6):
             col = get_column_letter(2+i); prev = get_column_letter(1+i)
             c = ws.cell(20, 2+i, f"=-({col}4-{prev}4)*$B$19"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
@@ -535,16 +558,16 @@ class LBOBuilder:
             add_comment(c, f"计算公式:\n  Unlevered FCF = Net Income + D&A + CapEx + ΔNWC - Interest\n  = {col}15 + {col}16 + {col}18 + {col}20 - {col}11\n  (加回利息还原为 unlevered)")
 
         # Row 22: Levered FCF (Available for debt repayment)
-        ws.cell(22, 1, "Levered FCF (Available for Debt Repayment)").font = FONT_BOLD
+        ws.cell(22, 1, "Levered FCF (Available for Debt Repayment) -- 有杠杆自由现金流 (可用于偿债)").font = FONT_BOLD
         for i in range(0, 6):
             col = get_column_letter(2+i)
             c = ws.cell(22, 2+i, f"={col}15+{col}16+{col}18+{col}20"); c.font = FONT_BOLD; c.number_format = "#,##0"
             add_comment(c, f"计算公式:\n  Levered FCF = Net Income + D&A + CapEx + ΔNWC\n  = {col}15 + {col}16 + {col}18 + {col}20\n  (可用于偿还债务的现金)")
 
         # 列宽
-        ws.column_dimensions["A"].width = 46
+        ws.column_dimensions["A"].width = 60
         for i in range(2, 8):
-            ws.column_dimensions[get_column_letter(i)].width = 14
+            ws.column_dimensions[get_column_letter(i)].width = 16
 
         # 保存关键行号供 Debt Schedule / Returns 引用
         self.op_rows = {
@@ -562,14 +585,26 @@ class LBOBuilder:
         self._sec_header(ws, 1, 1, 7, "DEBT SCHEDULE -- 债务偿还计划")
 
         # 列: A=Label, B=Closing (Day 1 余额), C..G = Year 1..5
-        self._col_headers(ws, 3, ["Closing", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"], col_start=2)
-        ws.cell(3, 1, "Line Item (M)").fill = FILL_LIGHT_BLUE; ws.cell(3, 1).font = FONT_BOLD
+        self._col_headers(ws, 3,
+                          ["Closing -- 期初",
+                           "Year 1 -- 第1年", "Year 2 -- 第2年", "Year 3 -- 第3年",
+                           "Year 4 -- 第4年", "Year 5 -- 第5年"], col_start=2)
+        ws.cell(3, 1, "Line Item (M) -- 项目 (百万)").fill = FILL_LIGHT_BLUE
+        ws.cell(3, 1).font = FONT_BOLD
+
+        tranche_cn_names = {
+            "Revolver":     "循环信贷",
+            "Term Loan A":  "定期贷款A",
+            "Term Loan B":  "定期贷款B",
+            "Senior Notes": "优先债券",
+        }
 
         # 每档 6 行 (subtitle / Beg / Interest / Mandatory Amort / Cash Sweep / Ending),
         # 行号布局已在 __init__ 中预先计算 (self.debt_tranche_positions)
         for idx, (name, base, share, rate, amort) in enumerate(self.debt_tranche_positions):
+            cn = tranche_cn_names.get(name, name)
             # Section subtitle (base - 1)
-            c = ws.cell(base - 1, 1, f"{name} @ {rate:.1%}  |  Mandatory Amort {amort:.0%}"); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
+            c = ws.cell(base - 1, 1, f"{name} -- {cn} @ {rate:.1%}  |  Mandatory Amort {amort:.0%}"); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
 
             # Beginning Balance (base)
             ws.cell(base, 1, "Beginning Balance -- 期初余额")
@@ -584,7 +619,8 @@ class LBOBuilder:
 
             # Interest Expense (base + 1) — 用期初余额, 断开循环引用
             ws.cell(base+1, 1, f"Interest Expense @ {rate:.1%} -- 利息支出")
-            ws.cell(base+1, 2, 0).number_format = "#,##0"  # Closing 期无利息
+            c0 = ws.cell(base+1, 2, 0); c0.number_format = "#,##0"; c0.font = FONT_BLACK
+            add_comment(c0, "Closing 期无利息 (债务尚未起息)")
             for i in range(1, 6):
                 col = get_column_letter(2+i)
                 c = ws.cell(base+1, 2+i, f"={col}{base}*{rate}"); c.font = FONT_BLACK; c.number_format = "#,##0"
@@ -592,7 +628,8 @@ class LBOBuilder:
 
             # Mandatory Amortization (base + 2)
             ws.cell(base+2, 1, "Mandatory Amortization -- 强制摊销")
-            ws.cell(base+2, 2, 0).number_format = "#,##0;(#,##0)"
+            c0 = ws.cell(base+2, 2, 0); c0.number_format = "#,##0;(#,##0)"; c0.font = FONT_BLACK
+            add_comment(c0, "Closing 期无摊销")
             for i in range(1, 6):
                 col = get_column_letter(2+i)
                 if amort > 0:
@@ -606,6 +643,9 @@ class LBOBuilder:
 
             # Cash Sweep (base + 3) — 稍后统一填, 因为需要引用其他档 sweep 行
             ws.cell(base+3, 1, "Cash Sweep -- 现金瀑布优先偿还")
+            # Closing 期显式 0 (不留空), 保证下游 Ending Balance 公式引用不出错
+            c0 = ws.cell(base+3, 2, 0); c0.number_format = "#,##0;(#,##0)"; c0.font = FONT_BLACK
+            add_comment(c0, "Closing 期无现金瀑布")
             for i in range(1, 6):
                 ws.cell(base+3, 2+i, 0).number_format = "#,##0;(#,##0)"
 
@@ -649,11 +689,11 @@ class LBOBuilder:
         sweep_rows    = [pos[1] + 3 for pos in self.debt_tranche_positions]
         ending_rows   = [pos[1] + 4 for pos in self.debt_tranche_positions]
 
-        ws.cell(self.debt_rows["total_beg"],      1, "Total Beginning Debt").font = FONT_BOLD
-        ws.cell(self.debt_rows["total_interest"], 1, "Total Interest Expense").font = FONT_BOLD
-        ws.cell(self.debt_rows["total_amort"],    1, "Total Mandatory Amort").font = FONT_BOLD
-        ws.cell(self.debt_rows["total_sweep"],    1, "Total Cash Sweep").font = FONT_BOLD
-        ws.cell(self.debt_rows["total_ending"],   1, "Total Ending Debt").font = FONT_BOLD
+        ws.cell(self.debt_rows["total_beg"],      1, "Total Beginning Debt -- 期初债务合计").font = FONT_BOLD
+        ws.cell(self.debt_rows["total_interest"], 1, "Total Interest Expense -- 利息支出合计").font = FONT_BOLD
+        ws.cell(self.debt_rows["total_amort"],    1, "Total Mandatory Amort -- 强制摊销合计").font = FONT_BOLD
+        ws.cell(self.debt_rows["total_sweep"],    1, "Total Cash Sweep -- 现金瀑布合计").font = FONT_BOLD
+        ws.cell(self.debt_rows["total_ending"],   1, "Total Ending Debt -- 期末债务合计").font = FONT_BOLD
 
         for i in range(0, 6):
             col = get_column_letter(2+i)
@@ -675,9 +715,9 @@ class LBOBuilder:
                         f"Total Ending Debt = Σ 各档期末余额\n  = {'+'.join(f'{col}{r}' for r in ending_rows)}")
 
         # 列宽
-        ws.column_dimensions["A"].width = 46
+        ws.column_dimensions["A"].width = 54
         for i in range(2, 8):
-            ws.column_dimensions[get_column_letter(i)].width = 14
+            ws.column_dimensions[get_column_letter(i)].width = 16
 
     # ==================== Tab 4: Returns Analysis ====================
     def _ret(self):
@@ -702,7 +742,7 @@ class LBOBuilder:
         c = ws.cell(7, 2, "=B5*B6"); c.font = FONT_BLACK; c.number_format = "#,##0"
         add_comment(c, "计算公式:\n  Exit EV = Exit EBITDA × Exit Multiple\n  = B5 × B6")
 
-        c = ws.cell(8, 1, "Less: Net Debt at Exit (Year 5) -- 退出年净债务")
+        c = ws.cell(8, 1, "Less: Net Debt at Exit (Year 5) -- 减: 退出年净债务")
         end_row = self.debt_rows["total_ending"]
         c = ws.cell(8, 2, f"='Debt Schedule'!G{end_row}"); c.font = FONT_GREEN; c.number_format = "#,##0"
         add_comment(c, f"跨 Sheet 引用:\n  = Debt Schedule!G{end_row}\n  (Year 5 Total Ending Debt)")
@@ -713,21 +753,23 @@ class LBOBuilder:
 
         # 现金流系列 (用于 IRR): Year 0 = -Initial Equity, Year 1-4 = 0 (无分红), Year 5 = Exit Equity
         ws.cell(11, 1, "CASH FLOW SERIES for IRR -- IRR 现金流系列").font = FONT_BOLD; ws.cell(11, 1).fill = FILL_LIGHT_BLUE
-        self._col_headers(ws, 12, ["Year 0", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"], col_start=2)
-        ws.cell(12, 1, "Period").fill = FILL_LIGHT_BLUE; ws.cell(12, 1).font = FONT_BOLD
+        self._col_headers(ws, 12,
+                          ["Year 0 -- 第0年", "Year 1 -- 第1年", "Year 2 -- 第2年",
+                           "Year 3 -- 第3年", "Year 4 -- 第4年", "Year 5 -- 第5年"], col_start=2)
+        ws.cell(12, 1, "Period -- 期间").fill = FILL_LIGHT_BLUE; ws.cell(12, 1).font = FONT_BOLD
 
-        ws.cell(13, 1, "Cash Flow (M)")
+        ws.cell(13, 1, "Cash Flow (M) -- 现金流 (百万)")
         c = ws.cell(13, 2, "=-B4"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
         add_comment(c, "Year 0 = -Initial Equity Investment (投入,负数)")
         for i in range(1, 5):
             col = get_column_letter(2+i)
-            c = ws.cell(13, 2+i, 0); c.font = FONT_BLACK; c.number_format = "#,##0"
+            c = ws.cell(13, 2+i, 0); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
             add_comment(c, f"Year {i}: 假设无分红 (可根据实际填入 Interim Distributions)")
-        c = ws.cell(13, 7, "=B9"); c.font = FONT_BLACK; c.number_format = "#,##0"
+        c = ws.cell(13, 7, "=B9"); c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
         add_comment(c, "Year 5 = +Exit Equity Value (退出,正数)")
 
         # MOIC & IRR
-        ws.cell(15, 1, "MOIC (Money on Invested Capital) -- 倍数").font = FONT_BOLD
+        ws.cell(15, 1, "MOIC (Money on Invested Capital) -- 投资倍数").font = FONT_BOLD
         c = ws.cell(15, 2, "=B9/B4"); c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = '0.00"x"'
         add_comment(c, "计算公式:\n  MOIC = Exit Equity / Initial Equity\n  = B9 / B4")
 
@@ -739,29 +781,32 @@ class LBOBuilder:
         # 保存基准值供敏感性表使用
         ws.cell(18, 1, "SENSITIVITY BASE PARAMETERS -- 敏感性表基准参数").font = FONT_BOLD; ws.cell(18, 1).fill = FILL_LIGHT_BLUE
         # 用于 Table 1/2/3 的基准变量
-        ws.cell(19, 1, "Base LTM EBITDA")
-        ws.cell(19, 2, f"='Sources & Uses'!B{self.su_rows['ebitda']}").font = FONT_GREEN
-        ws.cell(20, 1, "Base Entry Multiple")
-        ws.cell(20, 2, f"='Sources & Uses'!B{self.su_rows['entry_multiple']}").font = FONT_GREEN
-        ws.cell(21, 1, "Base Exit Multiple")
-        ws.cell(21, 2, "=B6").font = FONT_PURPLE
-        ws.cell(22, 1, "Base Leverage Ratio")
-        ws.cell(22, 2, "='Sources & Uses'!B10").font = FONT_GREEN
-        ws.cell(23, 1, "Base Revenue Growth")
-        ws.cell(23, 2, self.rev_growth).font = FONT_BLUE; ws.cell(23, 2).fill = FILL_INPUT_GREY; ws.cell(23, 2).number_format = "0.0%"
-        ws.cell(24, 1, "Base EBITDA Margin")
-        ws.cell(24, 2, self.ebitda_margin).font = FONT_BLUE; ws.cell(24, 2).fill = FILL_INPUT_GREY; ws.cell(24, 2).number_format = "0.0%"
-        ws.cell(25, 1, "Base LTM Revenue")
-        ws.cell(25, 2, f"='Operating Model'!B{self.op_rows['revenue']}").font = FONT_GREEN
-        ws.cell(26, 1, "Base Total FCF over Hold (approximated as Debt paid down)")
-        # Total FCF used to pay down debt ≈ Total Debt 初始 - Total Debt 期末
-        end_row_debt = self.debt_rows["total_ending"]
-        ws.cell(26, 2, f"=SUM('Sources & Uses'!B{self.su_rows['tranche_first']}:B{self.su_rows['tranche_last']})-'Debt Schedule'!G{end_row_debt}").font = FONT_BLACK
-        ws.cell(26, 2).number_format = "#,##0"
-        ws.cell(27, 1, "Base Net Debt at Exit")
-        ws.cell(27, 2, "=B8").font = FONT_PURPLE
-        for r in range(19, 28):
-            ws.cell(r, 2).number_format = ws.cell(r, 2).number_format or "#,##0"
+        _base_rows = [
+            (19, "Base LTM EBITDA -- 基准LTM EBITDA",
+                 f"='Sources & Uses'!B{self.su_rows['ebitda']}", "#,##0", FONT_GREEN),
+            (20, "Base Entry Multiple -- 基准入场倍数",
+                 f"='Sources & Uses'!B{self.su_rows['entry_multiple']}", '0.0"x"', FONT_GREEN),
+            (21, "Base Exit Multiple -- 基准退出倍数",
+                 "=B6", '0.0"x"', FONT_PURPLE),
+            (22, "Base Leverage Ratio -- 基准杠杆率",
+                 "='Sources & Uses'!B10", "0.0%", FONT_GREEN),
+            (23, "Base Revenue Growth -- 基准营收增长率",
+                 self.rev_growth, "0.0%", FONT_BLUE),
+            (24, "Base EBITDA Margin -- 基准EBITDA利润率",
+                 self.ebitda_margin, "0.0%", FONT_BLUE),
+            (25, "Base LTM Revenue -- 基准LTM营业收入",
+                 f"='Operating Model'!B{self.op_rows['revenue']}", "#,##0", FONT_GREEN),
+            (26, "Base Total FCF over Hold -- 基准持有期总FCF (以债务偿还额近似)",
+                 f"=SUM('Sources & Uses'!B{self.su_rows['tranche_first']}:B{self.su_rows['tranche_last']})-'Debt Schedule'!G{self.debt_rows['total_ending']}",
+                 "#,##0", FONT_BLACK),
+            (27, "Base Net Debt at Exit -- 基准退出年净债务",
+                 "=B8", "#,##0", FONT_PURPLE),
+        ]
+        for r, label, val, fmt, font in _base_rows:
+            ws.cell(r, 1, label)
+            c = ws.cell(r, 2, val); c.font = font; c.number_format = fmt
+            if font is FONT_BLUE:
+                c.fill = FILL_INPUT_GREY
 
         # ---- 敏感性表 1: Entry × Exit Multiple → IRR (row 30-38) ----
         self._sensitivity_table_1_entry_exit_irr(ws, start_row=30)
@@ -773,9 +818,9 @@ class LBOBuilder:
         self._sensitivity_table_3_growth_margin_irr(ws, start_row=54)
 
         # 列宽
-        ws.column_dimensions["A"].width = 46
-        for i in range(2, 8):
-            ws.column_dimensions[get_column_letter(i)].width = 14
+        ws.column_dimensions["A"].width = 58
+        for i in range(2, 9):
+            ws.column_dimensions[get_column_letter(i)].width = 16
 
     # ---------- 敏感性表 helpers ----------
     def _sens_axis(self, base: float, step: float) -> list:
@@ -784,8 +829,13 @@ class LBOBuilder:
 
     def _write_sens_header(self, ws, row: int, title: str, row_axis_label: str, col_axis_label: str):
         c = ws.cell(row, 1, title); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
-        ws.cell(row + 1, 1, f"{row_axis_label} \\ {col_axis_label}").font = FONT_BOLD
-        ws.cell(row + 1, 1).fill = FILL_LIGHT_BLUE
+        # row+1: 轴标签行 (说明行/列 语义)
+        c = ws.cell(row + 1, 1, f"Row axis (↓) / 行轴: {row_axis_label}  |  Col axis (→) / 列轴: {col_axis_label}")
+        c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
+        # row+2: 列轴 header 行, 在 A 列写上列轴名 (方便识别列头是什么变量)
+        c = ws.cell(row + 2, 1, f"{col_axis_label} →")
+        c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE
+        c.alignment = Alignment(horizontal="right")
 
     def _sensitivity_table_1_entry_exit_irr(self, ws, start_row: int):
         """Table 1: Entry Multiple (row 轴) × Exit Multiple (列 轴) → IRR
@@ -805,12 +855,17 @@ class LBOBuilder:
         row_axis = self._sens_axis(base_entry, 1.0)  # Entry step = 1.0x
         col_axis = self._sens_axis(base_exit, 1.0)   # Exit step = 1.0x
 
-        self._write_sens_header(ws, start_row, "TABLE 1: Entry × Exit Multiple → IRR", "Entry Multiple", "Exit Multiple")
+        self._write_sens_header(ws, start_row, "TABLE 1: Entry × Exit Multiple → IRR -- 入场倍数 × 退出倍数 → 内部收益率",
+                                "Entry Multiple / 入场倍数", "Exit Multiple / 退出倍数")
         for j, v in enumerate(col_axis):
             c = ws.cell(start_row + 2, 3 + j, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = '0.0"x"'
             c.alignment = Alignment(horizontal="center")
         for i, v in enumerate(row_axis):
+            # 每行的 col A 标注行轴变量名, col B 放行轴取值
+            cA = ws.cell(start_row + 3 + i, 1, "Entry Multiple ↓ / 入场倍数")
+            cA.font = FONT_BOLD; cA.fill = FILL_LIGHT_BLUE
             c = ws.cell(start_row + 3 + i, 2, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = '0.0"x"'
+            c.alignment = Alignment(horizontal="center")
 
         for i in range(5):
             for j in range(5):
@@ -850,11 +905,16 @@ class LBOBuilder:
         # 保证 leverage ∈ [0, 0.9]
         col_axis = [max(0.05, min(0.90, v)) for v in col_axis]
 
-        self._write_sens_header(ws, start_row, "TABLE 2: Entry × Leverage → MOIC", "Entry Multiple", "Leverage %")
+        self._write_sens_header(ws, start_row, "TABLE 2: Entry × Leverage → MOIC -- 入场倍数 × 杠杆率 → 投资倍数",
+                                "Entry Multiple / 入场倍数", "Leverage % / 杠杆率")
         for j, v in enumerate(col_axis):
             c = ws.cell(start_row + 2, 3 + j, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = "0.0%"
+            c.alignment = Alignment(horizontal="center")
         for i, v in enumerate(row_axis):
+            cA = ws.cell(start_row + 3 + i, 1, "Entry Multiple ↓ / 入场倍数")
+            cA.font = FONT_BOLD; cA.fill = FILL_LIGHT_BLUE
             c = ws.cell(start_row + 3 + i, 2, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = '0.0"x"'
+            c.alignment = Alignment(horizontal="center")
 
         for i in range(5):
             for j in range(5):
@@ -892,11 +952,16 @@ class LBOBuilder:
         col_axis = self._sens_axis(base_margin, 0.02)  # ±2%
         col_axis = [max(0.02, v) for v in col_axis]
 
-        self._write_sens_header(ws, start_row, "TABLE 3: Revenue Growth × EBITDA Margin → IRR", "Revenue Growth", "EBITDA Margin")
+        self._write_sens_header(ws, start_row, "TABLE 3: Revenue Growth × EBITDA Margin → IRR -- 营收增长率 × EBITDA利润率 → 内部收益率",
+                                "Revenue Growth / 营收增长率", "EBITDA Margin / EBITDA利润率")
         for j, v in enumerate(col_axis):
             c = ws.cell(start_row + 2, 3 + j, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = "0.0%"
+            c.alignment = Alignment(horizontal="center")
         for i, v in enumerate(row_axis):
+            cA = ws.cell(start_row + 3 + i, 1, "Revenue Growth ↓ / 营收增长率")
+            cA.font = FONT_BOLD; cA.fill = FILL_LIGHT_BLUE
             c = ws.cell(start_row + 3 + i, 2, v); c.font = FONT_BOLD; c.fill = FILL_LIGHT_BLUE; c.number_format = "0.0%"
+            c.alignment = Alignment(horizontal="center")
 
         for i in range(5):
             for j in range(5):
@@ -910,9 +975,9 @@ class LBOBuilder:
                 exit_eq = f"({exit_ev}-$B$27)"
                 init_eq = "$B$4"
                 moic = f"IFERROR(({exit_eq})/{init_eq},0)"
-                cell = ws.cell(r, c, f"=({moic})^(1/5)-1"); cell.font = FONT_BLACK; cell.number_format = "0.0%"
                 # 用 IFERROR 保护, 若 MOIC 为负则显示 -100%
-                cell.value = f"=IFERROR(IF({moic}>0,({moic})^(1/5)-1,-1),0)"
+                cell = ws.cell(r, c, f"=IFERROR(IF({moic}>0,({moic})^(1/5)-1,-1),0)")
+                cell.font = FONT_BLACK; cell.number_format = "0.0%"
                 if i == 2 and j == 2:
                     cell.font = FONT_BLACK_BOLD; cell.fill = FILL_MEDIUM_BLUE
                     add_comment(cell, "★ 中心格 = Base Case\n  Revenue Growth = Base\n  EBITDA Margin = Base\n  该表使用闭式近似:\n  Y5 EBITDA ≈ LTM_Revenue × (1+g)^5 × margin\n  中心格 IRR 应接近模型 B16")
