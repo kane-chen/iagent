@@ -131,11 +131,17 @@ _FX_FALLBACKS = {
 # ==================== Beta 基准指数 & Rf/ERP 常量 ====================
 # 按交易场所前缀选择大盘基准 (用于计算个股 5Y monthly beta)
 _BENCHMARK_INDEX = {
-    "US": "US.SPY",       # S&P 500 ETF
+    "US": "US.SPY",       # S&P 500 ETF (美国本土公司默认基准)
     "HK": "HK.800000",    # 恒生指数
     "SH": "SH.000300",    # 沪深 300
     "SZ": "SH.000300",    # A 股统一用沪深 300
 }
+# 中概股 ADR 专用基准 (美股上市但报表币种为 CNY → 业务在中国, 股价主要受中国宏观/监管驱动).
+# KWEB 覆盖 BABA/PDD/JD/TCOM/BIDU/NTES 等主要中概互联网/科技股,
+# 与 ADR 中概股相关性远高于 SPY (r 从 ~0.3 提升到 ~0.85), Beta 更贴近真实风险.
+# 若 KWEB 数据不足 (< _BETA_MIN_SAMPLES 月样本), 自动回退到 PGJ → SPY.
+_ADR_CN_BENCHMARK_PRIMARY  = "US.KWEB"    # 首选: 中概互联网 ETF (2013-08 上市)
+_ADR_CN_BENCHMARK_FALLBACK = "US.PGJ"     # 备选: Golden Dragon 广义中概 ETF
 
 # 按报表币种 (Reporting Currency) 决定 Rf 与 ERP:
 # - Rf: 10Y 主权债券收益率
@@ -326,11 +332,83 @@ def fetch_market_data_from_futu(stock_code: str) -> dict:
     return result
 
 # ==================== FX Rate Fetching ====================
+def _sina_fx_quote(from_ccy: str, to_ccy: str) -> Tuple[Optional[float], str]:
+    """通过新浪财经外汇快照获取 1 from_ccy = X to_ccy 汇率。
+
+    新浪 API: https://hq.sinajs.cn/list=fx_s{from_lower}{to_lower}
+    返回格式: var hq_str_fx_susdcny="YYYY-mm-dd HH:MM:SS,<last>,<bid>,<ask>,...";
+    仅解析成功且数值在合理范围 (0.0001, 100000) 才视为有效。
+
+    Returns:
+        (rate, source_msg) — rate 为 None 表示失败, source_msg 描述原因/来源
+    """
+    import urllib.request as _urlreq
+    import re as _re
+    from_l = from_ccy.lower()
+    to_l = to_ccy.lower()
+    code = f"fx_s{from_l}{to_l}"
+    url = f"https://hq.sinajs.cn/list={code}"
+    try:
+        req = _urlreq.Request(url, headers={
+            # 新浪财经外汇接口要求 Referer 头指向 sina.com.cn 白名单
+            "Referer": "https://finance.sina.com.cn/",
+            "User-Agent": "Mozilla/5.0",
+        })
+        with _urlreq.urlopen(req, timeout=5) as resp:
+            # 新浪返回 GBK 编码
+            raw = resp.read().decode("gbk", errors="ignore")
+    except Exception as e:
+        return None, f"Sina FX 请求失败 ({code}): {e}"
+    m = _re.search(r'"([^"]*)"', raw)
+    if not m or not m.group(1):
+        return None, f"Sina FX 无数据 ({code})"
+    parts = m.group(1).split(",")
+    if len(parts) < 2:
+        return None, f"Sina FX 响应格式异常 ({code})"
+    # 第 1 列 (index 1) 通常是最新价; 若为 0 尝试第 2 列 (bid)
+    for idx in (1, 2, 3):
+        if idx < len(parts):
+            try:
+                v = float(parts[idx])
+            except (TypeError, ValueError):
+                continue
+            if 0.0001 < v < 100000:
+                ts = parts[0] if parts else ""
+                return v, f"Sina 新浪财经 ({code}, {ts})"
+    return None, f"Sina FX 数值异常 ({code}): {parts[:4]}"
+
+
+def fetch_fx_rate_from_sina(from_ccy: str, to_ccy: str) -> Tuple[Optional[float], str]:
+    """新浪财经汇率获取, 支持正向/反向候选。
+
+    Returns:
+        (rate, source): 失败时 rate 为 None
+    """
+    from_ccy, to_ccy = from_ccy.upper(), to_ccy.upper()
+    if from_ccy == to_ccy:
+        return 1.0, "Same currency (no conversion)"
+    # 直连
+    rate, msg = _sina_fx_quote(from_ccy, to_ccy)
+    if rate is not None:
+        logger.info(f"  -> Sina FX 成功: 1 {from_ccy} = {rate:.4f} {to_ccy} ({msg})")
+        return rate, msg
+    logger.info(f"  -> Sina FX 直连失败 ({msg}), 尝试反向")
+    # 反向 (取倒数)
+    inv_rate, inv_msg = _sina_fx_quote(to_ccy, from_ccy)
+    if inv_rate is not None and inv_rate > 0:
+        rate = 1.0 / inv_rate
+        logger.info(f"  -> Sina FX 反向成功: 1 {from_ccy} = {rate:.4f} {to_ccy} (via {to_ccy}->{from_ccy})")
+        return rate, f"{inv_msg} (inverse)"
+    return None, f"Sina FX 双向均失败 (last: {inv_msg})"
+
+
 def fetch_fx_rate_from_futu(from_ccy: str, to_ccy: str) -> Tuple[float, str]:
     """获取 1 from_ccy = X to_ccy 的汇率。
 
-    优先尝试 Futu 外汇快照 (`get_market_snapshot(['HK.USDCNH', ...])`),
-    失败时使用 _FX_FALLBACKS 中的常量兜底。
+    优先级:
+      1) 新浪财经 hq.sinajs.cn (无需依赖 FutuOpenD FX 权限, 覆盖主流货币对)
+      2) Futu 外汇快照 (`get_market_snapshot(['HK.USDCNH', ...])`, 需 FutuOpenD FX 权限)
+      3) _FX_FALLBACKS 常量兜底
 
     Returns:
         (rate, source): source 是数据来源标识, 用于 Excel 备注
@@ -338,6 +416,13 @@ def fetch_fx_rate_from_futu(from_ccy: str, to_ccy: str) -> Tuple[float, str]:
     from_ccy, to_ccy = from_ccy.upper(), to_ccy.upper()
     if from_ccy == to_ccy:
         return 1.0, "Same currency (no conversion)"
+
+    # ---- 优先: 新浪财经开放接口 ----
+    logger.info(f"正在通过新浪财经获取 {from_ccy}->{to_ccy} 汇率...")
+    sina_rate, sina_msg = fetch_fx_rate_from_sina(from_ccy, to_ccy)
+    if sina_rate is not None:
+        return sina_rate, sina_msg
+    logger.warning(f"Sina FX 不可用 ({sina_msg}), 回退到 Futu FX")
 
     codes = _FX_FUTU_CODES.get((from_ccy, to_ccy), [])
     inverse_codes = _FX_FUTU_CODES.get((to_ccy, from_ccy), [])
@@ -394,9 +479,16 @@ def fetch_fx_rate_from_futu(from_ccy: str, to_ccy: str) -> Tuple[float, str]:
     return 1.0, f"NO MAPPING — please override in Excel"
 
 # ==================== Beta 计算 ====================
-def get_benchmark_for(stock_code: str) -> str:
-    """根据股票所属交易场所选择大盘基准指数, 用于计算个股 Beta。"""
+def get_benchmark_for(stock_code: str, reporting_currency: Optional[str] = None) -> str:
+    """根据股票所属交易场所 + 报表币种选择大盘基准指数, 用于计算个股 Beta.
+
+    关键: **美股上市的中概股 ADR** (`US.*` 且报表币种 CNY, 如 BABA/PDD/TCOM/JD) 与 S&P 500 相关性
+    极低 (r~0.3), 用 SPY 算 β 会严重低估 (~0.4). 业务/股价驱动因素在中国, 应改用中概股基准
+    KWEB (KraneShares 中概互联网 ETF).
+    """
     prefix = stock_code.split('.')[0] if '.' in stock_code else ""
+    if prefix == "US" and reporting_currency == "CNY":
+        return _ADR_CN_BENCHMARK_PRIMARY
     return _BENCHMARK_INDEX.get(prefix, "US.SPY")
 
 
@@ -432,37 +524,66 @@ def _fetch_monthly_returns(ctx, code: str, months: int = 60):
 
 
 def compute_beta_from_futu(stock_code: str, benchmark_code: Optional[str] = None,
-                            months: int = 60) -> Tuple[Optional[float], str]:
-    """通过 Futu `request_history_kline` 拉取 5Y monthly K 线, 计算个股 Beta。
+                            months: int = 60,
+                            reporting_currency: Optional[str] = None) -> Tuple[Optional[float], str]:
+    """通过 Futu `request_history_kline` 拉取 5Y monthly K 线, 计算个股 Beta.
 
     Beta = cov(stock_return, mkt_return) / var(mkt_return)
+
+    自动 fallback: 若指定的基准 (如 US.KWEB 用于中概股) 样本不足 24 个月, 会:
+      - ADR 中概股 (US.* + CNY): 尝试 KWEB → PGJ → SPY 递降
+      - 其他情况: 保留原基准 (样本不足时返回 None 走兜底常量)
 
     Returns:
         (beta, source): beta 为 None 时表示计算失败, 调用方应用兜底值
     """
-    benchmark = benchmark_code or get_benchmark_for(stock_code)
+    benchmark = benchmark_code or get_benchmark_for(stock_code, reporting_currency)
     logger.info(f"正在通过 FutuOpenD 计算 {stock_code} 5Y monthly Beta (基准: {benchmark})...")
+
+    # 构建基准候选链: 中概股 ADR 场景下 KWEB 若样本不足自动降级
+    prefix = stock_code.split('.')[0] if '.' in stock_code else ""
+    is_adr_cn = (prefix == "US" and reporting_currency == "CNY")
+    if is_adr_cn:
+        candidates = [benchmark, _ADR_CN_BENCHMARK_FALLBACK, "US.SPY"]
+        seen = set(); benchmarks_to_try = []
+        for b in candidates:
+            if b and b not in seen:
+                seen.add(b); benchmarks_to_try.append(b)
+    else:
+        benchmarks_to_try = [benchmark]
+
     ctx = None
     try:
         ctx = create_quote_context()
         stock_r = _fetch_monthly_returns(ctx, stock_code, months)
-        mkt_r = _fetch_monthly_returns(ctx, benchmark, months)
-        n = min(len(stock_r), len(mkt_r))
-        if n < _BETA_MIN_SAMPLES:
-            logger.warning(f"  -> 样本不足 ({n} < {_BETA_MIN_SAMPLES}), 无法计算 Beta")
-            return None, f"Insufficient history ({n} months)"
-        stock_r = stock_r[-n:]
-        mkt_r = mkt_r[-n:]
-        mean_s = sum(stock_r) / n
-        mean_m = sum(mkt_r) / n
-        cov = sum((s - mean_s) * (m - mean_m) for s, m in zip(stock_r, mkt_r)) / n
-        var_m = sum((m - mean_m) ** 2 for m in mkt_r) / n
-        if var_m <= 0:
-            logger.warning(f"  -> 基准方差为 0, 无法计算 Beta")
-            return None, "Zero market variance"
-        beta = cov / var_m
-        logger.info(f"  -> 成功: Beta({stock_code} vs {benchmark}) = {beta:.4f}, n={n} months")
-        return beta, f"Futu {n}M monthly kline (vs {benchmark}), computed {date.today().isoformat()}"
+        if len(stock_r) < _BETA_MIN_SAMPLES:
+            logger.warning(f"  -> 股票月线样本不足 ({len(stock_r)} < {_BETA_MIN_SAMPLES})")
+            return None, f"Insufficient stock history ({len(stock_r)} months)"
+
+        last_err = None
+        for bm in benchmarks_to_try:
+            mkt_r = _fetch_monthly_returns(ctx, bm, months)
+            n = min(len(stock_r), len(mkt_r))
+            if n < _BETA_MIN_SAMPLES:
+                last_err = f"{bm} history insufficient ({n} months)"
+                logger.warning(f"  -> {last_err}, 尝试下一基准")
+                continue
+            sr = stock_r[-n:]; mr = mkt_r[-n:]
+            mean_s = sum(sr) / n; mean_m = sum(mr) / n
+            cov = sum((s - mean_s) * (m - mean_m) for s, m in zip(sr, mr)) / n
+            var_m = sum((m - mean_m) ** 2 for m in mr) / n
+            if var_m <= 0:
+                last_err = f"{bm} zero market variance"
+                continue
+            beta = cov / var_m
+            var_s = sum((s - mean_s) ** 2 for s in sr) / n
+            r_corr = cov / (var_s ** 0.5 * var_m ** 0.5) if var_s > 0 else 0.0
+            note = "" if bm == benchmarks_to_try[0] else f" (fallback from {benchmarks_to_try[0]})"
+            logger.info(f"  -> 成功: Beta({stock_code} vs {bm}){note} = {beta:.4f}, "
+                        f"r={r_corr:.3f}, n={n} months")
+            return beta, (f"Futu {n}M monthly kline (vs {bm}, r={r_corr:.2f}), "
+                          f"computed {date.today().isoformat()}{note}")
+        return None, f"All benchmarks failed ({last_err})"
     except SystemExit:
         logger.error("Beta 计算触发 SystemExit (Futu 未连接?)")
         return None, "Futu API failure"
@@ -660,8 +781,10 @@ def extract_financial_data(workspace: Path, ticker: str) -> dict:
 
     # ===== WACC 输入个股化: Beta / Rf / ERP =====
     # Beta: Futu 5Y monthly 自算, 失败回退到常量
-    benchmark = get_benchmark_for(stock_code)
-    beta_calc, beta_source = compute_beta_from_futu(stock_code, benchmark)
+    # 传入 reporting_currency 让 Beta 基准正确识别 ADR 中概股 (US.* + CNY → KWEB, 而非 SPY)
+    benchmark = get_benchmark_for(stock_code, reporting_currency)
+    beta_calc, beta_source = compute_beta_from_futu(
+        stock_code, benchmark, reporting_currency=reporting_currency)
     if beta_calc is None:
         logger.warning(f"Beta 计算失败, 使用兜底值 {_BETA_FALLBACK}")
         beta_calc = _BETA_FALLBACK
@@ -764,8 +887,9 @@ class DCFBuilder:
             "Bear": {
                 "rev_growth":       _decay(base_growth, -0.03, 0.005),
                 "ebit_margin":      _decay(base_margin, -0.03, 0.002),
-                "da_pct":           [max(base_da, 0.03)] * 5,
-                "capex_pct":        [max(base_capex, 0.05) + 0.01] * 5,
+                # D&A / CapEx 使用最近一年实际值 (不加人为下限, 尊重公司真实结构)
+                "da_pct":           [base_da] * 5,
+                "capex_pct":        [base_capex + 0.01] * 5,
                 "nwc_pct":          [0.02] * 5,
                 "tax_rate":         [base_tax] * 5,
                 "terminal_growth":  [0.020] + [None] * 4,
@@ -774,8 +898,8 @@ class DCFBuilder:
             "Base": {
                 "rev_growth":       _decay(base_growth, 0.00, 0.003),
                 "ebit_margin":      _decay(base_margin, 0.00, 0.000),
-                "da_pct":           [max(base_da, 0.03)] * 5,
-                "capex_pct":        [max(base_capex, 0.05)] * 5,
+                "da_pct":           [base_da] * 5,
+                "capex_pct":        [base_capex] * 5,
                 "nwc_pct":          [0.01] * 5,
                 "tax_rate":         [base_tax] * 5,
                 "terminal_growth":  [0.025] + [None] * 4,
@@ -784,8 +908,8 @@ class DCFBuilder:
             "Bull": {
                 "rev_growth":       _decay(base_growth, 0.03, 0.005),
                 "ebit_margin":      _decay(base_margin, 0.03, -0.002),  # 递增
-                "da_pct":           [max(base_da, 0.03)] * 5,
-                "capex_pct":        [max(base_capex, 0.05) - 0.005] * 5,
+                "da_pct":           [base_da] * 5,
+                "capex_pct":        [max(base_capex - 0.005, 0.0)] * 5,
                 "nwc_pct":          [0.005] * 5,
                 "tax_rate":         [base_tax] * 5,
                 "terminal_growth":  [0.030] + [None] * 4,

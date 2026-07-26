@@ -106,7 +106,7 @@ python scripts/build_dcf_model.py --ticker BABA --workspace /path/to/workspace
 | Stock Price / Shares | `Futu get_market_snapshot` | 实时行情 |
 | Reporting Currency | 财报 Excel `col B` 单位字符串 (如"百万人民币"→CNY) | 反向映射 `_UNIT_NAME_TO_CURRENCY` |
 | Trading Currency | 从 stock_code 前缀推断 (`US.*→USD, HK.*→HKD, SH./SZ.*→CNY`) | Futu snapshot 无此字段 |
-| FX Rate | Futu FX snapshot (`HK.USDCNH` / `HK.USDHKD` / …) | 失败回退到 `_FX_FALLBACKS` 常量, 用户可在 `DCF!B10` 覆盖 |
+| FX Rate | **新浪财经 `hq.sinajs.cn/list=fx_s{pair}`** (优先) → Futu FX snapshot (`HK.USDCNH` / `HK.USDHKD` / …) → `_FX_FALLBACKS` 常量兜底 | 新浪 API 无需 FutuOpenD FX 权限, 覆盖主流货币对 (USD/CNY, USD/HKD, HKD/CNY, EUR/USD, ...); 用户可在 `DCF!B10` 覆盖 |
 | Beta (5Y Monthly) | Futu `request_history_kline` 拉 60 个月月线, `cov(个股, 基准) / var(基准)` | 基准按交易场所选: US.SPY / HK.800000 恒生 / SH.000300 沪深 300; 失败回退 `_BETA_FALLBACK=1.20` |
 | Risk-Free Rate | 按报表币种查 `_RF_ERP_BY_CURRENCY` 常量表 | USD 4.3% / HKD 4.0% / CNY 2.5% / …; 用户可在 `WACC!B2` 覆盖 |
 | Equity Risk Premium | 按报表币种查 `_RF_ERP_BY_CURRENCY` (Damodaran country ERP) | USD 5.5% / HKD 6.0% / CNY 6.5% / …; 用户可在 `WACC!B4` 覆盖 |
@@ -160,7 +160,7 @@ python scripts/build_dcf_model.py --ticker BABA --workspace /path/to/workspace
 A: 因为 BABA 最近一年 (2026FY) 的 EBIT Margin 骤降至 5.83% (2025FY 为 14.76%), CapEx 占营收 12.3%, 导致 FCF 深度为负。这是真实数据信号, 用户可切换 Bull 情景 (调整增长/毛利假设) 得到正的估值。
 
 **Q: BABA / PDD / JD 等 ADR 或港股 (HK.00700) 的 Upside% 数值离谱?**
-A: 检查 `DCF!B10` 的 FX Rate 是否合理。ADR (US.BABA) 报表币种是 CNY 而股价是 USD, FX Rate 应约 7.2 (1 USD = 7.2 CNY); 港股 (HK.00700) 报表也常是 CNY 而股价是 HKD, FX 应约 0.92。若脚本运行时 Futu FX 快照失败, 会使用 `_FX_FALLBACKS` 常量, 请手动覆盖为实时汇率。
+A: 检查 `DCF!B10` 的 FX Rate 是否合理。ADR (US.BABA) 报表币种是 CNY 而股价是 USD, FX Rate 应约 7.2 (1 USD = 7.2 CNY); 港股 (HK.00700) 报表也常是 CNY 而股价是 HKD, FX 应约 0.92。**当前版本 FX 优先从新浪财经开放接口 `hq.sinajs.cn/list=fx_s{pair}` 抓取实时汇率, 无需 FutuOpenD FX 权限, 覆盖 USD/CNY, USD/HKD, HKD/CNY, EUR/USD 等主流货币对**; 若新浪 API 失败自动回退到 Futu FX snapshot, 再兜底 `_FX_FALLBACKS` 常量。用户仍可在 `DCF!B10` 手动覆盖。
 
 **Q: WACC Sheet 的 Beta / Rf / ERP 从哪里来?**
 A: 三个都是个股/地区差异化:

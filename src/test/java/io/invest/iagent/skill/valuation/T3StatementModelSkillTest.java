@@ -31,8 +31,20 @@ public class T3StatementModelSkillTest {
     }
 
     @Test
+    public void test_skill_direct_83690() throws Exception {
+        int code = this.runSkill("83690", 160);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
     public void test_skill_direct_baba() throws Exception {
         int code = this.runSkill("BABA", 120);
+        Assertions.assertEquals(0,code);
+    }
+
+    @Test
+    public void test_skill_direct_LI() throws Exception {
+        int code = this.runSkill("LI", 120);
         Assertions.assertEquals(0,code);
     }
 
