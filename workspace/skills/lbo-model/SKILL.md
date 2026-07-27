@@ -13,8 +13,8 @@ description: 生成投行标准的 LBO (Leveraged Buyout) 4-Tab Excel 模型 (So
 |---|---|---|
 | Sources & Uses | 资金来源与用途 | 4 档债务 (Revolver / TLA / TLB / Senior Notes) + Sponsor Equity Plug; Sources = Uses |
 | Operating Model | 5 年经营预测 | Revenue Growth × EBITDA Margin 驱动,EBIT → Interest → Tax → Net Income → FCF |
-| Debt Schedule | 债务偿还计划 | 多档 roll-forward, Interest 用期初余额 (断循环), Cash Sweep 按 Revolver→TLA→TLB→Notes 瀑布 |
-| Returns Analysis | 回报 + 敏感性 | Exit EV/Equity, MOIC, IRR (基于现金流系列) + 3 张 5×5 敏感性表 |
+| Debt Schedule | 债务偿还计划 + Credit Metrics | 多档 roll-forward, Interest 用期初余额 (断循环), Cash Sweep 按 Revolver→TLA→TLB→Notes 瀑布; 附 Leverage / Net Leverage / Interest Cov / DSCR + Cumulative Paydown |
+| Returns Analysis | 回报 + Value Bridge + 敏感性 | Exit EV/Equity, MOIC, IRR (基于现金流系列) + Value Creation Bridge (EBITDA Growth / Multiple Expansion / Debt Paydown / Fees Wedge, 精确勾稽 Exit Equity - Initial Equity) + 3 张 5×5 敏感性表 |
 
 ## 运行方式
 
@@ -24,7 +24,7 @@ python scripts/build_lbo_model.py --ticker BABA --workspace /path/to/workspace
 python scripts/build_lbo_model.py --ticker BABA --workspace /path/to/workspace --entry-multiple 10.0 --exit-multiple 11.0
 ```
 
-**前置条件**: `workspace/excels/{ticker}_income_*.xlsx`、`{ticker}_balance_*.xlsx`、`{ticker}_cashflow_*.xlsx` 已由 `futu-financial-report` skill 生成。
+**前置条件**: Futu OpenD 已启动并登录 (脚本会通过 `workspace/skills/3-statement-model` 复用富途 API 抽取三表历史数据; 与 3-Statement / DCF skill 共享同一份口径, 无需依赖本地 `workspace/excels/{ticker}_*_*.xlsx` 文件)。
 
 ## 关键实现原则
 
@@ -77,15 +77,18 @@ Year 0 = -Initial Equity (负), Year 1-4 = 0 (假设无分红), Year 5 = +Exit E
 
 ## 数据抽取规则
 
-从富途生成的 Excel 中提取 LTM 数据:
-- **Revenue**: `总收入` 或 `营业总收入` (income Excel)
-- **EBIT**: `营业利润` (income Excel)
-- **D&A**: 优先 `折旧摊销及损耗` / `折旧与摊销` / `折旧及摊销` (跨市场兼容 US fid 5059 / A股 fid 3002 / HK fid 5059), Cash Flow 优先, Income 备选
-- **EBITDA**: `EBIT + D&A` (若 D&A 缺失, 以 CapEx × 70% 估算, 会 log warning)
-- **CapEx**: 优先 income `资本开支(CapEx)` (LTM 加工口径, 与 EBITDA/Revenue 对齐), 缺失时回退 cashflow 明细 (`资本开支(CapEx明细)`, 可能为财年快照)
+**数据源**: 通过 `workspace/skills/3-statement-model/scripts/build_3_statement_model.py` 的 `extract_financial_data` 从富途 API (`get_financials_statements`) 拉取三表历史 (年报口径), 与 3-Statement / DCF sheet 共享同一口径. 主要字段:
+
+- **Revenue**: 富途 `总收入` / `营业总收入` (income), 取最新一期 (LTM)
+- **EBIT**: 富途 `营业利润` (income)
+- **D&A**: 优先 CF-side 广口径 `折旧摊销及损耗` / `折旧与摊销` / `折旧及摊销` (跨市场兼容 US fid 5059 / A股 fid 3002 / HK fid 5059), 缺失时回退 IS-side; 三方都缺则以 CapEx × 70% 估算 (行业经验值, 会 log warning)
+- **EBITDA**: `EBIT + D&A` (与 3-Statement CF 加回口径一致)
+- **CapEx**: 3-statement 跨市场 fallback (港股 5071+5073 / 美股 8046+8047 / A股 3043), 缺失时以 5% 营收兜底
 - **Tax Rate**: `所得税 / 税前利润` (若 EBT 为负则用默认 25%)
-- **Debt**: `短期借款与融资租赁负债 + 长期借款`
-- **Revenue Growth**: 最近两年营收增速 (超过 [-20%, +50%] 时收敛至 5%)
+- **Debt**: BS L3 `短期借款与融资租赁 + 长期借款` (与 DCF Gross Debt 口径一致)
+- **NWC%**: 3-statement 的 ΔWC / ΔRevenue 最近 3 年均值 (与 DCF 一致, LBO 场景取绝对值不为负)
+- **Revenue Growth**: 3-statement 最近一年 hist_rev_growth (超过 [-20%, +50%] 时收敛至 5%)
+- **币种**: 3-statement 已完成识别 + FX 换算 (新浪财经优先, Futu FX 兜底)
 
 ## 中英文对照展示
 
@@ -103,11 +106,13 @@ Year 0 = -Initial Equity (负), Year 1-4 = 0 (假设无分红), Year 5 = +Exit E
 ## 验证清单
 
 生成后自动应符合:
-- ✔ Sources = Uses (勾稽应为 0)
+- ✔ Sources = Uses (S&U 勾稽应为 0)
 - ✔ 债务余额不为负 (`MAX(0, ...)` 保护)
 - ✔ Interest 用期初余额 (循环引用断开)
 - ✔ Cash Sweep 遵循 Revolver → TLA → TLB → Notes 优先级
 - ✔ IRR/MOIC 符号正确 (Y0 投入负, Y5 退出正)
+- ✔ Value Creation Bridge 精确勾稽: `Check = (Exit Eq - Init Eq) - (EBITDA Growth + Multiple Expansion + Debt Paydown + Fees Wedge) = 0`
+- ✔ Debt Schedule Credit Metrics 每年有值 (Closing 期 Int Cov / DSCR = "N/A" 因债务未起息)
 - ✔ 敏感性表中心格 ≈ 模型实际 IRR/MOIC (Table 3 精确一致,Table 1/2 因闭式近似略有偏差)
 - ✔ 无 `#REF!` / `#DIV/0!` / `#VALUE!` / `#NAME?`
 

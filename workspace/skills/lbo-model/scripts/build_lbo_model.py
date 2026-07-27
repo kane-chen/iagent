@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-生成包含实时公式的 LBO (Leveraged Buyout) Excel 模型。
+生成包含实时公式的 LBO (Leveraged Buyout) Excel 模型.
 
 结构 (对齐 references/schema.md):
   Tab 1: Sources & Uses      -- 多档债务 + Equity Plug, Sources = Uses
   Tab 2: Operating Model     -- Closing + Year1-5 收入/EBITDA/EBIT/税/FCF
   Tab 3: Debt Schedule       -- Revolver/TLA/TLB/Senior Notes 多档 roll-forward,
-                                Interest=期初余额×利率 (断循环), Cash Sweep 瀑布
+                                Interest=期初余额×利率 (断循环), Cash Sweep 瀑布,
+                                + Credit Metrics (Leverage/Coverage) + Cumulative Paydown
   Tab 4: Returns Analysis    -- Exit EV/Equity, MOIC, IRR (基于现金流系列),
-                                3 张 5×5 敏感性表 (Entry×Exit → IRR /
-                                Entry×Leverage → MOIC / Growth×Margin → IRR)
+                                + Value Creation Bridge (EBITDA Growth / Multiple / Debt Paydown),
+                                + 3 张 5×5 敏感性表
+
+数据源: 富途 API (`get_financials_statements`) 三表历史数据, 复用
+`workspace/skills/3-statement-model/scripts/build_3_statement_model.py` 的抽取逻辑,
+保证 D&A / CapEx / NWC / 币种 / FX / Beta 等口径与 3-Statement + DCF sheet 一致.
 
 字体颜色约定:
   蓝色 0000FF: 硬编码输入
@@ -25,13 +30,12 @@
 """
 import argparse
 import re
-import zipfile
-import tempfile
 import os
+import sys
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 try:
     import openpyxl
@@ -40,6 +44,25 @@ try:
     from openpyxl.comments import Comment
 except ImportError as exc:
     raise ImportError("openpyxl required: pip install openpyxl") from exc
+
+# ==================== 复用 3-statement-model 的数据抽取 ====================
+# 通过 sys.path 加载 sibling skill 的 build_3_statement_model.py, 复用其:
+#   - Futu API 三表抽取 (`_fetch_statement_from_api`)
+#   - 股价/股本获取 (`fetch_market_data_from_futu`)
+#   - 币种识别与 FX (`fetch_fx_rate_from_futu`, 新浪财经优先)
+#   - D&A 双口径 / CapEx 跨市场 fallback / NWC% ΔWC-driven / 市场类型判断
+# 保证 LBO 与 3-Statement + DCF 三个 skill 数据口径完全一致.
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_three_stmt_scripts = os.path.normpath(os.path.join(_this_dir, "..", "..", "3-statement-model", "scripts"))
+if os.path.isdir(_three_stmt_scripts) and _three_stmt_scripts not in sys.path:
+    sys.path.insert(0, _three_stmt_scripts)
+try:
+    from build_3_statement_model import extract_financial_data as _extract_3stmt
+except ImportError as exc:
+    raise ImportError(
+        f"无法导入 3-statement-model 的 extract_financial_data (期望路径: {_three_stmt_scripts}).\n"
+        "LBO skill 依赖 3-statement-model 提供的 Futu API 数据抽取."
+    ) from exc
 
 # ==================== Logging ====================
 logging.basicConfig(
@@ -85,126 +108,98 @@ def add_comment(cell, text: str, width: int = 280, height: int = 90):
 # ==================== Utility ====================
 def safe_divide(n, d): return n / d if d != 0 else 0.0
 
-def _ensure_shared_strings(file_path: Path) -> Tuple[Path, bool]:
-    file_path = Path(file_path)
-    try:
-        with zipfile.ZipFile(str(file_path), 'r') as zf:
-            if 'xl/sharedStrings.xml' in zf.namelist(): return file_path, False
-            ct = zf.read('[Content_Types].xml').decode('utf-8', errors='ignore')
-            if 'sharedStrings' not in ct: return file_path, False
-    except Exception: return file_path, False
-    fd, tmp = tempfile.mkstemp(suffix='.xlsx', dir=str(file_path.parent))
-    os.close(fd)
-    try:
-        with zipfile.ZipFile(str(file_path), 'r') as src, zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as dst:
-            for item in src.namelist(): dst.writestr(item, src.read(item))
-            dst.writestr('xl/sharedStrings.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>')
-        return Path(tmp), True
-    except Exception: return file_path, False
 
-def _read_excel_map(file_path: Path) -> dict:
-    fp, is_tmp = _ensure_shared_strings(file_path)
-    try:
-        wb = openpyxl.load_workbook(str(fp), read_only=True, data_only=True)
-        sheet = wb.active
-        data = {}
-        header_row = 1
-        for r in range(1, 5):
-            vals = [sheet.cell(r, c).value for c in range(1, sheet.max_column + 1) if sheet.cell(r, c).value]
-            if "FY" in " ".join(str(v) for v in vals): header_row = r; break
-        periods = [str(sheet.cell(header_row, c).value) for c in range(3, sheet.max_column + 1)]
-        for r in range(header_row + 1, sheet.max_row + 1):
-            ind = sheet.cell(r, 1).value
-            if not ind: continue
-            ind = str(ind).strip()
-            vals = {}
-            for c, p in enumerate(periods):
-                v = sheet.cell(r, c + 3).value
-                num = 0.0
-                if isinstance(v, (int, float)): num = float(v)
-                elif isinstance(v, str) and v:
-                    cl = v.replace(",", "").replace("-", "").strip()
-                    if cl.replace(".", "", 1).isdigit(): num = float(cl) * (-1 if v.strip().startswith("-") else 1)
-                vals[p] = num
-            data[ind] = vals
-        wb.close()
-        return data
-    finally:
-        if is_tmp and fp.exists(): os.remove(str(fp))
-
-def find_local_file(excels_path: Path, ticker: str, suffix: str) -> Optional[Path]:
-    pattern = re.compile(rf'^.*_{re.escape(ticker)}_{re.escape(suffix)}_.*\.(xlsx|xls)$', re.IGNORECASE)
-    files = [f for f in excels_path.iterdir() if f.is_file() and pattern.match(f.name)]
-    return sorted(files)[-1] if files else None
-
-# ==================== Data Extraction ====================
+# ==================== Data Extraction (via 3-Statement API 抽取) ====================
 def extract_financial_data(workspace: Path, ticker: str) -> dict:
-    """从富途生成的 Excel 中抽取 LTM 财务数据用于 LBO 模型。"""
-    excels_path = workspace / "excels"
-    inc_file = find_local_file(excels_path, ticker, "income")
-    bs_file = find_local_file(excels_path, ticker, "balance")
-    cf_file = find_local_file(excels_path, ticker, "cashflow")
-    inc_data = _read_excel_map(inc_file) if inc_file else {}
-    bs_data = _read_excel_map(bs_file) if bs_file else {}
-    cf_data = _read_excel_map(cf_file) if cf_file else {}
+    """通过 3-statement-model 的 Futu API 抽取拿到全套三表历史数据, 归约为 LBO 需要的 LTM 字段.
 
-    all_fy = set()
-    for d in [inc_data, bs_data, cf_data]:
-        for k, v in d.items(): all_fy.update([p for p in v.keys() if "FY" in p])
-    fy_cols = sorted(list(all_fy), reverse=True)
-    if not fy_cols:
-        raise RuntimeError(f"未找到 {ticker} 的历史财报数据,请先运行 futu-financial-report 生成 Excel")
-    latest_fy = fy_cols[0]
-    prev_fy = fy_cols[1] if len(fy_cols) > 1 else latest_fy
+    3-statement 的 `extract_financial_data` 已完成:
+      - Futu API 三表 (income/balance/cashflow) 分页拉取 (年报口径)
+      - D&A 双口径 (IS-side / CF-side, 广口径含无形/使用权/减值)
+      - CapEx 跨市场 fallback (港股 5071+5073 / 美股 8046+8047 / A股 3043)
+      - NWC% 由 ΔWC / ΔRevenue 最近 3 年均值 (与 DCF sheet 一致)
+      - 币种识别 + FX (新浪财经优先, Futu FX 兜底)
+      - Beta / Rf / ERP (WACC 用, LBO 场景可选)
 
-    def gv(data, keys, col):
-        for k in keys:
-            if k in data and col in data[k]: return data[k][col]
-        return 0.0
+    LBO 只取最新一年 (LTM) 数据 + 若干 hist 序列作为敏感性基准.
+    """
+    d3 = _extract_3stmt(workspace, ticker)
 
-    revenue = gv(inc_data, ["总收入", "营业总收入"], latest_fy)
-    prev_revenue = gv(inc_data, ["总收入", "营业总收入"], prev_fy)
-    ebit = gv(inc_data, ["营业利润"], latest_fy)
-    tax = gv(inc_data, ["所得税"], latest_fy)
-    ebt = gv(inc_data, ["税前利润"], latest_fy)
-    # CapEx: 优先从 income "资本开支(CapEx)" 拉取 (LTM 加工口径, 与 EBITDA/Revenue 对齐);
-    #        缺失时回退到 cashflow (可能是 fiscal-year 快照, 与 LTM 不一致)
-    capex = abs(gv(inc_data, ["资本开支(CapEx)", "资本开支"], latest_fy))
-    if capex == 0.0:
-        capex = abs(gv(cf_data, [
-            "资本开支(CapEx明细)", "资本开支(CapEx)", "资本开支",
-            "固定资产交易净额", "购建固定资产、无形资产和其他长期资产支付的现金",
-        ], latest_fy))
-    # D&A 字段名跨市场兼容: 美股 5059 -> "折旧摊销及损耗"; A股 3002 -> "折旧与摊销"; 港股 5059 -> "折旧及摊销"
-    da = gv(cf_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销"], latest_fy)
+    # LTM (最新一期历史) 索引
+    hist_fys = d3.get("hist_fys", [])
+    if not hist_fys:
+        raise RuntimeError(f"3-statement extract 未返回 {ticker} 历史数据")
+    idx = len(hist_fys) - 1
+
+    revenue = d3["hist_revenue"][idx]
+    # EBIT: 直接读富途"营业利润" (与 IS EBIT 口径一致, 不重复扣 D&A)
+    ebit    = d3["hist_ebit"][idx]
+    # D&A: 用 CF-side 广口径 (含无形/使用权/减值), 与 3-Statement CF/DCF 加回口径一致
+    da      = d3["hist_da"][idx]
     if da == 0.0:
-        # 回退到利润表 (部分公司在 IS 而非 CF 列示)
-        da = gv(inc_data, ["折旧摊销及损耗", "折旧与摊销", "折旧及摊销", "-折旧及摊销"], latest_fy)
+        # 极少数公司富途 CF/IS 都无 D&A 字段, 回退 CapEx × 70% 经验估算 (与 LBO SKILL.md Q&A 一致)
+        capex_latest = d3["hist_capex"][idx]
+        if capex_latest > 0:
+            da = 0.7 * capex_latest
+            logger.warning(f"D&A 缺失, 以 CapEx × 70%% 估算: {da:.2f} (BABA/TCOM/PDD 类正常; "
+                           f"如需精确请查 10-K 手工填 Operating Model!B7)")
 
-    # EBITDA = EBIT + D&A, 若 D&A 缺失则以 CapEx 的 70% 估算
-    if da == 0.0 and capex > 0:
-        da = 0.7 * capex
-        logger.warning("D&A 缺失,以 CapEx × 70%% 估算: %.2f", da)
     ebitda = ebit + da
+    capex  = abs(d3["hist_capex"][idx])
+    if capex == 0.0:
+        capex = 0.05 * revenue   # 兜底: 若富途无 CapEx 明细, 用 5% 营收估算
+        logger.warning(f"CapEx 缺失, 以 5%% 营收估算: {capex:.2f}")
 
-    rev_growth = safe_divide(revenue - prev_revenue, prev_revenue)
-    # 收敛异常增长率,避免极端 base case
-    if rev_growth < -0.20 or rev_growth > 0.50:
-        rev_growth = 0.05
-    tax_rate = safe_divide(tax, ebt) if ebt > 0 else 0.25
-    total_debt = gv(bs_data, ["短期借款与融资租赁负债", "短期借款"], latest_fy) + \
-                 gv(bs_data, ["长期借款", "长期借款与融资租赁负债"], latest_fy)
+    # LTM 增长率: 优先用最近一年 hist_rev_growth
+    rev_growth_series = d3.get("hist_rev_growth", [])
+    rev_growth = rev_growth_series[idx] if idx < len(rev_growth_series) else d3.get("growth", 0.05)
+    if rev_growth is None or rev_growth < -0.20 or rev_growth > 0.50:
+        rev_growth = 0.05   # 极端值收敛 (LBO 场景通常不会假设 >50% 增长)
+
+    tax_rate = d3.get("tax_rate", 0.25)
+    if tax_rate <= 0 or tax_rate > 0.5:
+        tax_rate = 0.25
+
+    # Total Debt = 短期借款 + 长期借款 (与 DCF Gross Debt 一致)
+    # 优先用 BS L3 (ST + LT), 兜底用 hist_debt
+    l3_st  = d3.get("hist_l3_st_debt",  [])
+    l3_lt  = d3.get("hist_l3_lt_debt",  [])
+    if l3_st and l3_lt:
+        total_debt = (l3_st[idx] if idx < len(l3_st) else 0.0) + \
+                     (l3_lt[idx] if idx < len(l3_lt) else 0.0)
+    else:
+        total_debt = d3["hist_debt"][idx] if idx < len(d3.get("hist_debt", [])) else 0.0
+
+    # 现金 (Net Debt bridge 用, 若未来扩展) 与 NWC% (与 DCF/3-Statement 一致)
+    cash_latest = 0.0
+    if "hist_l3_cash_sti" in d3 and idx < len(d3["hist_l3_cash_sti"]):
+        cash_latest = d3["hist_l3_cash_sti"][idx]
+    nwc_pct = d3.get("nwc_pct", 0.05)   # ΔWC/ΔRev 最近 3 年均值, LBO 场景取绝对值
+    # LBO 保守用绝对值 (NWC 占用率, 不为负)
+    nwc_pct_lbo = max(0.0, nwc_pct)
 
     return {
-        "ticker": ticker,
-        "revenue": revenue,
-        "ebit": ebit,
-        "da": da,
-        "ebitda": ebitda,
-        "capex": capex if capex > 0 else 0.05 * revenue,  # 若缺失以 5% 营收估算
-        "rev_growth": rev_growth,
-        "tax_rate": tax_rate,
-        "debt": total_debt,
+        "ticker":            ticker,
+        "revenue":           revenue,
+        "ebit":              ebit,
+        "da":                da,
+        "ebitda":            ebitda,
+        "capex":             capex,
+        "rev_growth":        rev_growth,
+        "tax_rate":          tax_rate,
+        "debt":              total_debt,
+        "cash":              cash_latest,
+        "nwc_pct":           nwc_pct_lbo,
+        # 币种信息 (报表展示用)
+        "reporting_currency": d3.get("reporting_currency") or "N/A",
+        "trading_currency":   d3.get("trading_currency") or "N/A",
+        # 保留 3-statement 全套 hist 序列以支持未来扩展 (如敏感性表更精细的 base)
+        "_hist_fys":        hist_fys,
+        "_hist_revenue":    d3["hist_revenue"],
+        "_hist_ebit":       d3["hist_ebit"],
+        "_hist_da":         d3["hist_da"],
+        "_hist_capex":      d3["hist_capex"],
+        "_hist_ebitda":     [e + a for e, a in zip(d3["hist_ebit"], d3["hist_da"])],
     }
 
 # ==================== LBO Builder ====================
@@ -284,6 +279,14 @@ class LBOBuilder:
             "total_amort":   totals_header_row + 3,    # 31
             "total_sweep":   totals_header_row + 4,    # 32
             "total_ending":  totals_header_row + 5,    # 33
+            "total_paydown": totals_header_row + 6,    # 34: -(Amort + Sweep) = 本年偿还额
+            "cumulative_paydown": totals_header_row + 7,  # 35: 累计偿还
+            # Credit Metrics 分组: 紧接 Totals 之后, 空一行做视觉分隔
+            "credit_header": totals_header_row + 9,        # 37
+            "credit_leverage": totals_header_row + 10,     # 38: Total Debt / EBITDA
+            "credit_interest_cov": totals_header_row + 11, # 39: EBITDA / Interest
+            "credit_dscr": totals_header_row + 12,         # 40: EBITDA / (Interest + Mandatory Amort)
+            "credit_net_leverage": totals_header_row + 13, # 41: Net Debt (End) / EBITDA
         }
 
     # ---------- helpers ----------
@@ -714,6 +717,110 @@ class LBOBuilder:
             add_comment(ws.cell(self.debt_rows["total_ending"], 2+i),
                         f"Total Ending Debt = Σ 各档期末余额\n  = {'+'.join(f'{col}{r}' for r in ending_rows)}")
 
+        # ==== Total Paydown 与 Cumulative Paydown 行 ====
+        # Total Paydown = -(Amort + Sweep), 转换为正值展示 (本年还债金额)
+        # Cumulative Paydown = 累加历年还债, LBO 核心 value driver
+        total_paydown_row = self.debt_rows["total_paydown"]
+        cum_paydown_row   = self.debt_rows["cumulative_paydown"]
+        ws.cell(total_paydown_row, 1, "Total Debt Paydown -- 本年还债合计 (正值)").font = FONT_BOLD
+        ws.cell(cum_paydown_row,   1, "Cumulative Debt Paydown -- 累计还债").font = FONT_BOLD
+        for i in range(0, 6):
+            col = get_column_letter(2+i)
+            # Total Paydown = -(Amort + Sweep) 取正值
+            c = ws.cell(total_paydown_row, 2+i,
+                        f"=-({col}{self.debt_rows['total_amort']}+{col}{self.debt_rows['total_sweep']})")
+            c.font = FONT_BLACK; c.number_format = "#,##0"
+            add_comment(c, "本年还债 = -(强制摊销 + 现金瀑布), 转正值展示")
+            # Cumulative: Y0=0, Y1=Y0_cum + Y1 paydown, ...
+            if i == 0:
+                cc = ws.cell(cum_paydown_row, 2+i, 0); cc.font = FONT_BLACK
+            else:
+                prev = get_column_letter(1+i)
+                cc = ws.cell(cum_paydown_row, 2+i,
+                             f"={prev}{cum_paydown_row}+{col}{total_paydown_row}")
+                cc.font = FONT_BLACK
+                add_comment(cc, f"累计还债 = 前年累计 + 本年还债\n= {prev}{cum_paydown_row} + {col}{total_paydown_row}")
+            cc.number_format = "#,##0"
+            if i == 5:
+                cc.fill = FILL_MEDIUM_BLUE; cc.font = FONT_BOLD
+
+        # ==== Credit Metrics 板块 ====
+        # 引用 Operating Model EBITDA (row=op_rows.ebitda), 提供 LBO 核心 covenant 监测指标
+        credit_header_row = self.debt_rows["credit_header"]
+        c = ws.cell(credit_header_row, 1, "CREDIT METRICS -- 信用指标 (LBO 关键覆盖度)")
+        c.font = FONT_WHITE_BOLD; c.fill = FILL_DARK_BLUE
+        for cc_col in range(1, 8):
+            ws.cell(credit_header_row, cc_col).fill = FILL_DARK_BLUE
+
+        # 4 个 credit metrics 指标标签
+        credit_labels = [
+            (self.debt_rows["credit_leverage"],     "Total Debt / EBITDA (x) -- 总债务/EBITDA (杠杆倍数)"),
+            (self.debt_rows["credit_net_leverage"], "Net Debt / EBITDA (x) -- 净债务/EBITDA (净杠杆倍数)"),
+            (self.debt_rows["credit_interest_cov"],"EBITDA / Interest (x) -- 利息覆盖倍数"),
+            (self.debt_rows["credit_dscr"],        "DSCR: EBITDA / (Interest + Amort) (x) -- 债务偿付覆盖倍数"),
+        ]
+        for r, label in credit_labels:
+            ws.cell(r, 1, label).font = FONT_BOLD
+
+        ebitda_row = self.op_rows["ebitda"]
+        # 每年计算 (col B=Closing 期无 LBO 结构 → 展示 pre-LBO 状态; C..G = Year 1..5)
+        # Closing (i==0) 期 Total Beg/Ending Debt = 初始融资规模 (Sources & Uses 的档位和), Interest=0/Amort=0,
+        # 因此 Interest Cov / DSCR 需用 N/A 展示避免 0 值误导
+        for i in range(0, 6):
+            col = get_column_letter(2+i)
+            ebitda_ref = f"'Operating Model'!{col}{ebitda_row}"
+            beg_ref    = f"{col}{self.debt_rows['total_beg']}"
+            end_ref    = f"{col}{self.debt_rows['total_ending']}"
+            int_ref    = f"{col}{self.debt_rows['total_interest']}"
+            # amort_ref: Amort is negative, so use -amort for absolute value
+            amort_ref  = f"{col}{self.debt_rows['total_amort']}"
+
+            # 1) Leverage: Total Ending Debt / EBITDA (期末杠杆倍数, 更能反映动态变化)
+            c = ws.cell(self.debt_rows["credit_leverage"], 2+i,
+                        f"=IFERROR({end_ref}/{ebitda_ref},0)")
+            c.font = FONT_BLACK; c.number_format = '0.00"x"'
+            add_comment(c, f"Leverage = Total Ending Debt / EBITDA\n  = {end_ref} / {ebitda_ref}\n"
+                           "标准 LBO 交易关闭时通常 5-7x, 持有期 deleveraging 到 <3x 是理想退出条件")
+            if i == 0:
+                # Closing 期展示 Initial LBO Leverage (期末=期初=Sources & Uses 初始债务规模)
+                add_comment(c, "Closing 期: Initial LBO Leverage (交易关闭日债务 / LTM EBITDA)\n"
+                               "  应等于 Leverage% × Entry Multiple (例如 0.5 × 9x = 4.5x)")
+
+            # 2) Net Leverage: (Debt End - Cash to BS) / EBITDA
+            #    这里简化: 假设持有期无余额 Cash (LBO 结构下 excess cash 被 sweep), Net Leverage ≈ Leverage
+            #    保守起见与 Leverage 一致 (可用户手工覆盖)
+            c = ws.cell(self.debt_rows["credit_net_leverage"], 2+i,
+                        f"=IFERROR({end_ref}/{ebitda_ref},0)")
+            c.font = FONT_BLACK; c.number_format = '0.00"x"'
+            add_comment(c, "Net Leverage: LBO 场景下 excess cash 被 sweep, 通常 ≈ Total Leverage")
+
+            # 3) Interest Coverage: EBITDA / Interest
+            #    Closing 期 Interest=0 → 用 "N/A" 展示 (债务尚未起息)
+            if i == 0:
+                c = ws.cell(self.debt_rows["credit_interest_cov"], 2+i, "N/A")
+                c.font = FONT_BLACK; c.alignment = Alignment(horizontal="right")
+                add_comment(c, "Closing 期利息为 0 (债务尚未起息), Interest Coverage 无意义")
+            else:
+                c = ws.cell(self.debt_rows["credit_interest_cov"], 2+i,
+                            f"=IF({int_ref}=0,NA(),{ebitda_ref}/{int_ref})")
+                c.font = FONT_BLACK; c.number_format = '0.00"x"'
+                add_comment(c, f"Interest Coverage = EBITDA / Interest\n  = {ebitda_ref} / {int_ref}\n"
+                               "标准 LBO covenant: > 2.0x 是最低要求, > 3.0x 较健康")
+
+            # 4) DSCR: EBITDA / (Interest + Mandatory Amort abs); Closing 期为 N/A
+            if i == 0:
+                c = ws.cell(self.debt_rows["credit_dscr"], 2+i, "N/A")
+                c.font = FONT_BLACK; c.alignment = Alignment(horizontal="right")
+                add_comment(c, "Closing 期 Debt Service 为 0, DSCR 无意义")
+            else:
+                #    amort 存为负值, 用 -amort 取正
+                c = ws.cell(self.debt_rows["credit_dscr"], 2+i,
+                            f"=IF(({int_ref}-{amort_ref})=0,NA(),{ebitda_ref}/({int_ref}-{amort_ref}))")
+                c.font = FONT_BLACK; c.number_format = '0.00"x"'
+                add_comment(c, f"DSCR = EBITDA / (Interest + Mandatory Amort 绝对值)\n"
+                               f"  = {ebitda_ref} / ({int_ref} - {amort_ref})\n"
+                               "标准 LBO covenant: > 1.15x 最低, > 1.5x 较健康")
+
         # 列宽
         ws.column_dimensions["A"].width = 54
         for i in range(2, 8):
@@ -777,45 +884,138 @@ class LBOBuilder:
         c = ws.cell(16, 2, "=IRR(B13:G13)"); c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = "0.0%"
         add_comment(c, "计算公式:\n  IRR = IRR(现金流系列 B13:G13)\n  Year 0 投入(负), Year 5 退出(正)")
 
+        # ==================== Value Creation Bridge (rows 18-25) ====================
+        # LBO 投资价值创造归因: 拆解 Exit Equity - Initial Equity 到三个 driver
+        #   1) EBITDA Growth Value  = (Y5 EBITDA - LTM EBITDA) × Entry Multiple
+        #      解释: 假设倍数不变, EBITDA 增长带来的企业价值增长, 全部归属股权 (债务已锁定)
+        #   2) Multiple Expansion   = Y5 EBITDA × (Exit Mult - Entry Mult)
+        #      解释: 假设 EBITDA 不变, 倍数扩张带来的额外价值 (市场情绪 / 行业估值改善)
+        #   3) Debt Paydown Value   = Initial Debt - Exit Net Debt
+        #      解释: 用 FCF 还债, 转移企业价值给股东 (deleveraging 是 LBO 核心 alpha)
+        # Total: 三项之和 = Exit Equity - Initial Equity (勾稽应精确)
+        c = ws.cell(18, 1, "VALUE CREATION BRIDGE -- 价值创造归因 (MOIC 分解)")
+        c.font = FONT_WHITE_BOLD; c.fill = FILL_DARK_BLUE
+        for col in range(1, 9):
+            ws.cell(18, col).fill = FILL_DARK_BLUE
+
+        # LTM EBITDA & Y5 EBITDA & Initial Debt & Exit Debt refs
+        ltm_ebitda_ref = f"'Sources & Uses'!B{self.su_rows['ebitda']}"
+        y5_ebitda_ref  = f"'Operating Model'!G{self.op_rows['ebitda']}"
+        entry_mult_ref = f"'Sources & Uses'!B{self.su_rows['entry_multiple']}"
+        exit_mult_ref  = "B6"
+        # Initial Debt = Σ 所有档 (含 Revolver)
+        init_debt_ref  = (f"SUM('Sources & Uses'!B{self.su_rows['tranche_first']}:"
+                         f"B{self.su_rows['tranche_last']})")
+        exit_debt_ref  = f"'Debt Schedule'!G{self.debt_rows['total_ending']}"
+
+        # Row 19: EBITDA Growth
+        ws.cell(19, 1, "(+) EBITDA Growth -- EBITDA 增长贡献")
+        c = ws.cell(19, 2, f"=({y5_ebitda_ref}-{ltm_ebitda_ref})*{entry_mult_ref}")
+        c.font = FONT_BLACK; c.number_format = "#,##0"
+        add_comment(c, f"EBITDA Growth Value:\n  = (Y5 EBITDA - LTM EBITDA) × Entry Multiple\n"
+                       f"  = ({y5_ebitda_ref} - {ltm_ebitda_ref}) × {entry_mult_ref}\n"
+                       "\n代表: 假设倍数不变, EBITDA 增长带来的企业价值增长 (全部归属股权)")
+
+        # Row 20: Multiple Expansion
+        ws.cell(20, 1, "(+) Multiple Expansion -- 倍数扩张贡献")
+        c = ws.cell(20, 2, f"={y5_ebitda_ref}*({exit_mult_ref}-{entry_mult_ref})")
+        c.font = FONT_BLACK; c.number_format = "#,##0"
+        add_comment(c, f"Multiple Expansion Value:\n  = Y5 EBITDA × (Exit Multiple - Entry Multiple)\n"
+                       f"  = {y5_ebitda_ref} × ({exit_mult_ref} - {entry_mult_ref})\n"
+                       "\n代表: 假设 EBITDA 不变, 退出倍数高于入场时带来的额外估值 (可正可负)")
+
+        # Row 21: Debt Paydown
+        ws.cell(21, 1, "(+) Debt Paydown -- 债务偿还贡献")
+        c = ws.cell(21, 2, f"={init_debt_ref}-{exit_debt_ref}")
+        c.font = FONT_BLACK; c.number_format = "#,##0"
+        add_comment(c, f"Debt Paydown Value:\n  = Initial Total Debt - Exit Net Debt\n"
+                       f"  = {init_debt_ref} - {exit_debt_ref}\n"
+                       "\n代表: 持有期用 FCF 还债, 企业价值从债权人转移到股权 (LBO 核心 alpha)")
+
+        # Row 22: (-) Fees & Structural Wedge -- Transaction/Financing Fees + Cash-to-BS 缺口
+        # 说明: Initial Equity = EV + Fees + CashToBS - Debt (Plug 平衡项), 但前 3 个 driver 未包含 Fees/CashToBS,
+        # 因此需要加一项负向 driver 使 bridge 与 (Exit Equity - Initial Equity) 精确勾稽.
+        ws.cell(22, 1, "(-) Fees & Structural Wedge -- 减: 交易费/融资费/BS 现金缺口")
+        trans_fee_ref = f"('Sources & Uses'!B{self.su_rows['ev']}*'Sources & Uses'!B7)"      # EV × TransFee%
+        fin_fee_ref   = f"({init_debt_ref}*'Sources & Uses'!B8)"                              # Debt × FinFee%
+        cash_bs_ref   = f"('Sources & Uses'!B{self.su_rows['ev']}*'Sources & Uses'!B9)"      # EV × CashToBS%
+        c = ws.cell(22, 2, f"=-({trans_fee_ref}+{fin_fee_ref}+{cash_bs_ref})")
+        c.font = FONT_BLACK; c.number_format = "#,##0;(#,##0)"
+        add_comment(c, "Fees & Structural Wedge (负向 driver):\n"
+                       "  = -(Transaction Fees + Financing Fees + Cash to BS)\n"
+                       "  = -(EV × TransFee% + InitDebt × FinFee% + EV × CashBS%)\n\n"
+                       "解释: Initial Equity 里包含了这三项 (Sponsor 出资承担), 但 Exit 时不回收.\n"
+                       "  Fees 是永久性沉没成本; Cash-to-BS 在 gross-debt exit 视角下也未回收.")
+
+        # Row 23: Total Value Creation (= sum of 4 drivers)
+        ws.cell(23, 1, "Total Value Creation -- 价值创造合计").font = FONT_BOLD
+        c = ws.cell(23, 2, "=B19+B20+B21+B22"); c.font = FONT_BOLD; c.fill = FILL_MEDIUM_BLUE; c.number_format = "#,##0"
+        add_comment(c, "Total Value Creation = EBITDA Growth + Multiple Expansion + Debt Paydown + Fees Wedge\n"
+                       "  = B19 + B20 + B21 + B22\n\n"
+                       "勾稽应精确等于 Exit Equity - Initial Equity (B9 - B4)")
+
+        # Row 24: Check row (Exit Equity - Initial Equity vs Bridge Total, 应=0)
+        ws.cell(24, 1, "  Check: Exit Equity - Initial Equity -- 勾稽 (应=0)")
+        c = ws.cell(24, 2, "=B9-B4-B23"); c.font = FONT_BLACK
+        c.number_format = "[Red][<>0.5]#,##0.00;[Red][<>0.5](#,##0.00);0"
+        add_comment(c, "勾稽差 = (Exit Equity - Initial Equity) - Total Value Creation\n"
+                       "  = (B9 - B4) - B23\n\n"
+                       "应精确为 0 (含 Fees Wedge 校正后). 非零 (阈值 0.5) 表示 bridge 计算有误.")
+
+        # Row 25-27: 归因占比 (% of Total, 以绝对值和为分母便于阅读)
+        ws.cell(25, 1, "  % EBITDA Growth Contribution -- EBITDA 增长占比")
+        c = ws.cell(25, 2, "=IFERROR(B19/B23,0)"); c.font = FONT_BLACK; c.number_format = "0.0%"
+        ws.cell(26, 1, "  % Multiple Expansion Contribution -- 倍数扩张占比")
+        c = ws.cell(26, 2, "=IFERROR(B20/B23,0)"); c.font = FONT_BLACK; c.number_format = "0.0%"
+        ws.cell(27, 1, "  % Debt Paydown Contribution -- 债务偿还占比")
+        c = ws.cell(27, 2, "=IFERROR(B21/B23,0)"); c.font = FONT_BLACK; c.number_format = "0.0%"
+
         # ---- 敏感性表基础参数 (用于公式引用) ----
-        # 保存基准值供敏感性表使用
-        ws.cell(18, 1, "SENSITIVITY BASE PARAMETERS -- 敏感性表基准参数").font = FONT_BOLD; ws.cell(18, 1).fill = FILL_LIGHT_BLUE
-        # 用于 Table 1/2/3 的基准变量
+        # 保存基准值供敏感性表使用 (从 row 29 开始, 空一行分隔; 由 self._sens_base_row 提供动态行号)
+        _sens_base_start = 29
+        ws.cell(_sens_base_start, 1, "SENSITIVITY BASE PARAMETERS -- 敏感性表基准参数").font = FONT_BOLD
+        ws.cell(_sens_base_start, 1).fill = FILL_LIGHT_BLUE
+        # 用于 Table 1/2/3 的基准变量 (记住每行地址, 供敏感性表引用)
         _base_rows = [
-            (19, "Base LTM EBITDA -- 基准LTM EBITDA",
-                 f"='Sources & Uses'!B{self.su_rows['ebitda']}", "#,##0", FONT_GREEN),
-            (20, "Base Entry Multiple -- 基准入场倍数",
-                 f"='Sources & Uses'!B{self.su_rows['entry_multiple']}", '0.0"x"', FONT_GREEN),
-            (21, "Base Exit Multiple -- 基准退出倍数",
-                 "=B6", '0.0"x"', FONT_PURPLE),
-            (22, "Base Leverage Ratio -- 基准杠杆率",
-                 "='Sources & Uses'!B10", "0.0%", FONT_GREEN),
-            (23, "Base Revenue Growth -- 基准营收增长率",
-                 self.rev_growth, "0.0%", FONT_BLUE),
-            (24, "Base EBITDA Margin -- 基准EBITDA利润率",
-                 self.ebitda_margin, "0.0%", FONT_BLUE),
-            (25, "Base LTM Revenue -- 基准LTM营业收入",
-                 f"='Operating Model'!B{self.op_rows['revenue']}", "#,##0", FONT_GREEN),
-            (26, "Base Total FCF over Hold -- 基准持有期总FCF (以债务偿还额近似)",
-                 f"=SUM('Sources & Uses'!B{self.su_rows['tranche_first']}:B{self.su_rows['tranche_last']})-'Debt Schedule'!G{self.debt_rows['total_ending']}",
-                 "#,##0", FONT_BLACK),
-            (27, "Base Net Debt at Exit -- 基准退出年净债务",
-                 "=B8", "#,##0", FONT_PURPLE),
+            ("ebitda",       "Base LTM EBITDA -- 基准LTM EBITDA",
+                             f"='Sources & Uses'!B{self.su_rows['ebitda']}", "#,##0", FONT_GREEN),
+            ("entry_mult",   "Base Entry Multiple -- 基准入场倍数",
+                             f"='Sources & Uses'!B{self.su_rows['entry_multiple']}", '0.0"x"', FONT_GREEN),
+            ("exit_mult",    "Base Exit Multiple -- 基准退出倍数",
+                             "=B6", '0.0"x"', FONT_PURPLE),
+            ("leverage",     "Base Leverage Ratio -- 基准杠杆率",
+                             "='Sources & Uses'!B10", "0.0%", FONT_GREEN),
+            ("rev_growth",   "Base Revenue Growth -- 基准营收增长率",
+                             self.rev_growth, "0.0%", FONT_BLUE),
+            ("ebitda_margin","Base EBITDA Margin -- 基准EBITDA利润率",
+                             self.ebitda_margin, "0.0%", FONT_BLUE),
+            ("ltm_revenue",  "Base LTM Revenue -- 基准LTM营业收入",
+                             f"='Operating Model'!B{self.op_rows['revenue']}", "#,##0", FONT_GREEN),
+            ("total_fcf",    "Base Total FCF over Hold -- 基准持有期总FCF (以债务偿还额近似)",
+                             f"={init_debt_ref}-{exit_debt_ref}", "#,##0", FONT_BLACK),
+            ("net_debt_exit","Base Net Debt at Exit -- 基准退出年净债务",
+                             "=B8", "#,##0", FONT_PURPLE),
         ]
-        for r, label, val, fmt, font in _base_rows:
+        self._sens_base_row = {}    # key → row number, 供敏感性表公式引用
+        for i, (key, label, val, fmt, font) in enumerate(_base_rows):
+            r = _sens_base_start + 1 + i
+            self._sens_base_row[key] = r
             ws.cell(r, 1, label)
             c = ws.cell(r, 2, val); c.font = font; c.number_format = fmt
             if font is FONT_BLUE:
                 c.fill = FILL_INPUT_GREY
 
-        # ---- 敏感性表 1: Entry × Exit Multiple → IRR (row 30-38) ----
-        self._sensitivity_table_1_entry_exit_irr(ws, start_row=30)
+        # ---- 敏感性表 1: Entry × Exit Multiple → IRR ----
+        _t1_start = self._sens_base_row["net_debt_exit"] + 3   # 空 2 行后
+        self._sensitivity_table_1_entry_exit_irr(ws, start_row=_t1_start)
 
-        # ---- 敏感性表 2: Entry × Leverage → MOIC (row 42-50) ----
-        self._sensitivity_table_2_entry_leverage_moic(ws, start_row=42)
+        # ---- 敏感性表 2: Entry × Leverage → MOIC ----
+        _t2_start = _t1_start + 12
+        self._sensitivity_table_2_entry_leverage_moic(ws, start_row=_t2_start)
 
-        # ---- 敏感性表 3: Growth × Margin → IRR (row 54-62) ----
-        self._sensitivity_table_3_growth_margin_irr(ws, start_row=54)
+        # ---- 敏感性表 3: Growth × Margin → IRR ----
+        _t3_start = _t2_start + 12
+        self._sensitivity_table_3_growth_margin_irr(ws, start_row=_t3_start)
 
         # 列宽
         ws.column_dimensions["A"].width = 58
@@ -873,11 +1073,16 @@ class LBOBuilder:
                 c = 3 + j
                 entry = f"$B{r}"
                 exit_m = f"{get_column_letter(c)}${start_row + 2}"
-                purchase = f"({entry}*$B$19)"                # EntryMult × Base LTM EBITDA
-                debt0 = f"($B$22*{purchase})"                # Leverage_base × Purchase
+                # 动态引用 Sensitivity Base Parameters 区 (由 self._sens_base_row 提供行号)
+                ebitda_ltm_ref = f"$B${self._sens_base_row['ebitda']}"        # 基准 LTM EBITDA
+                exit_ebitda_ref = "$B$5"                                       # Y5 EBITDA (Returns 主计算区)
+                leverage_ref   = f"$B${self._sens_base_row['leverage']}"      # 基准杠杆率
+                total_fcf_ref  = f"$B${self._sens_base_row['total_fcf']}"     # 基准持有期总还债额
+                purchase = f"({entry}*{ebitda_ltm_ref})"                       # EntryMult × Base LTM EBITDA
+                debt0 = f"({leverage_ref}*{purchase})"                         # Leverage_base × Purchase
                 init_eq = f"({purchase}-{debt0})"
-                net_debt_exit = f"MAX(0,{debt0}-$B$26)"      # Debt0 - Base FCF over hold
-                exit_ev = f"({exit_m}*$B$5)"                 # ExitMult × Base Exit EBITDA
+                net_debt_exit = f"MAX(0,{debt0}-{total_fcf_ref})"             # Debt0 - Base FCF over hold
+                exit_ev = f"({exit_m}*{exit_ebitda_ref})"                     # ExitMult × Base Exit EBITDA
                 exit_eq = f"({exit_ev}-{net_debt_exit})"
                 moic = f"IFERROR(({exit_eq})/{init_eq},0)"
                 formula = f"=IFERROR(IF({moic}>0,({moic})^(1/5)-1,-1),0)"
@@ -922,12 +1127,17 @@ class LBOBuilder:
                 c = 3 + j
                 entry = f"$B{r}"
                 lev = f"{get_column_letter(c)}${start_row + 2}"
-                purchase = f"({entry}*$B$19)"
+                # 动态引用 Sensitivity Base Parameters
+                ebitda_ltm_ref  = f"$B${self._sens_base_row['ebitda']}"
+                exit_ebitda_ref = "$B$5"
+                exit_mult_ref   = f"$B${self._sens_base_row['exit_mult']}"
+                total_fcf_ref   = f"$B${self._sens_base_row['total_fcf']}"
+                purchase = f"({entry}*{ebitda_ltm_ref})"
                 debt0 = f"({lev}*{purchase})"
                 init_eq = f"({purchase}-{debt0})"
                 # NetDebtExit = MAX(0, Debt0 - Base_Total_FCF)
-                net_debt_exit = f"MAX(0,{debt0}-$B$26)"
-                exit_ev = f"($B$21*$B$5)"
+                net_debt_exit = f"MAX(0,{debt0}-{total_fcf_ref})"
+                exit_ev = f"({exit_mult_ref}*{exit_ebitda_ref})"
                 exit_eq = f"({exit_ev}-{net_debt_exit})"
                 moic = f"IFERROR(({exit_eq})/{init_eq},0)"
                 cell = ws.cell(r, c, f"={moic}"); cell.font = FONT_BLACK; cell.number_format = '0.00"x"'
@@ -969,10 +1179,14 @@ class LBOBuilder:
                 c = 3 + j
                 growth = f"$B{r}"
                 margin = f"{get_column_letter(c)}${start_row + 2}"
-                y5_rev = f"($B$25*(1+{growth})^5)"
+                # 动态引用 Sensitivity Base Parameters
+                ltm_rev_ref     = f"$B${self._sens_base_row['ltm_revenue']}"
+                exit_mult_ref   = f"$B${self._sens_base_row['exit_mult']}"
+                net_debt_exit_ref = f"$B${self._sens_base_row['net_debt_exit']}"
+                y5_rev = f"({ltm_rev_ref}*(1+{growth})^5)"
                 y5_ebitda = f"({y5_rev}*{margin})"
-                exit_ev = f"($B$21*{y5_ebitda})"
-                exit_eq = f"({exit_ev}-$B$27)"
+                exit_ev = f"({exit_mult_ref}*{y5_ebitda})"
+                exit_eq = f"({exit_ev}-{net_debt_exit_ref})"
                 init_eq = "$B$4"
                 moic = f"IFERROR(({exit_eq})/{init_eq},0)"
                 # 用 IFERROR 保护, 若 MOIC 为负则显示 -100%
