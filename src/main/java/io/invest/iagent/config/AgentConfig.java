@@ -25,7 +25,10 @@ import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
 import io.agentscope.harness.agent.workspace.LocalFsMode;
 import io.invest.iagent.hook.AuditLoggingMiddleware;
+import io.invest.iagent.rag.RagService;
 import io.invest.iagent.service.filingrag.FilingRagService;
+import io.invest.iagent.tools.filingrag.FilingQaTool;
+import io.invest.iagent.tools.rag.RagQaTool;
 import io.invest.iagent.tools.web.WebSearchTool;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +52,9 @@ public class AgentConfig {
 
     @Autowired(required = false)
     private FilingRagService filingRagService;
+
+    @Autowired(required = false)
+    private RagService ragService;
 
     @PostConstruct
     public void init() {
@@ -92,9 +98,12 @@ public class AgentConfig {
                                         .build()
                         ).build());
         toolkit.registerTool(new WebSearchTool());
-//        if (filingRagService != null) {
-//            toolkit.registerTool(new FilingQaTool(filingRagService));
-//        }
+        if (filingRagService != null) {
+            toolkit.registerTool(new FilingQaTool(filingRagService));
+        }
+        if (ragService != null) {
+            toolkit.registerTool(new RagQaTool(ragService));
+        }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
         toolkit.registerTool(new ReadFileTool());
@@ -165,6 +174,9 @@ public class AgentConfig {
                 .build();
         Toolkit toolkit = new Toolkit(ToolkitConfig.builder().executionConfig(toolExecutionConfig).build());
         toolkit.registerTool(new WebSearchTool());
+        if (ragService != null) {
+            toolkit.registerTool(new RagQaTool(ragService));
+        }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
         toolkit.registerTool(new ReadFileTool());

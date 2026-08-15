@@ -102,7 +102,7 @@
 ### 最终检查清单（发布前）
 
 #### 自动化检查
-```python
+```code
 // 数据一致性检查
 assert check_cross_table_consistency(balance_sheet, income_statement, cash_flow)
 

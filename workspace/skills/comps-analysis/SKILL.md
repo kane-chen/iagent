@@ -1,52 +1,235 @@
 ---
 name: comps-analysis
-description: |
-  Build institutional-grade comparable company analyses with operating metrics, valuation multiples, and statistical benchmarking. This skill uses a hybrid data acquisition strategy: prioritizing local Excel files for operating metrics, and falling back to web search (Eastmoney, Futu, etc.) for missing data or market valuation metrics.
+description: 构建机构级可比公司分析，涵盖经营指标、估值倍数与统计基准，输出为 Excel/电子表格格式。
 ---
 
-## ⚠️ CRITICAL: Data Acquisition Strategy (READ FIRST)
+# 可比公司分析
 
-**ALWAYS follow this data source hierarchy:**
+## ⚠️ 数据源优先级（必读）
 
-1. **FIRST: Local Excel Extraction (Priority 1)**
-    - Search the `workspace/excels/` directory for files matching `{ticker}_{type}_*.xlsx` (e.g., `US_MSFT_income_*.xlsx`, `US_MSFT_balance_*.xlsx`).
-    - Extract operating metrics (Revenue, EBIT, Net Income, etc.) directly from these local files.
-    - This is the primary source for historical financial data.
+1. **首选：本地数据源** — 调用scripts/extract_values.py 获取财务数据
+2. **禁止：** MCP 可用时不得使用网络搜索
+3. **备用：** 仅 MCP 不可用时，使用 Bloomberg Terminal、SEC EDGAR 等
+4. **永远不以网络搜索为主数据源** — 缺乏准确性、审计追溯与可靠性
 
-2. **SECOND: Web Search for Missing Data (Priority 2)**
-    - If specific data points are missing from local files (e.g., Market Cap, Enterprise Value, Beta, or recent quarterly data), use `web_search`.
-    - Target reliable open financial APIs or websites: Eastmoney (东方财富), Futu (富途), Xueqiu (雪球), or Yahoo Finance.
-    - Extract the required figures and prepare to input them into the model.
+---
 
-3. **MANDATORY: Data Source Annotation**
-    - **Every hardcoded input cell MUST have a cell comment (批注) citing its exact source.**
-    - For local Excel data: `"Source: Local file US_MSFT_income_*.xlsx, Row '总收入'"`
-    - For web search data: `"Source: Futu (富途) - MSFT Market Cap, accessed 2024-10-02"`
-    - No hardcoded value is allowed without a traceable source comment.
+## 总体原则
 
-## ⚠️ CRITICAL: Formulas Over Hardcodes
+**"先搭结构，再让数据讲故事。"**
 
-### Environment & Execution
-- **If generating a standalone `.xlsx` file:** Use Python/openpyxl. Write `cell.value = "=E7/C7"` (formula string).
-- The `build_comps_model.py` script handles the layout, local Excel parsing, and formula generation.
-- After running the script, Claude must manually inspect the output Excel, use `web_search` to fill any missing market data cells (marked with "TODO: Web Search" comments), and add appropriate source citations.
+标题先行 → 输入干净数据 → 构建透明公式 → 统计自动呈现。好 comps 应让没参与构建的人也能一目了然。
 
-### Core Principles
-* **Statistical Rigor:** Always include a statistics block (Maximum, 75th Percentile, Median, 25th Percentile, Minimum) for comparable metrics.
-* **Cross-Reference:** Valuation multiples MUST reference the operating metrics section. Never input the same raw data twice.
+---
 
-## WORKFLOW & QUALITY CHECKS
+## ⚠️ 公式优于硬编码 + 逐步验证
 
-1. **Identify Peer Group:** Determine the list of comparable company tickers.
-2. **Run Script:** Execute `python scripts/build_comps_model.py --tickers MSFT,GOOGL,AMZN --workspace /path/to/workspace`.
-    - The script extracts local data, builds formulas, and leaves comments for missing data.
-3. **Web Search Fill:** Open the generated Excel. For cells with "TODO: Web Search" comments, perform web searches on Eastmoney/Futu to find the values.
-4. **Input & Cite:** Enter the web-sourced values in blue font and update the cell comment with the exact web source URL and date.
-5. **Sanity Checks:** Verify margins, multiples, and growth-multiple correlations.
+**公式规则：**
+- 所有派生值（利润率、倍数、统计）**必须是 Excel 公式引用输入单元格**，绝不粘贴预计算结果
+- 仅原始输入数据可硬编码，且每个硬编码单元格**必须附带批注注明来源**
+- 目的：输入变动时模型自动更新，硬编码利润率是隐性 bug
 
-## REFERENCES
+**逐步确认：**
+- 结构搭建后 → 展示标题布局，确认后再填数据
+- 原始数据输入后 → 展示输入区块，确认来源与期间后再建公式
+- 经营指标公式完成后 → 展示计算利润率，合理性检查后再做估值
+- 估值倍数完成后 → 确认倍数合理后再加统计
+- **禁止一次性建完整个表再呈现**
 
-- **[references/formulas.md](references/formulas.md):** Detailed formula references for statistics and financial calculations.
-- **[references/formatting.md](references/formatting.md):** Visual convention standards and color palettes.
-- **[references/data_sources.md](references/data_sources.md):** Guidelines on extracting data from local files and web sources.
-- **[references/industry_metrics.md](references/industry_metrics.md):** Industry-specific metric selection guides (SaaS, Manufacturing, Financial Services, etc.).
+---
+
+## 第1节：文档结构与标题
+
+### 标题区（第1-3行）
+```excel 
+Row 1: [分析标题] — 可比公司分析
+Row 2: [公司名(Ticker)] • [公司2(Ticker2)] • [公司3(Ticker3)]
+Row 3: 截至 [期间] | 金额单位 [USD 百万/十亿]，每股金额与比率除外
+```
+
+
+### 视觉规范（可选，用户模板/偏好优先覆盖）
+
+**字体：** Times New Roman，数据11pt，标题12pt，加粗用于节标题与公司名。
+
+**配色（3-4色即可，禁止引入绿橙红等多色）：**
+- 节标题：深蓝 `#1F4E79` 背景 + 白色加粗文字，全行着色
+- 列标题：浅蓝 `#D9E1F2` 背景 + 黑色加粗居中
+- 数据行：白底，公式黑色文字，输入蓝色文字
+- 统计行：浅灰 `#F2F2F2` 背景 + 黑色文字左对齐标签
+
+**精度：** 百分比1位(12.3%)、倍数1位(13.5x)、金额无小数千分位(69,632)。
+**边框：** 无边框。对齐：指标居中。列宽均等，行高一致。
+
+---
+
+## 第2节：经营指标与财务数据
+
+### 核心列
+1. Company — 统一格式公司名
+2. Revenue — 规模指标（LTM/季度/年度，视语境而定）
+3. Revenue Growth — YoY 变动百分比
+4. Gross Profit — 收入减 COGS
+5. Gross Margin — GP/Revenue
+6. EBITDA — 息税折摊前利润
+7. EBITDA Margin — EBITDA/Revenue
+
+### 可选列（按行业/目的取舍）
+- FCF / FCF Margin — 资本密集或 SaaS
+- Net Income / Net Margin — 成熟盈利公司
+- Operating Income — D&A 差异大的行业
+- CapEx 指标 — 资产密集行业
+- Rule of 40 — SaaS（增长% + 利润率%）
+- FCF Conversion — 盈利质量分析
+
+### 公式示例（以第7行为例）
+```excel
+Gross Margin (F7): =E7/C7
+EBITDA Margin (H7): =G7/C7
+FCF Margin: =[FCF]/[Revenue]
+Rule of 40: =[Growth %]+[FCF Margin %]
+```
+**黄金法则**： 所有比率 = [某指标] / [同行数据]，保持简单。
+
+### 统计区
+**可比指标必须有统计**（增长率%、利润率%、倍数、EPS、Beta）。
+**规模指标不做统计**（Revenue 绝对值、Market Cap、EV — 不同体量不可比）。
+```excel
+[空一行分隔]
+Maximum:   =MAX(B7:B9)
+75th Pct:  =QUARTILE(B7:B9,3)
+Median:    =MEDIAN(B7:B9)
+25th Pct:  =QUARTILE(B7:B9,1)
+Minimum:   =MIN(B7:B9)
+```
+不加"行业统计"标题行，仅空一行分隔。
+
+## 第3节：估值倍数与投资指标
+### 核心估值列
+- Company — 同经营指标区顺序
+- Market Cap — 当前市值
+- Enterprise Value — 市值 ± 净债务/现金
+- EV/Revenue — 每美元收入定价
+- EV/EBITDA — 每美元盈利定价
+- P/E Ratio — 价格相对净收益
+### 可选估值列
+- FCF Yield — FCF/Market Cap
+- PEG Ratio — P/E/增长率
+- Price/Book — 资产密集业务
+- ROE/ROA — 盈利能力比较
+- CAGR — 历史增速趋势
+- Asset Turnover — 运营效率
+- Debt/Equity — 资本结构
+原则： 包含3-5个核心倍数，不要堆砌所有指标。
+
+### 公式示例
+```excel
+EV/Revenue: =[EV]/[LTM Revenue]
+EV/EBITDA: =[EV]/[LTM EBITDA]
+P/E: =[Market Cap]/[Net Income]
+FCF Yield: =[LTM FCF]/[Market Cap]
+PEG: =[P/E]/[Growth Rate %]
+```
+### 交叉引用规则（关键）
+估值倍数**必须引用经营指标区**的单元格，同一原始数据绝不能输入两次。若 Revenue 在 C7，EV/Revenue 公式必须引用 C7。
+统计区结构同经营指标区：Max/75th/Median/25th/Min，空一行分隔，不加额外标题行。
+
+## 第4节：注释与方法论
+### 必含内容：
+
+#### 数据来源与质量：
+- 数据出处（S&P Kensho MCP / FactSet MCP / Bloomberg / SEC filings）
+- 覆盖期间（Q4 2024, 审计数据）
+- 验证方式（与10-K/10-Q交叉核对）
+#### 关键定义：
+- EBITDA 计算方法（毛利+D&A 或 营业利润+D&A）
+- FCF 公式（经营现金流 - CapEx）
+- 特殊指标释义（Rule of 40、FCF Conversion）
+- 期间定义（LTM、CAGR 计算区间）
+#### 估值方法论：
+- EV 计算方式（Market Cap + Net Debt）
+- 增速来源（历史CAGR、前瞻估计）
+- 调整说明（剔除一次性项目、标准化利润率）
+#### 分析框架：
+- 投资论点、核心关注指标、统计解读方式
+
+## 第5节：指标选择决策框架
+### 核心问题驱动选指标
+```csv
+问题	        聚焦指标	                          跳过指标
+谁被低估？	EV/Rev, EV/EBITDA, P/E	          运营细节
+谁最高效？	毛利率, EBITDA利润率, FCF利润率	  规模指标
+谁增长最快？	收入增长%, EBITDA CAGR	          利润率
+谁现金最强？	FCF, FCF利润率, FCF转化率	          EBITDA, P/E
+```
+
+### 行业专项指标
+```csv
+行业	        必含	                          可选	           跳过
+软件/SaaS	增长、毛利率、Rule of 40             ARR、NDR	   资产周转、存货
+制造/工业	EBITDA利润率、资产周转、CapEx/Rev	   ROA、存货周转	   Rule of 40
+金融	        ROE、ROA、效率比、P/E	           NIM	           毛利率、EBITDA
+零售/电商	增长、毛利率、存货周转	           同店销售、CAC	   R&D、CapEx
+```
+### 5-10 法则
+5个经营指标 + 5个估值指标 = 10列。超过15列大概率是噪音。
+
+## 第6节：最佳实践与质量检查
+- 开始前： 定义可比组、选择期间、统一单位、标注数据来源。
+- 构建中： 先输所有原始数据 → 每个硬编码单元格加批注（注明来源或假设+理由）→ 逐行建公式 → 统一格式。
+- 批注要求： 来源数据须精确引用（如 "Bloomberg MSFT DES, 2024-10-02"）；假设须解释推理（如 "假设15% EBITDA利润率基于同行中位数"）。尽可能添加超链接。
+
+- 合理性检查：
+  - 毛利率 > EBITDA利润率 > 净利润率（定义上必然）
+  - EV/Revenue 通常 0.5-20x，EV/EBITDA 通常 8-25x，P/E 通常 10-50x
+  - 高增长通常伴随高倍数
+- 常见错误： ❌ 混用市值与EV ❌ 期间不一致 ❌ 硬编码而非公式 ❌ 无批注 ❌ 塞入不可比公司 ❌ 过期数据未声明
+
+## 第7节：高级特性
+- 四分位分析：75th=溢价区、Median=典型、25th=折价区
+- 行业定制：SaaS加ARR/NDR；电商加GMV/Take Rate/活跃买家；医疗加R&D占比；制造加订单积压
+- 动态标题：列标题附带清晰单位标注
+
+## 第8节：示例布局
+``` 
+┌──────────────────────────────────────────────────────────┐
+│ TECHNOLOGY — 可比公司分析                                  │
+│ Microsoft • Alphabet • Amazon                            │
+│ 截至 Q4 2024 | 金额单位 USD Millions                       │
+├──────────────────────────────────────────────────────────┤
+│ 经营指标                                                  │
+├──────────┬─────────┬────────┬─────────┬─────────┬───────┤
+│ Company  │ Revenue │ Growth │ Gross   │ EBITDA  │ EBITDA│
+│          │ (LTM)   │ (YoY)  │ Margin  │ (LTM)   │ Margin│
+├──────────┼─────────┼────────┼─────────┼─────────┼───────┤
+│ MSFT     │ 261,400 │ 12.3%  │ 68.7%   │ 205,100 │ 78.4% │
+│ GOOGL    │ 349,800 │ 11.8%  │ 57.9%   │ 239,300 │ 68.4% │
+│ AMZN     │ 638,100 │ 10.5%  │ 47.3%   │ 152,600 │ 23.9% │
+│          │         │        │         │         │       │ [空行]
+│ Median   │=MEDIAN  │=MEDIAN │=MEDIAN  │=MEDIAN  │=MEDIAN│
+│ 75th %   │=QUART   │=QUART  │=QUART   │=QUART   │=QUART │
+│ 25th %   │=QUART   │=QUART  │=QUART   │=QUART   │=QUART │
+├─────────────────────────────────────────────────────────┤
+│ 估值倍数                                                  │
+├──────────┬─────────┬─────────┬────────┬─────────┬───────┤
+│ Company  │ Mkt Cap │ EV      │ EV/Rev │EV/EBITDA│  P/E  │
+├──────────┼─────────┼─────────┼────────┼─────────┼───────┤
+│ MSFT     │3,550,000│3,530,000│ 13.5x  │ 17.2x   │ 36.0x│
+│ GOOGL    │2,030,000│1,960,000│  5.6x  │  8.2x   │ 24.5x│
+│ AMZN     │2,226,000│2,320,000│  3.6x  │ 15.2x   │ 58.3x│
+│          │         │         │        │         │       │ [空行]
+│ Median   │         │         │=MEDIAN │=MEDIAN  │=MEDIAN│
+│ 75th %   │         │         │=QUART  │=QUART   │=QUART │
+│ 25th %   │         │         │=QUART  │=QUART   │=QUART │
+└──────────┴─────────┴─────────┴────────┴─────────┴───────┘
+
+```
+复杂度仅在需要时增加：季度+LTM、FCF指标、行业专项指标、>5家公司时更多统计行。
+
+## 第9节：红旗警告
+- 🚩 期间不一致 🚩 数据缺失未说明 🚩 来源偏差>10%
+- 🚩 负EBITDA用EBITDA倍数估值（应改用收入倍数）
+- 🚩 P/E>100x无超增长支撑 🚩 利润率不符行业常识
+- 🚩 财年截止日不同 🚩 纯业务与综合集团混编
+- 🚩 商业模式不可比强行列为同行
+存疑时排除。3个完美可比胜过6个勉强同行。

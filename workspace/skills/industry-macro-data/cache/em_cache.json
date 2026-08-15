@@ -1,0 +1,2652 @@
+{
+  "em|RPT_ECONOMY_TOTAL_RETAIL|RETAIL_TOTAL,RETAIL_TOTAL_SAME|ps42": {
+    "timestamp": 1784470130.739121,
+    "url": "https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=REPORT_DATE&sortTypes=-1&pageSize=42&pageNumber=1&reportName=RPT_ECONOMY_TOTAL_RETAIL&columns=ALL&source=WEB&client=WEB",
+    "resp": {
+      "version": "61649407e81a89a6ae9146bbf5f881f4",
+      "result": {
+        "pages": 5,
+        "data": [
+          {
+            "REPORT_DATE": "2026-06-01 00:00:00",
+            "TIME": "2026年06月份",
+            "RETAIL_TOTAL": 42691,
+            "RETAIL_TOTAL_SAME": 1,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.89632514,
+            "RETAIL_TOTAL_ACCUMULATE": 248722,
+            "RETAIL_ACCUMULATE_SAME": 1.3
+          },
+          {
+            "REPORT_DATE": "2026-05-01 00:00:00",
+            "TIME": "2026年05月份",
+            "RETAIL_TOTAL": 41090,
+            "RETAIL_TOTAL_SAME": -0.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.31909038,
+            "RETAIL_TOTAL_ACCUMULATE": 206031.4,
+            "RETAIL_ACCUMULATE_SAME": 1.4
+          },
+          {
+            "REPORT_DATE": "2026-04-01 00:00:00",
+            "TIME": "2026年04月份",
+            "RETAIL_TOTAL": 37246.5,
+            "RETAIL_TOTAL_SAME": 0.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -10.49956747,
+            "RETAIL_TOTAL_ACCUMULATE": 164941.5,
+            "RETAIL_ACCUMULATE_SAME": 1.9
+          },
+          {
+            "REPORT_DATE": "2026-03-01 00:00:00",
+            "TIME": "2026年03月份",
+            "RETAIL_TOTAL": 41616,
+            "RETAIL_TOTAL_SAME": 1.7,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 127694.9,
+            "RETAIL_ACCUMULATE_SAME": 2.4
+          },
+          {
+            "REPORT_DATE": "2026-02-01 00:00:00",
+            "TIME": "2026年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 86078.9,
+            "RETAIL_ACCUMULATE_SAME": 2.8
+          },
+          {
+            "REPORT_DATE": "2025-12-01 00:00:00",
+            "TIME": "2025年12月份",
+            "RETAIL_TOTAL": 45135.9,
+            "RETAIL_TOTAL_SAME": 0.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.81994624,
+            "RETAIL_TOTAL_ACCUMULATE": 501202.4,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2025-11-01 00:00:00",
+            "TIME": "2025年11月份",
+            "RETAIL_TOTAL": 43898,
+            "RETAIL_TOTAL_SAME": 1.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -5.17008596,
+            "RETAIL_TOTAL_ACCUMULATE": 456066.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2025-10-01 00:00:00",
+            "TIME": "2025年10月份",
+            "RETAIL_TOTAL": 46291.3,
+            "RETAIL_TOTAL_SAME": 2.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.29353601,
+            "RETAIL_TOTAL_ACCUMULATE": 412168.5,
+            "RETAIL_ACCUMULATE_SAME": 4.3
+          },
+          {
+            "REPORT_DATE": "2025-09-01 00:00:00",
+            "TIME": "2025年09月份",
+            "RETAIL_TOTAL": 41971,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.80675413,
+            "RETAIL_TOTAL_ACCUMULATE": 365877.2,
+            "RETAIL_ACCUMULATE_SAME": 4.5
+          },
+          {
+            "REPORT_DATE": "2025-08-01 00:00:00",
+            "TIME": "2025年08月份",
+            "RETAIL_TOTAL": 39667.6,
+            "RETAIL_TOTAL_SAME": 3.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.28828113,
+            "RETAIL_TOTAL_ACCUMULATE": 323906.2,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-07-01 00:00:00",
+            "TIME": "2025年07月份",
+            "RETAIL_TOTAL": 38780.2,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.29372343,
+            "RETAIL_TOTAL_ACCUMULATE": 284238.5,
+            "RETAIL_ACCUMULATE_SAME": 4.8
+          },
+          {
+            "REPORT_DATE": "2025-06-01 00:00:00",
+            "TIME": "2025年06月份",
+            "RETAIL_TOTAL": 42287.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.3268757,
+            "RETAIL_TOTAL_ACCUMULATE": 245458.4,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-05-01 00:00:00",
+            "TIME": "2025年05月份",
+            "RETAIL_TOTAL": 41325.8,
+            "RETAIL_TOTAL_SAME": 6.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 11.16825962,
+            "RETAIL_TOTAL_ACCUMULATE": 203171,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-04-01 00:00:00",
+            "TIME": "2025年04月份",
+            "RETAIL_TOTAL": 37174.1,
+            "RETAIL_TOTAL_SAME": 5.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -9.19969224,
+            "RETAIL_TOTAL_ACCUMULATE": 161845.2,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2025-03-01 00:00:00",
+            "TIME": "2025年03月份",
+            "RETAIL_TOTAL": 40940.5,
+            "RETAIL_TOTAL_SAME": 5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 124671.1,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-02-01 00:00:00",
+            "TIME": "2025年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 83730.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2024-12-01 00:00:00",
+            "TIME": "2024年12月份",
+            "RETAIL_TOTAL": 45171.5,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.21847223,
+            "RETAIL_TOTAL_ACCUMULATE": 487894.8,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-11-01 00:00:00",
+            "TIME": "2024年11月份",
+            "RETAIL_TOTAL": 43763,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.59808267,
+            "RETAIL_TOTAL_ACCUMULATE": 442723.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-10-01 00:00:00",
+            "TIME": "2024年10月份",
+            "RETAIL_TOTAL": 45396.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.42048243,
+            "RETAIL_TOTAL_ACCUMULATE": 398960.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-09-01 00:00:00",
+            "TIME": "2024年09月份",
+            "RETAIL_TOTAL": 41112.3,
+            "RETAIL_TOTAL_SAME": 3.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.16255829,
+            "RETAIL_TOTAL_ACCUMULATE": 353564,
+            "RETAIL_ACCUMULATE_SAME": 3.3
+          },
+          {
+            "REPORT_DATE": "2024-08-01 00:00:00",
+            "TIME": "2024年08月份",
+            "RETAIL_TOTAL": 38725.8,
+            "RETAIL_TOTAL_SAME": 2.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.56479525,
+            "RETAIL_TOTAL_ACCUMULATE": 312451.7,
+            "RETAIL_ACCUMULATE_SAME": 3.4
+          },
+          {
+            "REPORT_DATE": "2024-07-01 00:00:00",
+            "TIME": "2024年07月份",
+            "RETAIL_TOTAL": 37757.4,
+            "RETAIL_TOTAL_SAME": 2.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.30194738,
+            "RETAIL_TOTAL_ACCUMULATE": 273725.9,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-06-01 00:00:00",
+            "TIME": "2024年06月份",
+            "RETAIL_TOTAL": 40731.6,
+            "RETAIL_TOTAL_SAME": 2,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.87799342,
+            "RETAIL_TOTAL_ACCUMULATE": 235969,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2024-05-01 00:00:00",
+            "TIME": "2024年05月份",
+            "RETAIL_TOTAL": 39211,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.83750291,
+            "RETAIL_TOTAL_ACCUMULATE": 195236.9,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-04-01 00:00:00",
+            "TIME": "2024年04月份",
+            "RETAIL_TOTAL": 35699.1,
+            "RETAIL_TOTAL_SAME": 2.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.51052924,
+            "RETAIL_TOTAL_ACCUMULATE": 156025.8,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-03-01 00:00:00",
+            "TIME": "2024年03月份",
+            "RETAIL_TOTAL": 39019.9,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 120326.8,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2024-02-01 00:00:00",
+            "TIME": "2024年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 81306.9,
+            "RETAIL_ACCUMULATE_SAME": 5.5
+          },
+          {
+            "REPORT_DATE": "2023-12-01 00:00:00",
+            "TIME": "2023年12月份",
+            "RETAIL_TOTAL": 43550.2,
+            "RETAIL_TOTAL_SAME": 7.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.45900482,
+            "RETAIL_TOTAL_ACCUMULATE": 471495.2,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-11-01 00:00:00",
+            "TIME": "2023年11月份",
+            "RETAIL_TOTAL": 42505,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.91078393,
+            "RETAIL_TOTAL_ACCUMULATE": 427945,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-10-01 00:00:00",
+            "TIME": "2023年10月份",
+            "RETAIL_TOTAL": 43333,
+            "RETAIL_TOTAL_SAME": 7.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.80580525,
+            "RETAIL_TOTAL_ACCUMULATE": 385440,
+            "RETAIL_ACCUMULATE_SAME": 6.9
+          },
+          {
+            "REPORT_DATE": "2023-09-01 00:00:00",
+            "TIME": "2023年09月份",
+            "RETAIL_TOTAL": 39826,
+            "RETAIL_TOTAL_SAME": 5.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99120811,
+            "RETAIL_TOTAL_ACCUMULATE": 342107,
+            "RETAIL_ACCUMULATE_SAME": 6.8
+          },
+          {
+            "REPORT_DATE": "2023-08-01 00:00:00",
+            "TIME": "2023年08月份",
+            "RETAIL_TOTAL": 37932.7,
+            "RETAIL_TOTAL_SAME": 4.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.18818738,
+            "RETAIL_TOTAL_ACCUMULATE": 302281,
+            "RETAIL_ACCUMULATE_SAME": 7
+          },
+          {
+            "REPORT_DATE": "2023-07-01 00:00:00",
+            "TIME": "2023年07月份",
+            "RETAIL_TOTAL": 36760.7,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.98645354,
+            "RETAIL_TOTAL_ACCUMULATE": 264348.4,
+            "RETAIL_ACCUMULATE_SAME": 7.3
+          },
+          {
+            "REPORT_DATE": "2023-06-01 00:00:00",
+            "TIME": "2023年06月份",
+            "RETAIL_TOTAL": 39951.4,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.68230816,
+            "RETAIL_TOTAL_ACCUMULATE": 227587.6,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2023-05-01 00:00:00",
+            "TIME": "2023年05月份",
+            "RETAIL_TOTAL": 37803.3,
+            "RETAIL_TOTAL_SAME": 12.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.28633219,
+            "RETAIL_TOTAL_ACCUMULATE": 187636.3,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2023-04-01 00:00:00",
+            "TIME": "2023年04月份",
+            "RETAIL_TOTAL": 34910.5,
+            "RETAIL_TOTAL_SAME": 18.4,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.77933928,
+            "RETAIL_TOTAL_ACCUMULATE": 149832.9,
+            "RETAIL_ACCUMULATE_SAME": 8.5
+          },
+          {
+            "REPORT_DATE": "2023-03-01 00:00:00",
+            "TIME": "2023年03月份",
+            "RETAIL_TOTAL": 37855.4,
+            "RETAIL_TOTAL_SAME": 10.6,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 114922.4,
+            "RETAIL_ACCUMULATE_SAME": 5.8
+          },
+          {
+            "REPORT_DATE": "2023-02-01 00:00:00",
+            "TIME": "2023年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 77067,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2022-12-01 00:00:00",
+            "TIME": "2022年12月份",
+            "RETAIL_TOTAL": 40542.3,
+            "RETAIL_TOTAL_SAME": -1.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99079376,
+            "RETAIL_TOTAL_ACCUMULATE": 439732.5,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-11-01 00:00:00",
+            "TIME": "2022年11月份",
+            "RETAIL_TOTAL": 38615.1,
+            "RETAIL_TOTAL_SAME": -5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": -4.11070138,
+            "RETAIL_TOTAL_ACCUMULATE": 399190.2,
+            "RETAIL_ACCUMULATE_SAME": -0.1
+          },
+          {
+            "REPORT_DATE": "2022-10-01 00:00:00",
+            "TIME": "2022年10月份",
+            "RETAIL_TOTAL": 40270.5,
+            "RETAIL_TOTAL_SAME": -0.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.69123511,
+            "RETAIL_TOTAL_ACCUMULATE": 360575.1,
+            "RETAIL_ACCUMULATE_SAME": 0.6
+          },
+          {
+            "REPORT_DATE": "2022-09-01 00:00:00",
+            "TIME": "2022年09月份",
+            "RETAIL_TOTAL": 37744.9,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.10117519,
+            "RETAIL_TOTAL_ACCUMULATE": 320304.6,
+            "RETAIL_ACCUMULATE_SAME": 0.7
+          }
+        ],
+        "count": 207
+      },
+      "success": true,
+      "message": "ok",
+      "code": 0
+    }
+  },
+  "em|RPT_ECONOMY_CPI|NATIONAL_SAME,|ps30": {
+    "timestamp": 1784470130.9903738,
+    "url": "https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=REPORT_DATE&sortTypes=-1&pageSize=30&pageNumber=1&reportName=RPT_ECONOMY_CPI&columns=ALL&source=WEB&client=WEB",
+    "resp": {
+      "version": "345a8a5d40ecefae9729c5823fa26192",
+      "result": {
+        "pages": 8,
+        "data": [
+          {
+            "REPORT_DATE": "2026-06-01 00:00:00",
+            "TIME": "2026年06月份",
+            "NATIONAL_SAME": 1,
+            "NATIONAL_BASE": 101,
+            "NATIONAL_SEQUENTIAL": -0.3,
+            "NATIONAL_ACCUMULATE": 101,
+            "CITY_SAME": 1,
+            "CITY_BASE": 101,
+            "CITY_SEQUENTIAL": -0.4,
+            "CITY_ACCUMULATE": 101,
+            "RURAL_SAME": 0.8,
+            "RURAL_BASE": 100.8,
+            "RURAL_SEQUENTIAL": -0.3,
+            "RURAL_ACCUMULATE": 100.8
+          },
+          {
+            "REPORT_DATE": "2026-05-01 00:00:00",
+            "TIME": "2026年05月份",
+            "NATIONAL_SAME": 1.2,
+            "NATIONAL_BASE": 101.2,
+            "NATIONAL_SEQUENTIAL": -0.1,
+            "NATIONAL_ACCUMULATE": 101,
+            "CITY_SAME": 1.3,
+            "CITY_BASE": 101.3,
+            "CITY_SEQUENTIAL": -0.1,
+            "CITY_ACCUMULATE": 101,
+            "RURAL_SAME": 1.1,
+            "RURAL_BASE": 101.1,
+            "RURAL_SEQUENTIAL": -0.1,
+            "RURAL_ACCUMULATE": 100.8
+          },
+          {
+            "REPORT_DATE": "2026-04-01 00:00:00",
+            "TIME": "2026年04月份",
+            "NATIONAL_SAME": 1.2,
+            "NATIONAL_BASE": 101.2,
+            "NATIONAL_SEQUENTIAL": 0.3,
+            "NATIONAL_ACCUMULATE": 100.9,
+            "CITY_SAME": 1.2,
+            "CITY_BASE": 101.2,
+            "CITY_SEQUENTIAL": 0.3,
+            "CITY_ACCUMULATE": 101,
+            "RURAL_SAME": 1,
+            "RURAL_BASE": 101,
+            "RURAL_SEQUENTIAL": 0.1,
+            "RURAL_ACCUMULATE": 100.7
+          },
+          {
+            "REPORT_DATE": "2026-03-01 00:00:00",
+            "TIME": "2026年03月份",
+            "NATIONAL_SAME": 1,
+            "NATIONAL_BASE": 101,
+            "NATIONAL_SEQUENTIAL": -0.7,
+            "NATIONAL_ACCUMULATE": 100.9,
+            "CITY_SAME": 1.1,
+            "CITY_BASE": 101.1,
+            "CITY_SEQUENTIAL": -0.7,
+            "CITY_ACCUMULATE": 100.9,
+            "RURAL_SAME": 0.9,
+            "RURAL_BASE": 100.9,
+            "RURAL_SEQUENTIAL": -0.5,
+            "RURAL_ACCUMULATE": 100.7
+          },
+          {
+            "REPORT_DATE": "2026-02-01 00:00:00",
+            "TIME": "2026年02月份",
+            "NATIONAL_SAME": 1.3,
+            "NATIONAL_BASE": 101.3,
+            "NATIONAL_SEQUENTIAL": 1,
+            "NATIONAL_ACCUMULATE": 100.8,
+            "CITY_SAME": 1.4,
+            "CITY_BASE": 101.4,
+            "CITY_SEQUENTIAL": 1,
+            "CITY_ACCUMULATE": 100.8,
+            "RURAL_SAME": 0.9,
+            "RURAL_BASE": 100.9,
+            "RURAL_SEQUENTIAL": 0.7,
+            "RURAL_ACCUMULATE": 100.5
+          },
+          {
+            "REPORT_DATE": "2026-01-01 00:00:00",
+            "TIME": "2026年01月份",
+            "NATIONAL_SAME": 0.2,
+            "NATIONAL_BASE": 100.2,
+            "NATIONAL_SEQUENTIAL": 0.2,
+            "NATIONAL_ACCUMULATE": 100.2,
+            "CITY_SAME": 0.2,
+            "CITY_BASE": 100.2,
+            "CITY_SEQUENTIAL": 0.2,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.1,
+            "RURAL_BASE": 100.1,
+            "RURAL_SEQUENTIAL": 0.2,
+            "RURAL_ACCUMULATE": 100.1
+          },
+          {
+            "REPORT_DATE": "2025-12-01 00:00:00",
+            "TIME": "2025年12月份",
+            "NATIONAL_SAME": 0.8,
+            "NATIONAL_BASE": 100.8,
+            "NATIONAL_SEQUENTIAL": 0.2,
+            "NATIONAL_ACCUMULATE": 100,
+            "CITY_SAME": 0.9,
+            "CITY_BASE": 100.9,
+            "CITY_SEQUENTIAL": 0.2,
+            "CITY_ACCUMULATE": 100.1,
+            "RURAL_SAME": 0.6,
+            "RURAL_BASE": 100.6,
+            "RURAL_SEQUENTIAL": 0.2,
+            "RURAL_ACCUMULATE": 99.8
+          },
+          {
+            "REPORT_DATE": "2025-11-01 00:00:00",
+            "TIME": "2025年11月份",
+            "NATIONAL_SAME": 0.7,
+            "NATIONAL_BASE": 100.7,
+            "NATIONAL_SEQUENTIAL": -0.1,
+            "NATIONAL_ACCUMULATE": 100,
+            "CITY_SAME": 0.7,
+            "CITY_BASE": 100.7,
+            "CITY_SEQUENTIAL": -0.1,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": 0.4,
+            "RURAL_BASE": 100.4,
+            "RURAL_SEQUENTIAL": 0,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-10-01 00:00:00",
+            "TIME": "2025年10月份",
+            "NATIONAL_SAME": 0.2,
+            "NATIONAL_BASE": 100.2,
+            "NATIONAL_SEQUENTIAL": 0.2,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": 0.3,
+            "CITY_BASE": 100.3,
+            "CITY_SEQUENTIAL": 0.2,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.2,
+            "RURAL_BASE": 99.8,
+            "RURAL_SEQUENTIAL": 0.1,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-09-01 00:00:00",
+            "TIME": "2025年09月份",
+            "NATIONAL_SAME": -0.3,
+            "NATIONAL_BASE": 99.7,
+            "NATIONAL_SEQUENTIAL": 0.1,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": -0.2,
+            "CITY_BASE": 99.8,
+            "CITY_SEQUENTIAL": 0,
+            "CITY_ACCUMULATE": 99.9,
+            "RURAL_SAME": -0.5,
+            "RURAL_BASE": 99.5,
+            "RURAL_SEQUENTIAL": 0.2,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-08-01 00:00:00",
+            "TIME": "2025年08月份",
+            "NATIONAL_SAME": -0.4,
+            "NATIONAL_BASE": 99.6,
+            "NATIONAL_SEQUENTIAL": 0,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": -0.3,
+            "CITY_BASE": 99.7,
+            "CITY_SEQUENTIAL": 0,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.6,
+            "RURAL_BASE": 99.4,
+            "RURAL_SEQUENTIAL": 0.1,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-07-01 00:00:00",
+            "TIME": "2025年07月份",
+            "NATIONAL_SAME": 0,
+            "NATIONAL_BASE": 100,
+            "NATIONAL_SEQUENTIAL": 0.4,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": 0,
+            "CITY_BASE": 100,
+            "CITY_SEQUENTIAL": 0.4,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.3,
+            "RURAL_BASE": 99.7,
+            "RURAL_SEQUENTIAL": 0.3,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-06-01 00:00:00",
+            "TIME": "2025年06月份",
+            "NATIONAL_SAME": 0.1,
+            "NATIONAL_BASE": 100.1,
+            "NATIONAL_SEQUENTIAL": -0.1,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": 0.1,
+            "CITY_BASE": 100.1,
+            "CITY_SEQUENTIAL": -0.1,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.2,
+            "RURAL_BASE": 99.8,
+            "RURAL_SEQUENTIAL": 0,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-05-01 00:00:00",
+            "TIME": "2025年05月份",
+            "NATIONAL_SAME": -0.1,
+            "NATIONAL_BASE": 99.9,
+            "NATIONAL_SEQUENTIAL": -0.2,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": 0,
+            "CITY_BASE": 100,
+            "CITY_SEQUENTIAL": -0.2,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.4,
+            "RURAL_BASE": 99.6,
+            "RURAL_SEQUENTIAL": -0.2,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-04-01 00:00:00",
+            "TIME": "2025年04月份",
+            "NATIONAL_SAME": -0.1,
+            "NATIONAL_BASE": 99.9,
+            "NATIONAL_SEQUENTIAL": 0.1,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": 0,
+            "CITY_BASE": 100,
+            "CITY_SEQUENTIAL": 0.2,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": -0.3,
+            "RURAL_BASE": 99.7,
+            "RURAL_SEQUENTIAL": 0,
+            "RURAL_ACCUMULATE": 99.7
+          },
+          {
+            "REPORT_DATE": "2025-03-01 00:00:00",
+            "TIME": "2025年03月份",
+            "NATIONAL_SAME": -0.1,
+            "NATIONAL_BASE": 99.9,
+            "NATIONAL_SEQUENTIAL": -0.4,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": -0.1,
+            "CITY_BASE": 99.9,
+            "CITY_SEQUENTIAL": -0.4,
+            "CITY_ACCUMULATE": 99.9,
+            "RURAL_SAME": -0.3,
+            "RURAL_BASE": 99.7,
+            "RURAL_SEQUENTIAL": -0.3,
+            "RURAL_ACCUMULATE": 99.8
+          },
+          {
+            "REPORT_DATE": "2025-02-01 00:00:00",
+            "TIME": "2025年02月份",
+            "NATIONAL_SAME": -0.7,
+            "NATIONAL_BASE": 99.3,
+            "NATIONAL_SEQUENTIAL": -0.2,
+            "NATIONAL_ACCUMULATE": 99.9,
+            "CITY_SAME": -0.7,
+            "CITY_BASE": 99.3,
+            "CITY_SEQUENTIAL": -0.2,
+            "CITY_ACCUMULATE": 99.9,
+            "RURAL_SAME": -0.7,
+            "RURAL_BASE": 99.3,
+            "RURAL_SEQUENTIAL": -0.1,
+            "RURAL_ACCUMULATE": 99.8
+          },
+          {
+            "REPORT_DATE": "2025-01-01 00:00:00",
+            "TIME": "2025年01月份",
+            "NATIONAL_SAME": 0.5,
+            "NATIONAL_BASE": 100.5,
+            "NATIONAL_SEQUENTIAL": 0.7,
+            "NATIONAL_ACCUMULATE": 100.5,
+            "CITY_SAME": 0.6,
+            "CITY_BASE": 100.6,
+            "CITY_SEQUENTIAL": 0.8,
+            "CITY_ACCUMULATE": 100.6,
+            "RURAL_SAME": 0.3,
+            "RURAL_BASE": 100.3,
+            "RURAL_SEQUENTIAL": 0.5,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-12-01 00:00:00",
+            "TIME": "2024年12月份",
+            "NATIONAL_SAME": 0.1,
+            "NATIONAL_BASE": 100.1,
+            "NATIONAL_SEQUENTIAL": 0,
+            "NATIONAL_ACCUMULATE": 100.2,
+            "CITY_SAME": 0.1,
+            "CITY_BASE": 100.1,
+            "CITY_SEQUENTIAL": 0,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0,
+            "RURAL_BASE": 100,
+            "RURAL_SEQUENTIAL": -0.1,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-11-01 00:00:00",
+            "TIME": "2024年11月份",
+            "NATIONAL_SAME": 0.2,
+            "NATIONAL_BASE": 100.2,
+            "NATIONAL_SEQUENTIAL": -0.6,
+            "NATIONAL_ACCUMULATE": 100.3,
+            "CITY_SAME": 0.1,
+            "CITY_BASE": 100.1,
+            "CITY_SEQUENTIAL": -0.6,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.2,
+            "RURAL_BASE": 100.2,
+            "RURAL_SEQUENTIAL": -0.6,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-10-01 00:00:00",
+            "TIME": "2024年10月份",
+            "NATIONAL_SAME": 0.3,
+            "NATIONAL_BASE": 100.3,
+            "NATIONAL_SEQUENTIAL": -0.3,
+            "NATIONAL_ACCUMULATE": 100.3,
+            "CITY_SAME": 0.2,
+            "CITY_BASE": 100.2,
+            "CITY_SEQUENTIAL": -0.3,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.3,
+            "RURAL_BASE": 100.3,
+            "RURAL_SEQUENTIAL": -0.3,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-09-01 00:00:00",
+            "TIME": "2024年09月份",
+            "NATIONAL_SAME": 0.4,
+            "NATIONAL_BASE": 100.4,
+            "NATIONAL_SEQUENTIAL": 0,
+            "NATIONAL_ACCUMULATE": 100.3,
+            "CITY_SAME": 0.4,
+            "CITY_BASE": 100.4,
+            "CITY_SEQUENTIAL": -0.1,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.6,
+            "RURAL_BASE": 100.6,
+            "RURAL_SEQUENTIAL": 0.1,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-08-01 00:00:00",
+            "TIME": "2024年08月份",
+            "NATIONAL_SAME": 0.6,
+            "NATIONAL_BASE": 100.6,
+            "NATIONAL_SEQUENTIAL": 0.4,
+            "NATIONAL_ACCUMULATE": 100.2,
+            "CITY_SAME": 0.6,
+            "CITY_BASE": 100.6,
+            "CITY_SEQUENTIAL": 0.3,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.8,
+            "RURAL_BASE": 100.8,
+            "RURAL_SEQUENTIAL": 0.4,
+            "RURAL_ACCUMULATE": 100.3
+          },
+          {
+            "REPORT_DATE": "2024-07-01 00:00:00",
+            "TIME": "2024年07月份",
+            "NATIONAL_SAME": 0.5,
+            "NATIONAL_BASE": 100.5,
+            "NATIONAL_SEQUENTIAL": 0.5,
+            "NATIONAL_ACCUMULATE": 100.2,
+            "CITY_SAME": 0.5,
+            "CITY_BASE": 100.5,
+            "CITY_SEQUENTIAL": 0.6,
+            "CITY_ACCUMULATE": 100.2,
+            "RURAL_SAME": 0.7,
+            "RURAL_BASE": 100.7,
+            "RURAL_SEQUENTIAL": 0.4,
+            "RURAL_ACCUMULATE": 100.2
+          },
+          {
+            "REPORT_DATE": "2024-06-01 00:00:00",
+            "TIME": "2024年06月份",
+            "NATIONAL_SAME": 0.2,
+            "NATIONAL_BASE": 100.2,
+            "NATIONAL_SEQUENTIAL": -0.2,
+            "NATIONAL_ACCUMULATE": 100.1,
+            "CITY_SAME": 0.2,
+            "CITY_BASE": 100.2,
+            "CITY_SEQUENTIAL": -0.2,
+            "CITY_ACCUMULATE": 100.1,
+            "RURAL_SAME": 0.4,
+            "RURAL_BASE": 100.4,
+            "RURAL_SEQUENTIAL": -0.2,
+            "RURAL_ACCUMULATE": 100.2
+          },
+          {
+            "REPORT_DATE": "2024-05-01 00:00:00",
+            "TIME": "2024年05月份",
+            "NATIONAL_SAME": 0.3,
+            "NATIONAL_BASE": 100.3,
+            "NATIONAL_SEQUENTIAL": -0.1,
+            "NATIONAL_ACCUMULATE": 100.1,
+            "CITY_SAME": 0.3,
+            "CITY_BASE": 100.3,
+            "CITY_SEQUENTIAL": -0.1,
+            "CITY_ACCUMULATE": 100.1,
+            "RURAL_SAME": 0.4,
+            "RURAL_BASE": 100.4,
+            "RURAL_SEQUENTIAL": -0.1,
+            "RURAL_ACCUMULATE": 100.1
+          },
+          {
+            "REPORT_DATE": "2024-04-01 00:00:00",
+            "TIME": "2024年04月份",
+            "NATIONAL_SAME": 0.3,
+            "NATIONAL_BASE": 100.3,
+            "NATIONAL_SEQUENTIAL": 0.1,
+            "NATIONAL_ACCUMULATE": 100.1,
+            "CITY_SAME": 0.3,
+            "CITY_BASE": 100.3,
+            "CITY_SEQUENTIAL": 0.1,
+            "CITY_ACCUMULATE": 100.1,
+            "RURAL_SAME": 0.4,
+            "RURAL_BASE": 100.4,
+            "RURAL_SEQUENTIAL": 0,
+            "RURAL_ACCUMULATE": 100
+          },
+          {
+            "REPORT_DATE": "2024-03-01 00:00:00",
+            "TIME": "2024年03月份",
+            "NATIONAL_SAME": 0.1,
+            "NATIONAL_BASE": 100.1,
+            "NATIONAL_SEQUENTIAL": -1,
+            "NATIONAL_ACCUMULATE": 100,
+            "CITY_SAME": 0,
+            "CITY_BASE": 100,
+            "CITY_SEQUENTIAL": -1,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": 0.1,
+            "RURAL_BASE": 100.1,
+            "RURAL_SEQUENTIAL": -0.7,
+            "RURAL_ACCUMULATE": 99.9
+          },
+          {
+            "REPORT_DATE": "2024-02-01 00:00:00",
+            "TIME": "2024年02月份",
+            "NATIONAL_SAME": 0.7,
+            "NATIONAL_BASE": 100.7,
+            "NATIONAL_SEQUENTIAL": 1,
+            "NATIONAL_ACCUMULATE": 100,
+            "CITY_SAME": 0.8,
+            "CITY_BASE": 100.8,
+            "CITY_SEQUENTIAL": 1.1,
+            "CITY_ACCUMULATE": 100,
+            "RURAL_SAME": 0.5,
+            "RURAL_BASE": 100.5,
+            "RURAL_SEQUENTIAL": 0.9,
+            "RURAL_ACCUMULATE": 99.8
+          },
+          {
+            "REPORT_DATE": "2024-01-01 00:00:00",
+            "TIME": "2024年01月份",
+            "NATIONAL_SAME": -0.8,
+            "NATIONAL_BASE": 99.2,
+            "NATIONAL_SEQUENTIAL": 0.3,
+            "NATIONAL_ACCUMULATE": 99.2,
+            "CITY_SAME": -0.8,
+            "CITY_BASE": 99.2,
+            "CITY_SEQUENTIAL": 0.3,
+            "CITY_ACCUMULATE": 99.2,
+            "RURAL_SAME": -0.8,
+            "RURAL_BASE": 99.2,
+            "RURAL_SEQUENTIAL": 0.2,
+            "RURAL_ACCUMULATE": 99.2
+          }
+        ],
+        "count": 222
+      },
+      "success": true,
+      "message": "ok",
+      "code": 0
+    }
+  },
+  "em|RPT_ECONOMY_TOTAL_RETAIL|RETAIL_TOTAL,RETAIL_TOTAL_SAME|ps78": {
+    "timestamp": 1784471415.250595,
+    "url": "https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=REPORT_DATE&sortTypes=-1&pageSize=78&pageNumber=1&reportName=RPT_ECONOMY_TOTAL_RETAIL&columns=ALL&source=WEB&client=WEB",
+    "resp": {
+      "version": "7b782958246d51d16ccfad432e3b5be6",
+      "result": {
+        "pages": 3,
+        "data": [
+          {
+            "REPORT_DATE": "2026-06-01 00:00:00",
+            "TIME": "2026年06月份",
+            "RETAIL_TOTAL": 42691,
+            "RETAIL_TOTAL_SAME": 1,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.89632514,
+            "RETAIL_TOTAL_ACCUMULATE": 248722,
+            "RETAIL_ACCUMULATE_SAME": 1.3
+          },
+          {
+            "REPORT_DATE": "2026-05-01 00:00:00",
+            "TIME": "2026年05月份",
+            "RETAIL_TOTAL": 41090,
+            "RETAIL_TOTAL_SAME": -0.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.31909038,
+            "RETAIL_TOTAL_ACCUMULATE": 206031.4,
+            "RETAIL_ACCUMULATE_SAME": 1.4
+          },
+          {
+            "REPORT_DATE": "2026-04-01 00:00:00",
+            "TIME": "2026年04月份",
+            "RETAIL_TOTAL": 37246.5,
+            "RETAIL_TOTAL_SAME": 0.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -10.49956747,
+            "RETAIL_TOTAL_ACCUMULATE": 164941.5,
+            "RETAIL_ACCUMULATE_SAME": 1.9
+          },
+          {
+            "REPORT_DATE": "2026-03-01 00:00:00",
+            "TIME": "2026年03月份",
+            "RETAIL_TOTAL": 41616,
+            "RETAIL_TOTAL_SAME": 1.7,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 127694.9,
+            "RETAIL_ACCUMULATE_SAME": 2.4
+          },
+          {
+            "REPORT_DATE": "2026-02-01 00:00:00",
+            "TIME": "2026年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 86078.9,
+            "RETAIL_ACCUMULATE_SAME": 2.8
+          },
+          {
+            "REPORT_DATE": "2025-12-01 00:00:00",
+            "TIME": "2025年12月份",
+            "RETAIL_TOTAL": 45135.9,
+            "RETAIL_TOTAL_SAME": 0.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.81994624,
+            "RETAIL_TOTAL_ACCUMULATE": 501202.4,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2025-11-01 00:00:00",
+            "TIME": "2025年11月份",
+            "RETAIL_TOTAL": 43898,
+            "RETAIL_TOTAL_SAME": 1.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -5.17008596,
+            "RETAIL_TOTAL_ACCUMULATE": 456066.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2025-10-01 00:00:00",
+            "TIME": "2025年10月份",
+            "RETAIL_TOTAL": 46291.3,
+            "RETAIL_TOTAL_SAME": 2.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.29353601,
+            "RETAIL_TOTAL_ACCUMULATE": 412168.5,
+            "RETAIL_ACCUMULATE_SAME": 4.3
+          },
+          {
+            "REPORT_DATE": "2025-09-01 00:00:00",
+            "TIME": "2025年09月份",
+            "RETAIL_TOTAL": 41971,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.80675413,
+            "RETAIL_TOTAL_ACCUMULATE": 365877.2,
+            "RETAIL_ACCUMULATE_SAME": 4.5
+          },
+          {
+            "REPORT_DATE": "2025-08-01 00:00:00",
+            "TIME": "2025年08月份",
+            "RETAIL_TOTAL": 39667.6,
+            "RETAIL_TOTAL_SAME": 3.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.28828113,
+            "RETAIL_TOTAL_ACCUMULATE": 323906.2,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-07-01 00:00:00",
+            "TIME": "2025年07月份",
+            "RETAIL_TOTAL": 38780.2,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.29372343,
+            "RETAIL_TOTAL_ACCUMULATE": 284238.5,
+            "RETAIL_ACCUMULATE_SAME": 4.8
+          },
+          {
+            "REPORT_DATE": "2025-06-01 00:00:00",
+            "TIME": "2025年06月份",
+            "RETAIL_TOTAL": 42287.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.3268757,
+            "RETAIL_TOTAL_ACCUMULATE": 245458.4,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-05-01 00:00:00",
+            "TIME": "2025年05月份",
+            "RETAIL_TOTAL": 41325.8,
+            "RETAIL_TOTAL_SAME": 6.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 11.16825962,
+            "RETAIL_TOTAL_ACCUMULATE": 203171,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-04-01 00:00:00",
+            "TIME": "2025年04月份",
+            "RETAIL_TOTAL": 37174.1,
+            "RETAIL_TOTAL_SAME": 5.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -9.19969224,
+            "RETAIL_TOTAL_ACCUMULATE": 161845.2,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2025-03-01 00:00:00",
+            "TIME": "2025年03月份",
+            "RETAIL_TOTAL": 40940.5,
+            "RETAIL_TOTAL_SAME": 5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 124671.1,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-02-01 00:00:00",
+            "TIME": "2025年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 83730.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2024-12-01 00:00:00",
+            "TIME": "2024年12月份",
+            "RETAIL_TOTAL": 45171.5,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.21847223,
+            "RETAIL_TOTAL_ACCUMULATE": 487894.8,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-11-01 00:00:00",
+            "TIME": "2024年11月份",
+            "RETAIL_TOTAL": 43763,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.59808267,
+            "RETAIL_TOTAL_ACCUMULATE": 442723.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-10-01 00:00:00",
+            "TIME": "2024年10月份",
+            "RETAIL_TOTAL": 45396.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.42048243,
+            "RETAIL_TOTAL_ACCUMULATE": 398960.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-09-01 00:00:00",
+            "TIME": "2024年09月份",
+            "RETAIL_TOTAL": 41112.3,
+            "RETAIL_TOTAL_SAME": 3.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.16255829,
+            "RETAIL_TOTAL_ACCUMULATE": 353564,
+            "RETAIL_ACCUMULATE_SAME": 3.3
+          },
+          {
+            "REPORT_DATE": "2024-08-01 00:00:00",
+            "TIME": "2024年08月份",
+            "RETAIL_TOTAL": 38725.8,
+            "RETAIL_TOTAL_SAME": 2.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.56479525,
+            "RETAIL_TOTAL_ACCUMULATE": 312451.7,
+            "RETAIL_ACCUMULATE_SAME": 3.4
+          },
+          {
+            "REPORT_DATE": "2024-07-01 00:00:00",
+            "TIME": "2024年07月份",
+            "RETAIL_TOTAL": 37757.4,
+            "RETAIL_TOTAL_SAME": 2.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.30194738,
+            "RETAIL_TOTAL_ACCUMULATE": 273725.9,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-06-01 00:00:00",
+            "TIME": "2024年06月份",
+            "RETAIL_TOTAL": 40731.6,
+            "RETAIL_TOTAL_SAME": 2,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.87799342,
+            "RETAIL_TOTAL_ACCUMULATE": 235969,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2024-05-01 00:00:00",
+            "TIME": "2024年05月份",
+            "RETAIL_TOTAL": 39211,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.83750291,
+            "RETAIL_TOTAL_ACCUMULATE": 195236.9,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-04-01 00:00:00",
+            "TIME": "2024年04月份",
+            "RETAIL_TOTAL": 35699.1,
+            "RETAIL_TOTAL_SAME": 2.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.51052924,
+            "RETAIL_TOTAL_ACCUMULATE": 156025.8,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-03-01 00:00:00",
+            "TIME": "2024年03月份",
+            "RETAIL_TOTAL": 39019.9,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 120326.8,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2024-02-01 00:00:00",
+            "TIME": "2024年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 81306.9,
+            "RETAIL_ACCUMULATE_SAME": 5.5
+          },
+          {
+            "REPORT_DATE": "2023-12-01 00:00:00",
+            "TIME": "2023年12月份",
+            "RETAIL_TOTAL": 43550.2,
+            "RETAIL_TOTAL_SAME": 7.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.45900482,
+            "RETAIL_TOTAL_ACCUMULATE": 471495.2,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-11-01 00:00:00",
+            "TIME": "2023年11月份",
+            "RETAIL_TOTAL": 42505,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.91078393,
+            "RETAIL_TOTAL_ACCUMULATE": 427945,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-10-01 00:00:00",
+            "TIME": "2023年10月份",
+            "RETAIL_TOTAL": 43333,
+            "RETAIL_TOTAL_SAME": 7.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.80580525,
+            "RETAIL_TOTAL_ACCUMULATE": 385440,
+            "RETAIL_ACCUMULATE_SAME": 6.9
+          },
+          {
+            "REPORT_DATE": "2023-09-01 00:00:00",
+            "TIME": "2023年09月份",
+            "RETAIL_TOTAL": 39826,
+            "RETAIL_TOTAL_SAME": 5.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99120811,
+            "RETAIL_TOTAL_ACCUMULATE": 342107,
+            "RETAIL_ACCUMULATE_SAME": 6.8
+          },
+          {
+            "REPORT_DATE": "2023-08-01 00:00:00",
+            "TIME": "2023年08月份",
+            "RETAIL_TOTAL": 37932.7,
+            "RETAIL_TOTAL_SAME": 4.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.18818738,
+            "RETAIL_TOTAL_ACCUMULATE": 302281,
+            "RETAIL_ACCUMULATE_SAME": 7
+          },
+          {
+            "REPORT_DATE": "2023-07-01 00:00:00",
+            "TIME": "2023年07月份",
+            "RETAIL_TOTAL": 36760.7,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.98645354,
+            "RETAIL_TOTAL_ACCUMULATE": 264348.4,
+            "RETAIL_ACCUMULATE_SAME": 7.3
+          },
+          {
+            "REPORT_DATE": "2023-06-01 00:00:00",
+            "TIME": "2023年06月份",
+            "RETAIL_TOTAL": 39951.4,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.68230816,
+            "RETAIL_TOTAL_ACCUMULATE": 227587.6,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2023-05-01 00:00:00",
+            "TIME": "2023年05月份",
+            "RETAIL_TOTAL": 37803.3,
+            "RETAIL_TOTAL_SAME": 12.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.28633219,
+            "RETAIL_TOTAL_ACCUMULATE": 187636.3,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2023-04-01 00:00:00",
+            "TIME": "2023年04月份",
+            "RETAIL_TOTAL": 34910.5,
+            "RETAIL_TOTAL_SAME": 18.4,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.77933928,
+            "RETAIL_TOTAL_ACCUMULATE": 149832.9,
+            "RETAIL_ACCUMULATE_SAME": 8.5
+          },
+          {
+            "REPORT_DATE": "2023-03-01 00:00:00",
+            "TIME": "2023年03月份",
+            "RETAIL_TOTAL": 37855.4,
+            "RETAIL_TOTAL_SAME": 10.6,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 114922.4,
+            "RETAIL_ACCUMULATE_SAME": 5.8
+          },
+          {
+            "REPORT_DATE": "2023-02-01 00:00:00",
+            "TIME": "2023年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 77067,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2022-12-01 00:00:00",
+            "TIME": "2022年12月份",
+            "RETAIL_TOTAL": 40542.3,
+            "RETAIL_TOTAL_SAME": -1.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99079376,
+            "RETAIL_TOTAL_ACCUMULATE": 439732.5,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-11-01 00:00:00",
+            "TIME": "2022年11月份",
+            "RETAIL_TOTAL": 38615.1,
+            "RETAIL_TOTAL_SAME": -5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": -4.11070138,
+            "RETAIL_TOTAL_ACCUMULATE": 399190.2,
+            "RETAIL_ACCUMULATE_SAME": -0.1
+          },
+          {
+            "REPORT_DATE": "2022-10-01 00:00:00",
+            "TIME": "2022年10月份",
+            "RETAIL_TOTAL": 40270.5,
+            "RETAIL_TOTAL_SAME": -0.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.69123511,
+            "RETAIL_TOTAL_ACCUMULATE": 360575.1,
+            "RETAIL_ACCUMULATE_SAME": 0.6
+          },
+          {
+            "REPORT_DATE": "2022-09-01 00:00:00",
+            "TIME": "2022年09月份",
+            "RETAIL_TOTAL": 37744.9,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.10117519,
+            "RETAIL_TOTAL_ACCUMULATE": 320304.6,
+            "RETAIL_ACCUMULATE_SAME": 0.7
+          },
+          {
+            "REPORT_DATE": "2022-08-01 00:00:00",
+            "TIME": "2022年08月份",
+            "RETAIL_TOTAL": 36257.9,
+            "RETAIL_TOTAL_SAME": 5.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.08112328,
+            "RETAIL_TOTAL_ACCUMULATE": 282559.7,
+            "RETAIL_ACCUMULATE_SAME": 0.5
+          },
+          {
+            "REPORT_DATE": "2022-07-01 00:00:00",
+            "TIME": "2022年07月份",
+            "RETAIL_TOTAL": 35870.1,
+            "RETAIL_TOTAL_SAME": 2.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.41408014,
+            "RETAIL_TOTAL_ACCUMULATE": 246301.8,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-06-01 00:00:00",
+            "TIME": "2022年06月份",
+            "RETAIL_TOTAL": 38742.5,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 15.48722688,
+            "RETAIL_TOTAL_ACCUMULATE": 210431.7,
+            "RETAIL_ACCUMULATE_SAME": -0.7
+          },
+          {
+            "REPORT_DATE": "2022-05-01 00:00:00",
+            "TIME": "2022年05月份",
+            "RETAIL_TOTAL": 33547,
+            "RETAIL_TOTAL_SAME": -6.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 13.7838287,
+            "RETAIL_TOTAL_ACCUMULATE": 171689.3,
+            "RETAIL_ACCUMULATE_SAME": -1.5
+          },
+          {
+            "REPORT_DATE": "2022-04-01 00:00:00",
+            "TIME": "2022年04月份",
+            "RETAIL_TOTAL": 29483.1,
+            "RETAIL_TOTAL_SAME": -11.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -13.87545972,
+            "RETAIL_TOTAL_ACCUMULATE": 138142.2,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-03-01 00:00:00",
+            "TIME": "2022年03月份",
+            "RETAIL_TOTAL": 34233.1,
+            "RETAIL_TOTAL_SAME": -3.5,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 108659.1,
+            "RETAIL_ACCUMULATE_SAME": 3.3
+          },
+          {
+            "REPORT_DATE": "2022-02-01 00:00:00",
+            "TIME": "2022年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 74426,
+            "RETAIL_ACCUMULATE_SAME": 6.7
+          },
+          {
+            "REPORT_DATE": "2021-12-01 00:00:00",
+            "TIME": "2021年12月份",
+            "RETAIL_TOTAL": 41268.9,
+            "RETAIL_TOTAL_SAME": 1.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 0.54990839,
+            "RETAIL_TOTAL_ACCUMULATE": 440823.2,
+            "RETAIL_ACCUMULATE_SAME": 12.5
+          },
+          {
+            "REPORT_DATE": "2021-11-01 00:00:00",
+            "TIME": "2021年11月份",
+            "RETAIL_TOTAL": 41043.2,
+            "RETAIL_TOTAL_SAME": 3.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.45671987,
+            "RETAIL_TOTAL_ACCUMULATE": 399554.3,
+            "RETAIL_ACCUMULATE_SAME": 13.7
+          },
+          {
+            "REPORT_DATE": "2021-10-01 00:00:00",
+            "TIME": "2021年10月份",
+            "RETAIL_TOTAL": 40453.9,
+            "RETAIL_TOTAL_SAME": 4.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.8305867,
+            "RETAIL_TOTAL_ACCUMULATE": 358511.1,
+            "RETAIL_ACCUMULATE_SAME": 14.9
+          },
+          {
+            "REPORT_DATE": "2021-09-01 00:00:00",
+            "TIME": "2021年09月份",
+            "RETAIL_TOTAL": 36833,
+            "RETAIL_TOTAL_SAME": 4.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 7.08855092,
+            "RETAIL_TOTAL_ACCUMULATE": 318057.2,
+            "RETAIL_ACCUMULATE_SAME": 16.4
+          },
+          {
+            "REPORT_DATE": "2021-08-01 00:00:00",
+            "TIME": "2021年08月份",
+            "RETAIL_TOTAL": 34394.9,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.51810589,
+            "RETAIL_TOTAL_ACCUMULATE": 281224.2,
+            "RETAIL_ACCUMULATE_SAME": 18.1
+          },
+          {
+            "REPORT_DATE": "2021-07-01 00:00:00",
+            "TIME": "2021年07月份",
+            "RETAIL_TOTAL": 34925.1,
+            "RETAIL_TOTAL_SAME": 8.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.07900324,
+            "RETAIL_TOTAL_ACCUMULATE": 246829.4,
+            "RETAIL_ACCUMULATE_SAME": 20.7
+          },
+          {
+            "REPORT_DATE": "2021-06-01 00:00:00",
+            "TIME": "2021年06月份",
+            "RETAIL_TOTAL": 37585.8,
+            "RETAIL_TOTAL_SAME": 12.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.5644608,
+            "RETAIL_TOTAL_ACCUMULATE": 211904.3,
+            "RETAIL_ACCUMULATE_SAME": 23
+          },
+          {
+            "REPORT_DATE": "2021-05-01 00:00:00",
+            "TIME": "2021年05月份",
+            "RETAIL_TOTAL": 35945.1,
+            "RETAIL_TOTAL_SAME": 12.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.42317043,
+            "RETAIL_TOTAL_ACCUMULATE": 174318.5,
+            "RETAIL_ACCUMULATE_SAME": 25.7
+          },
+          {
+            "REPORT_DATE": "2021-04-01 00:00:00",
+            "TIME": "2021年04月份",
+            "RETAIL_TOTAL": 33152.6,
+            "RETAIL_TOTAL_SAME": 17.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -6.5705485,
+            "RETAIL_TOTAL_ACCUMULATE": 138373.4,
+            "RETAIL_ACCUMULATE_SAME": 29.6
+          },
+          {
+            "REPORT_DATE": "2021-03-01 00:00:00",
+            "TIME": "2021年03月份",
+            "RETAIL_TOTAL": 35484.1,
+            "RETAIL_TOTAL_SAME": 34.2,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 105220.8,
+            "RETAIL_ACCUMULATE_SAME": 33.9
+          },
+          {
+            "REPORT_DATE": "2021-02-01 00:00:00",
+            "TIME": "2021年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 69736.8,
+            "RETAIL_ACCUMULATE_SAME": 33.8
+          },
+          {
+            "REPORT_DATE": "2020-12-01 00:00:00",
+            "TIME": "2020年12月份",
+            "RETAIL_TOTAL": 40566,
+            "RETAIL_TOTAL_SAME": 4.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.6618279,
+            "RETAIL_TOTAL_ACCUMULATE": 391980.6,
+            "RETAIL_ACCUMULATE_SAME": -3.9
+          },
+          {
+            "REPORT_DATE": "2020-11-01 00:00:00",
+            "TIME": "2020年11月份",
+            "RETAIL_TOTAL": 39514.2,
+            "RETAIL_TOTAL_SAME": 5,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.43075447,
+            "RETAIL_TOTAL_ACCUMULATE": 351414.7,
+            "RETAIL_ACCUMULATE_SAME": -4.8
+          },
+          {
+            "REPORT_DATE": "2020-10-01 00:00:00",
+            "TIME": "2020年10月份",
+            "RETAIL_TOTAL": 38576.5,
+            "RETAIL_TOTAL_SAME": 4.3,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.29827991,
+            "RETAIL_TOTAL_ACCUMULATE": 311900.5,
+            "RETAIL_ACCUMULATE_SAME": -5.9
+          },
+          {
+            "REPORT_DATE": "2020-09-01 00:00:00",
+            "TIME": "2020年09月份",
+            "RETAIL_TOTAL": 35294.7,
+            "RETAIL_TOTAL_SAME": 3.3,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.13574378,
+            "RETAIL_TOTAL_ACCUMULATE": 273324,
+            "RETAIL_ACCUMULATE_SAME": -7.2
+          },
+          {
+            "REPORT_DATE": "2020-08-01 00:00:00",
+            "TIME": "2020年08月份",
+            "RETAIL_TOTAL": 33570.6,
+            "RETAIL_TOTAL_SAME": 0.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.24842792,
+            "RETAIL_TOTAL_ACCUMULATE": 238029.4,
+            "RETAIL_ACCUMULATE_SAME": -8.6
+          },
+          {
+            "REPORT_DATE": "2020-07-01 00:00:00",
+            "TIME": "2020年07月份",
+            "RETAIL_TOTAL": 32202.5,
+            "RETAIL_TOTAL_SAME": -1.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.94739589,
+            "RETAIL_TOTAL_ACCUMULATE": 204458.7,
+            "RETAIL_ACCUMULATE_SAME": -9.9
+          },
+          {
+            "REPORT_DATE": "2020-06-01 00:00:00",
+            "TIME": "2020年06月份",
+            "RETAIL_TOTAL": 33525.9,
+            "RETAIL_TOTAL_SAME": -1.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.85756643,
+            "RETAIL_TOTAL_ACCUMULATE": 172256.2,
+            "RETAIL_ACCUMULATE_SAME": -11.4
+          },
+          {
+            "REPORT_DATE": "2020-05-01 00:00:00",
+            "TIME": "2020年05月份",
+            "RETAIL_TOTAL": 31972.8,
+            "RETAIL_TOTAL_SAME": -2.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 13.46804932,
+            "RETAIL_TOTAL_ACCUMULATE": 138730.3,
+            "RETAIL_ACCUMULATE_SAME": -13.5
+          },
+          {
+            "REPORT_DATE": "2020-04-01 00:00:00",
+            "TIME": "2020年04月份",
+            "RETAIL_TOTAL": 28177.8,
+            "RETAIL_TOTAL_SAME": -7.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.53272791,
+            "RETAIL_TOTAL_ACCUMULATE": 106757.5,
+            "RETAIL_ACCUMULATE_SAME": -16.2
+          },
+          {
+            "REPORT_DATE": "2020-03-01 00:00:00",
+            "TIME": "2020年03月份",
+            "RETAIL_TOTAL": 26449.9,
+            "RETAIL_TOTAL_SAME": -15.8,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 78579.7,
+            "RETAIL_ACCUMULATE_SAME": -19
+          },
+          {
+            "REPORT_DATE": "2020-02-01 00:00:00",
+            "TIME": "2020年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 52129.8,
+            "RETAIL_ACCUMULATE_SAME": -20.5
+          },
+          {
+            "REPORT_DATE": "2019-12-01 00:00:00",
+            "TIME": "2019年12月份",
+            "RETAIL_TOTAL": 38776.7,
+            "RETAIL_TOTAL_SAME": 8,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.79268017,
+            "RETAIL_TOTAL_ACCUMULATE": 411649,
+            "RETAIL_ACCUMULATE_SAME": 8
+          },
+          {
+            "REPORT_DATE": "2019-11-01 00:00:00",
+            "TIME": "2019年11月份",
+            "RETAIL_TOTAL": 38093.8,
+            "RETAIL_TOTAL_SAME": 8,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.02755595,
+            "RETAIL_TOTAL_ACCUMULATE": 372872.3,
+            "RETAIL_ACCUMULATE_SAME": 8
+          },
+          {
+            "REPORT_DATE": "2019-10-01 00:00:00",
+            "TIME": "2019年10月份",
+            "RETAIL_TOTAL": 38104.3,
+            "RETAIL_TOTAL_SAME": 7.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.46357577,
+            "RETAIL_TOTAL_ACCUMULATE": 334778.5,
+            "RETAIL_ACCUMULATE_SAME": 8.1
+          },
+          {
+            "REPORT_DATE": "2019-09-01 00:00:00",
+            "TIME": "2019年09月份",
+            "RETAIL_TOTAL": 34494.9,
+            "RETAIL_TOTAL_SAME": 7.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.76597446,
+            "RETAIL_TOTAL_ACCUMULATE": 296674.2,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2019-08-01 00:00:00",
+            "TIME": "2019年08月份",
+            "RETAIL_TOTAL": 33896.3,
+            "RETAIL_TOTAL_SAME": 7.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.4884121,
+            "RETAIL_TOTAL_ACCUMULATE": 262179.3,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2019-07-01 00:00:00",
+            "TIME": "2019年07月份",
+            "RETAIL_TOTAL": 33073.3,
+            "RETAIL_TOTAL_SAME": 7.6,
+            "RETAIL_TOTAL_SEQUENTIAL": -2.37557596,
+            "RETAIL_TOTAL_ACCUMULATE": 228282.9,
+            "RETAIL_ACCUMULATE_SAME": 8.3
+          },
+          {
+            "REPORT_DATE": "2019-06-01 00:00:00",
+            "TIME": "2019年06月份",
+            "RETAIL_TOTAL": 33878.1,
+            "RETAIL_TOTAL_SAME": 9.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.79890884,
+            "RETAIL_TOTAL_ACCUMULATE": 195209.7,
+            "RETAIL_ACCUMULATE_SAME": 8.4
+          }
+        ],
+        "count": 207
+      },
+      "success": true,
+      "message": "ok",
+      "code": 0
+    }
+  },
+  "em|RPT_ECONOMY_TOTAL_RETAIL|RETAIL_TOTAL,RETAIL_TOTAL_SAME|ps114": {
+    "timestamp": 1784471524.608573,
+    "url": "https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=REPORT_DATE&sortTypes=-1&pageSize=114&pageNumber=1&reportName=RPT_ECONOMY_TOTAL_RETAIL&columns=ALL&source=WEB&client=WEB",
+    "resp": {
+      "version": "1b6a6e2b09c5e65cc3f91c11e1caacc0",
+      "result": {
+        "pages": 2,
+        "data": [
+          {
+            "REPORT_DATE": "2026-06-01 00:00:00",
+            "TIME": "2026年06月份",
+            "RETAIL_TOTAL": 42691,
+            "RETAIL_TOTAL_SAME": 1,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.89632514,
+            "RETAIL_TOTAL_ACCUMULATE": 248722,
+            "RETAIL_ACCUMULATE_SAME": 1.3
+          },
+          {
+            "REPORT_DATE": "2026-05-01 00:00:00",
+            "TIME": "2026年05月份",
+            "RETAIL_TOTAL": 41090,
+            "RETAIL_TOTAL_SAME": -0.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.31909038,
+            "RETAIL_TOTAL_ACCUMULATE": 206031.4,
+            "RETAIL_ACCUMULATE_SAME": 1.4
+          },
+          {
+            "REPORT_DATE": "2026-04-01 00:00:00",
+            "TIME": "2026年04月份",
+            "RETAIL_TOTAL": 37246.5,
+            "RETAIL_TOTAL_SAME": 0.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -10.49956747,
+            "RETAIL_TOTAL_ACCUMULATE": 164941.5,
+            "RETAIL_ACCUMULATE_SAME": 1.9
+          },
+          {
+            "REPORT_DATE": "2026-03-01 00:00:00",
+            "TIME": "2026年03月份",
+            "RETAIL_TOTAL": 41616,
+            "RETAIL_TOTAL_SAME": 1.7,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 127694.9,
+            "RETAIL_ACCUMULATE_SAME": 2.4
+          },
+          {
+            "REPORT_DATE": "2026-02-01 00:00:00",
+            "TIME": "2026年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 86078.9,
+            "RETAIL_ACCUMULATE_SAME": 2.8
+          },
+          {
+            "REPORT_DATE": "2025-12-01 00:00:00",
+            "TIME": "2025年12月份",
+            "RETAIL_TOTAL": 45135.9,
+            "RETAIL_TOTAL_SAME": 0.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.81994624,
+            "RETAIL_TOTAL_ACCUMULATE": 501202.4,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2025-11-01 00:00:00",
+            "TIME": "2025年11月份",
+            "RETAIL_TOTAL": 43898,
+            "RETAIL_TOTAL_SAME": 1.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -5.17008596,
+            "RETAIL_TOTAL_ACCUMULATE": 456066.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2025-10-01 00:00:00",
+            "TIME": "2025年10月份",
+            "RETAIL_TOTAL": 46291.3,
+            "RETAIL_TOTAL_SAME": 2.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.29353601,
+            "RETAIL_TOTAL_ACCUMULATE": 412168.5,
+            "RETAIL_ACCUMULATE_SAME": 4.3
+          },
+          {
+            "REPORT_DATE": "2025-09-01 00:00:00",
+            "TIME": "2025年09月份",
+            "RETAIL_TOTAL": 41971,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.80675413,
+            "RETAIL_TOTAL_ACCUMULATE": 365877.2,
+            "RETAIL_ACCUMULATE_SAME": 4.5
+          },
+          {
+            "REPORT_DATE": "2025-08-01 00:00:00",
+            "TIME": "2025年08月份",
+            "RETAIL_TOTAL": 39667.6,
+            "RETAIL_TOTAL_SAME": 3.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.28828113,
+            "RETAIL_TOTAL_ACCUMULATE": 323906.2,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-07-01 00:00:00",
+            "TIME": "2025年07月份",
+            "RETAIL_TOTAL": 38780.2,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.29372343,
+            "RETAIL_TOTAL_ACCUMULATE": 284238.5,
+            "RETAIL_ACCUMULATE_SAME": 4.8
+          },
+          {
+            "REPORT_DATE": "2025-06-01 00:00:00",
+            "TIME": "2025年06月份",
+            "RETAIL_TOTAL": 42287.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.3268757,
+            "RETAIL_TOTAL_ACCUMULATE": 245458.4,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-05-01 00:00:00",
+            "TIME": "2025年05月份",
+            "RETAIL_TOTAL": 41325.8,
+            "RETAIL_TOTAL_SAME": 6.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 11.16825962,
+            "RETAIL_TOTAL_ACCUMULATE": 203171,
+            "RETAIL_ACCUMULATE_SAME": 5
+          },
+          {
+            "REPORT_DATE": "2025-04-01 00:00:00",
+            "TIME": "2025年04月份",
+            "RETAIL_TOTAL": 37174.1,
+            "RETAIL_TOTAL_SAME": 5.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -9.19969224,
+            "RETAIL_TOTAL_ACCUMULATE": 161845.2,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2025-03-01 00:00:00",
+            "TIME": "2025年03月份",
+            "RETAIL_TOTAL": 40940.5,
+            "RETAIL_TOTAL_SAME": 5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 124671.1,
+            "RETAIL_ACCUMULATE_SAME": 4.6
+          },
+          {
+            "REPORT_DATE": "2025-02-01 00:00:00",
+            "TIME": "2025年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 83730.6,
+            "RETAIL_ACCUMULATE_SAME": 4
+          },
+          {
+            "REPORT_DATE": "2024-12-01 00:00:00",
+            "TIME": "2024年12月份",
+            "RETAIL_TOTAL": 45171.5,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.21847223,
+            "RETAIL_TOTAL_ACCUMULATE": 487894.8,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-11-01 00:00:00",
+            "TIME": "2024年11月份",
+            "RETAIL_TOTAL": 43763,
+            "RETAIL_TOTAL_SAME": 3,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.59808267,
+            "RETAIL_TOTAL_ACCUMULATE": 442723.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-10-01 00:00:00",
+            "TIME": "2024年10月份",
+            "RETAIL_TOTAL": 45396.4,
+            "RETAIL_TOTAL_SAME": 4.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.42048243,
+            "RETAIL_TOTAL_ACCUMULATE": 398960.3,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-09-01 00:00:00",
+            "TIME": "2024年09月份",
+            "RETAIL_TOTAL": 41112.3,
+            "RETAIL_TOTAL_SAME": 3.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.16255829,
+            "RETAIL_TOTAL_ACCUMULATE": 353564,
+            "RETAIL_ACCUMULATE_SAME": 3.3
+          },
+          {
+            "REPORT_DATE": "2024-08-01 00:00:00",
+            "TIME": "2024年08月份",
+            "RETAIL_TOTAL": 38725.8,
+            "RETAIL_TOTAL_SAME": 2.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.56479525,
+            "RETAIL_TOTAL_ACCUMULATE": 312451.7,
+            "RETAIL_ACCUMULATE_SAME": 3.4
+          },
+          {
+            "REPORT_DATE": "2024-07-01 00:00:00",
+            "TIME": "2024年07月份",
+            "RETAIL_TOTAL": 37757.4,
+            "RETAIL_TOTAL_SAME": 2.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.30194738,
+            "RETAIL_TOTAL_ACCUMULATE": 273725.9,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2024-06-01 00:00:00",
+            "TIME": "2024年06月份",
+            "RETAIL_TOTAL": 40731.6,
+            "RETAIL_TOTAL_SAME": 2,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.87799342,
+            "RETAIL_TOTAL_ACCUMULATE": 235969,
+            "RETAIL_ACCUMULATE_SAME": 3.7
+          },
+          {
+            "REPORT_DATE": "2024-05-01 00:00:00",
+            "TIME": "2024年05月份",
+            "RETAIL_TOTAL": 39211,
+            "RETAIL_TOTAL_SAME": 3.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.83750291,
+            "RETAIL_TOTAL_ACCUMULATE": 195236.9,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-04-01 00:00:00",
+            "TIME": "2024年04月份",
+            "RETAIL_TOTAL": 35699.1,
+            "RETAIL_TOTAL_SAME": 2.3,
+            "RETAIL_TOTAL_SEQUENTIAL": -8.51052924,
+            "RETAIL_TOTAL_ACCUMULATE": 156025.8,
+            "RETAIL_ACCUMULATE_SAME": 4.1
+          },
+          {
+            "REPORT_DATE": "2024-03-01 00:00:00",
+            "TIME": "2024年03月份",
+            "RETAIL_TOTAL": 39019.9,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 120326.8,
+            "RETAIL_ACCUMULATE_SAME": 4.7
+          },
+          {
+            "REPORT_DATE": "2024-02-01 00:00:00",
+            "TIME": "2024年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 81306.9,
+            "RETAIL_ACCUMULATE_SAME": 5.5
+          },
+          {
+            "REPORT_DATE": "2023-12-01 00:00:00",
+            "TIME": "2023年12月份",
+            "RETAIL_TOTAL": 43550.2,
+            "RETAIL_TOTAL_SAME": 7.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.45900482,
+            "RETAIL_TOTAL_ACCUMULATE": 471495.2,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-11-01 00:00:00",
+            "TIME": "2023年11月份",
+            "RETAIL_TOTAL": 42505,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.91078393,
+            "RETAIL_TOTAL_ACCUMULATE": 427945,
+            "RETAIL_ACCUMULATE_SAME": 7.2
+          },
+          {
+            "REPORT_DATE": "2023-10-01 00:00:00",
+            "TIME": "2023年10月份",
+            "RETAIL_TOTAL": 43333,
+            "RETAIL_TOTAL_SAME": 7.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.80580525,
+            "RETAIL_TOTAL_ACCUMULATE": 385440,
+            "RETAIL_ACCUMULATE_SAME": 6.9
+          },
+          {
+            "REPORT_DATE": "2023-09-01 00:00:00",
+            "TIME": "2023年09月份",
+            "RETAIL_TOTAL": 39826,
+            "RETAIL_TOTAL_SAME": 5.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99120811,
+            "RETAIL_TOTAL_ACCUMULATE": 342107,
+            "RETAIL_ACCUMULATE_SAME": 6.8
+          },
+          {
+            "REPORT_DATE": "2023-08-01 00:00:00",
+            "TIME": "2023年08月份",
+            "RETAIL_TOTAL": 37932.7,
+            "RETAIL_TOTAL_SAME": 4.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 3.18818738,
+            "RETAIL_TOTAL_ACCUMULATE": 302281,
+            "RETAIL_ACCUMULATE_SAME": 7
+          },
+          {
+            "REPORT_DATE": "2023-07-01 00:00:00",
+            "TIME": "2023年07月份",
+            "RETAIL_TOTAL": 36760.7,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.98645354,
+            "RETAIL_TOTAL_ACCUMULATE": 264348.4,
+            "RETAIL_ACCUMULATE_SAME": 7.3
+          },
+          {
+            "REPORT_DATE": "2023-06-01 00:00:00",
+            "TIME": "2023年06月份",
+            "RETAIL_TOTAL": 39951.4,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.68230816,
+            "RETAIL_TOTAL_ACCUMULATE": 227587.6,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2023-05-01 00:00:00",
+            "TIME": "2023年05月份",
+            "RETAIL_TOTAL": 37803.3,
+            "RETAIL_TOTAL_SAME": 12.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.28633219,
+            "RETAIL_TOTAL_ACCUMULATE": 187636.3,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2023-04-01 00:00:00",
+            "TIME": "2023年04月份",
+            "RETAIL_TOTAL": 34910.5,
+            "RETAIL_TOTAL_SAME": 18.4,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.77933928,
+            "RETAIL_TOTAL_ACCUMULATE": 149832.9,
+            "RETAIL_ACCUMULATE_SAME": 8.5
+          },
+          {
+            "REPORT_DATE": "2023-03-01 00:00:00",
+            "TIME": "2023年03月份",
+            "RETAIL_TOTAL": 37855.4,
+            "RETAIL_TOTAL_SAME": 10.6,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 114922.4,
+            "RETAIL_ACCUMULATE_SAME": 5.8
+          },
+          {
+            "REPORT_DATE": "2023-02-01 00:00:00",
+            "TIME": "2023年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 77067,
+            "RETAIL_ACCUMULATE_SAME": 3.5
+          },
+          {
+            "REPORT_DATE": "2022-12-01 00:00:00",
+            "TIME": "2022年12月份",
+            "RETAIL_TOTAL": 40542.3,
+            "RETAIL_TOTAL_SAME": -1.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.99079376,
+            "RETAIL_TOTAL_ACCUMULATE": 439732.5,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-11-01 00:00:00",
+            "TIME": "2022年11月份",
+            "RETAIL_TOTAL": 38615.1,
+            "RETAIL_TOTAL_SAME": -5.9,
+            "RETAIL_TOTAL_SEQUENTIAL": -4.11070138,
+            "RETAIL_TOTAL_ACCUMULATE": 399190.2,
+            "RETAIL_ACCUMULATE_SAME": -0.1
+          },
+          {
+            "REPORT_DATE": "2022-10-01 00:00:00",
+            "TIME": "2022年10月份",
+            "RETAIL_TOTAL": 40270.5,
+            "RETAIL_TOTAL_SAME": -0.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.69123511,
+            "RETAIL_TOTAL_ACCUMULATE": 360575.1,
+            "RETAIL_ACCUMULATE_SAME": 0.6
+          },
+          {
+            "REPORT_DATE": "2022-09-01 00:00:00",
+            "TIME": "2022年09月份",
+            "RETAIL_TOTAL": 37744.9,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.10117519,
+            "RETAIL_TOTAL_ACCUMULATE": 320304.6,
+            "RETAIL_ACCUMULATE_SAME": 0.7
+          },
+          {
+            "REPORT_DATE": "2022-08-01 00:00:00",
+            "TIME": "2022年08月份",
+            "RETAIL_TOTAL": 36257.9,
+            "RETAIL_TOTAL_SAME": 5.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.08112328,
+            "RETAIL_TOTAL_ACCUMULATE": 282559.7,
+            "RETAIL_ACCUMULATE_SAME": 0.5
+          },
+          {
+            "REPORT_DATE": "2022-07-01 00:00:00",
+            "TIME": "2022年07月份",
+            "RETAIL_TOTAL": 35870.1,
+            "RETAIL_TOTAL_SAME": 2.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.41408014,
+            "RETAIL_TOTAL_ACCUMULATE": 246301.8,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-06-01 00:00:00",
+            "TIME": "2022年06月份",
+            "RETAIL_TOTAL": 38742.5,
+            "RETAIL_TOTAL_SAME": 3.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 15.48722688,
+            "RETAIL_TOTAL_ACCUMULATE": 210431.7,
+            "RETAIL_ACCUMULATE_SAME": -0.7
+          },
+          {
+            "REPORT_DATE": "2022-05-01 00:00:00",
+            "TIME": "2022年05月份",
+            "RETAIL_TOTAL": 33547,
+            "RETAIL_TOTAL_SAME": -6.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 13.7838287,
+            "RETAIL_TOTAL_ACCUMULATE": 171689.3,
+            "RETAIL_ACCUMULATE_SAME": -1.5
+          },
+          {
+            "REPORT_DATE": "2022-04-01 00:00:00",
+            "TIME": "2022年04月份",
+            "RETAIL_TOTAL": 29483.1,
+            "RETAIL_TOTAL_SAME": -11.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -13.87545972,
+            "RETAIL_TOTAL_ACCUMULATE": 138142.2,
+            "RETAIL_ACCUMULATE_SAME": -0.2
+          },
+          {
+            "REPORT_DATE": "2022-03-01 00:00:00",
+            "TIME": "2022年03月份",
+            "RETAIL_TOTAL": 34233.1,
+            "RETAIL_TOTAL_SAME": -3.5,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 108659.1,
+            "RETAIL_ACCUMULATE_SAME": 3.3
+          },
+          {
+            "REPORT_DATE": "2022-02-01 00:00:00",
+            "TIME": "2022年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 74426,
+            "RETAIL_ACCUMULATE_SAME": 6.7
+          },
+          {
+            "REPORT_DATE": "2021-12-01 00:00:00",
+            "TIME": "2021年12月份",
+            "RETAIL_TOTAL": 41268.9,
+            "RETAIL_TOTAL_SAME": 1.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 0.54990839,
+            "RETAIL_TOTAL_ACCUMULATE": 440823.2,
+            "RETAIL_ACCUMULATE_SAME": 12.5
+          },
+          {
+            "REPORT_DATE": "2021-11-01 00:00:00",
+            "TIME": "2021年11月份",
+            "RETAIL_TOTAL": 41043.2,
+            "RETAIL_TOTAL_SAME": 3.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.45671987,
+            "RETAIL_TOTAL_ACCUMULATE": 399554.3,
+            "RETAIL_ACCUMULATE_SAME": 13.7
+          },
+          {
+            "REPORT_DATE": "2021-10-01 00:00:00",
+            "TIME": "2021年10月份",
+            "RETAIL_TOTAL": 40453.9,
+            "RETAIL_TOTAL_SAME": 4.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.8305867,
+            "RETAIL_TOTAL_ACCUMULATE": 358511.1,
+            "RETAIL_ACCUMULATE_SAME": 14.9
+          },
+          {
+            "REPORT_DATE": "2021-09-01 00:00:00",
+            "TIME": "2021年09月份",
+            "RETAIL_TOTAL": 36833,
+            "RETAIL_TOTAL_SAME": 4.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 7.08855092,
+            "RETAIL_TOTAL_ACCUMULATE": 318057.2,
+            "RETAIL_ACCUMULATE_SAME": 16.4
+          },
+          {
+            "REPORT_DATE": "2021-08-01 00:00:00",
+            "TIME": "2021年08月份",
+            "RETAIL_TOTAL": 34394.9,
+            "RETAIL_TOTAL_SAME": 2.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.51810589,
+            "RETAIL_TOTAL_ACCUMULATE": 281224.2,
+            "RETAIL_ACCUMULATE_SAME": 18.1
+          },
+          {
+            "REPORT_DATE": "2021-07-01 00:00:00",
+            "TIME": "2021年07月份",
+            "RETAIL_TOTAL": 34925.1,
+            "RETAIL_TOTAL_SAME": 8.5,
+            "RETAIL_TOTAL_SEQUENTIAL": -7.07900324,
+            "RETAIL_TOTAL_ACCUMULATE": 246829.4,
+            "RETAIL_ACCUMULATE_SAME": 20.7
+          },
+          {
+            "REPORT_DATE": "2021-06-01 00:00:00",
+            "TIME": "2021年06月份",
+            "RETAIL_TOTAL": 37585.8,
+            "RETAIL_TOTAL_SAME": 12.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.5644608,
+            "RETAIL_TOTAL_ACCUMULATE": 211904.3,
+            "RETAIL_ACCUMULATE_SAME": 23
+          },
+          {
+            "REPORT_DATE": "2021-05-01 00:00:00",
+            "TIME": "2021年05月份",
+            "RETAIL_TOTAL": 35945.1,
+            "RETAIL_TOTAL_SAME": 12.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 8.42317043,
+            "RETAIL_TOTAL_ACCUMULATE": 174318.5,
+            "RETAIL_ACCUMULATE_SAME": 25.7
+          },
+          {
+            "REPORT_DATE": "2021-04-01 00:00:00",
+            "TIME": "2021年04月份",
+            "RETAIL_TOTAL": 33152.6,
+            "RETAIL_TOTAL_SAME": 17.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -6.5705485,
+            "RETAIL_TOTAL_ACCUMULATE": 138373.4,
+            "RETAIL_ACCUMULATE_SAME": 29.6
+          },
+          {
+            "REPORT_DATE": "2021-03-01 00:00:00",
+            "TIME": "2021年03月份",
+            "RETAIL_TOTAL": 35484.1,
+            "RETAIL_TOTAL_SAME": 34.2,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 105220.8,
+            "RETAIL_ACCUMULATE_SAME": 33.9
+          },
+          {
+            "REPORT_DATE": "2021-02-01 00:00:00",
+            "TIME": "2021年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 69736.8,
+            "RETAIL_ACCUMULATE_SAME": 33.8
+          },
+          {
+            "REPORT_DATE": "2020-12-01 00:00:00",
+            "TIME": "2020年12月份",
+            "RETAIL_TOTAL": 40566,
+            "RETAIL_TOTAL_SAME": 4.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.6618279,
+            "RETAIL_TOTAL_ACCUMULATE": 391980.6,
+            "RETAIL_ACCUMULATE_SAME": -3.9
+          },
+          {
+            "REPORT_DATE": "2020-11-01 00:00:00",
+            "TIME": "2020年11月份",
+            "RETAIL_TOTAL": 39514.2,
+            "RETAIL_TOTAL_SAME": 5,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.43075447,
+            "RETAIL_TOTAL_ACCUMULATE": 351414.7,
+            "RETAIL_ACCUMULATE_SAME": -4.8
+          },
+          {
+            "REPORT_DATE": "2020-10-01 00:00:00",
+            "TIME": "2020年10月份",
+            "RETAIL_TOTAL": 38576.5,
+            "RETAIL_TOTAL_SAME": 4.3,
+            "RETAIL_TOTAL_SEQUENTIAL": 9.29827991,
+            "RETAIL_TOTAL_ACCUMULATE": 311900.5,
+            "RETAIL_ACCUMULATE_SAME": -5.9
+          },
+          {
+            "REPORT_DATE": "2020-09-01 00:00:00",
+            "TIME": "2020年09月份",
+            "RETAIL_TOTAL": 35294.7,
+            "RETAIL_TOTAL_SAME": 3.3,
+            "RETAIL_TOTAL_SEQUENTIAL": 5.13574378,
+            "RETAIL_TOTAL_ACCUMULATE": 273324,
+            "RETAIL_ACCUMULATE_SAME": -7.2
+          },
+          {
+            "REPORT_DATE": "2020-08-01 00:00:00",
+            "TIME": "2020年08月份",
+            "RETAIL_TOTAL": 33570.6,
+            "RETAIL_TOTAL_SAME": 0.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.24842792,
+            "RETAIL_TOTAL_ACCUMULATE": 238029.4,
+            "RETAIL_ACCUMULATE_SAME": -8.6
+          },
+          {
+            "REPORT_DATE": "2020-07-01 00:00:00",
+            "TIME": "2020年07月份",
+            "RETAIL_TOTAL": 32202.5,
+            "RETAIL_TOTAL_SAME": -1.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.94739589,
+            "RETAIL_TOTAL_ACCUMULATE": 204458.7,
+            "RETAIL_ACCUMULATE_SAME": -9.9
+          },
+          {
+            "REPORT_DATE": "2020-06-01 00:00:00",
+            "TIME": "2020年06月份",
+            "RETAIL_TOTAL": 33525.9,
+            "RETAIL_TOTAL_SAME": -1.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 4.85756643,
+            "RETAIL_TOTAL_ACCUMULATE": 172256.2,
+            "RETAIL_ACCUMULATE_SAME": -11.4
+          },
+          {
+            "REPORT_DATE": "2020-05-01 00:00:00",
+            "TIME": "2020年05月份",
+            "RETAIL_TOTAL": 31972.8,
+            "RETAIL_TOTAL_SAME": -2.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 13.46804932,
+            "RETAIL_TOTAL_ACCUMULATE": 138730.3,
+            "RETAIL_ACCUMULATE_SAME": -13.5
+          },
+          {
+            "REPORT_DATE": "2020-04-01 00:00:00",
+            "TIME": "2020年04月份",
+            "RETAIL_TOTAL": 28177.8,
+            "RETAIL_TOTAL_SAME": -7.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.53272791,
+            "RETAIL_TOTAL_ACCUMULATE": 106757.5,
+            "RETAIL_ACCUMULATE_SAME": -16.2
+          },
+          {
+            "REPORT_DATE": "2020-03-01 00:00:00",
+            "TIME": "2020年03月份",
+            "RETAIL_TOTAL": 26449.9,
+            "RETAIL_TOTAL_SAME": -15.8,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 78579.7,
+            "RETAIL_ACCUMULATE_SAME": -19
+          },
+          {
+            "REPORT_DATE": "2020-02-01 00:00:00",
+            "TIME": "2020年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 52129.8,
+            "RETAIL_ACCUMULATE_SAME": -20.5
+          },
+          {
+            "REPORT_DATE": "2019-12-01 00:00:00",
+            "TIME": "2019年12月份",
+            "RETAIL_TOTAL": 38776.7,
+            "RETAIL_TOTAL_SAME": 8,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.79268017,
+            "RETAIL_TOTAL_ACCUMULATE": 411649,
+            "RETAIL_ACCUMULATE_SAME": 8
+          },
+          {
+            "REPORT_DATE": "2019-11-01 00:00:00",
+            "TIME": "2019年11月份",
+            "RETAIL_TOTAL": 38093.8,
+            "RETAIL_TOTAL_SAME": 8,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.02755595,
+            "RETAIL_TOTAL_ACCUMULATE": 372872.3,
+            "RETAIL_ACCUMULATE_SAME": 8
+          },
+          {
+            "REPORT_DATE": "2019-10-01 00:00:00",
+            "TIME": "2019年10月份",
+            "RETAIL_TOTAL": 38104.3,
+            "RETAIL_TOTAL_SAME": 7.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.46357577,
+            "RETAIL_TOTAL_ACCUMULATE": 334778.5,
+            "RETAIL_ACCUMULATE_SAME": 8.1
+          },
+          {
+            "REPORT_DATE": "2019-09-01 00:00:00",
+            "TIME": "2019年09月份",
+            "RETAIL_TOTAL": 34494.9,
+            "RETAIL_TOTAL_SAME": 7.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.76597446,
+            "RETAIL_TOTAL_ACCUMULATE": 296674.2,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2019-08-01 00:00:00",
+            "TIME": "2019年08月份",
+            "RETAIL_TOTAL": 33896.3,
+            "RETAIL_TOTAL_SAME": 7.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.4884121,
+            "RETAIL_TOTAL_ACCUMULATE": 262179.3,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2019-07-01 00:00:00",
+            "TIME": "2019年07月份",
+            "RETAIL_TOTAL": 33073.3,
+            "RETAIL_TOTAL_SAME": 7.6,
+            "RETAIL_TOTAL_SEQUENTIAL": -2.37557596,
+            "RETAIL_TOTAL_ACCUMULATE": 228282.9,
+            "RETAIL_ACCUMULATE_SAME": 8.3
+          },
+          {
+            "REPORT_DATE": "2019-06-01 00:00:00",
+            "TIME": "2019年06月份",
+            "RETAIL_TOTAL": 33878.1,
+            "RETAIL_TOTAL_SAME": 9.8,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.79890884,
+            "RETAIL_TOTAL_ACCUMULATE": 195209.7,
+            "RETAIL_ACCUMULATE_SAME": 8.4
+          },
+          {
+            "REPORT_DATE": "2019-05-01 00:00:00",
+            "TIME": "2019年05月份",
+            "RETAIL_TOTAL": 32955.7,
+            "RETAIL_TOTAL_SAME": 8.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 7.74731005,
+            "RETAIL_TOTAL_ACCUMULATE": 161331.6,
+            "RETAIL_ACCUMULATE_SAME": 8.1
+          },
+          {
+            "REPORT_DATE": "2019-04-01 00:00:00",
+            "TIME": "2019年04月份",
+            "RETAIL_TOTAL": 30586.1,
+            "RETAIL_TOTAL_SAME": 7.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -3.59204052,
+            "RETAIL_TOTAL_ACCUMULATE": 128375.8,
+            "RETAIL_ACCUMULATE_SAME": 8
+          },
+          {
+            "REPORT_DATE": "2019-03-01 00:00:00",
+            "TIME": "2019年03月份",
+            "RETAIL_TOTAL": 31725.7,
+            "RETAIL_TOTAL_SAME": 8.7,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 97789.7,
+            "RETAIL_ACCUMULATE_SAME": 8.3
+          },
+          {
+            "REPORT_DATE": "2019-02-01 00:00:00",
+            "TIME": "2019年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 66064,
+            "RETAIL_ACCUMULATE_SAME": 8.2
+          },
+          {
+            "REPORT_DATE": "2018-12-01 00:00:00",
+            "TIME": "2018年12月份",
+            "RETAIL_TOTAL": 35893.5,
+            "RETAIL_TOTAL_SAME": 8.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.79751955,
+            "RETAIL_TOTAL_ACCUMULATE": 380986.9,
+            "RETAIL_ACCUMULATE_SAME": 9
+          },
+          {
+            "REPORT_DATE": "2018-11-01 00:00:00",
+            "TIME": "2018年11月份",
+            "RETAIL_TOTAL": 35259.7,
+            "RETAIL_TOTAL_SAME": 8.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.77305372,
+            "RETAIL_TOTAL_ACCUMULATE": 345093.4,
+            "RETAIL_ACCUMULATE_SAME": 9.1
+          },
+          {
+            "REPORT_DATE": "2018-10-01 00:00:00",
+            "TIME": "2018年10月份",
+            "RETAIL_TOTAL": 35534.4,
+            "RETAIL_TOTAL_SAME": 8.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 11.02626432,
+            "RETAIL_TOTAL_ACCUMULATE": 309833.7,
+            "RETAIL_ACCUMULATE_SAME": 9.2
+          },
+          {
+            "REPORT_DATE": "2018-09-01 00:00:00",
+            "TIME": "2018年09月份",
+            "RETAIL_TOTAL": 32005.4,
+            "RETAIL_TOTAL_SAME": 9.2,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.46818716,
+            "RETAIL_TOTAL_ACCUMULATE": 274299.3,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2018-08-01 00:00:00",
+            "TIME": "2018年08月份",
+            "RETAIL_TOTAL": 31542.3,
+            "RETAIL_TOTAL_SAME": 9,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.63098813,
+            "RETAIL_TOTAL_ACCUMULATE": 242293.9,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2018-07-01 00:00:00",
+            "TIME": "2018年07月份",
+            "RETAIL_TOTAL": 30733.7,
+            "RETAIL_TOTAL_SAME": 8.8,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.34985215,
+            "RETAIL_TOTAL_ACCUMULATE": 210751.6,
+            "RETAIL_ACCUMULATE_SAME": 9.3
+          },
+          {
+            "REPORT_DATE": "2018-06-01 00:00:00",
+            "TIME": "2018年06月份",
+            "RETAIL_TOTAL": 30841.6,
+            "RETAIL_TOTAL_SAME": 9,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.5893093,
+            "RETAIL_TOTAL_ACCUMULATE": 180017.9,
+            "RETAIL_ACCUMULATE_SAME": 9.4
+          },
+          {
+            "REPORT_DATE": "2018-05-01 00:00:00",
+            "TIME": "2018年05月份",
+            "RETAIL_TOTAL": 30359.1,
+            "RETAIL_TOTAL_SAME": 8.5,
+            "RETAIL_TOTAL_SEQUENTIAL": 6.36678007,
+            "RETAIL_TOTAL_ACCUMULATE": 149176.4,
+            "RETAIL_ACCUMULATE_SAME": 9.5
+          },
+          {
+            "REPORT_DATE": "2018-04-01 00:00:00",
+            "TIME": "2018年04月份",
+            "RETAIL_TOTAL": 28541.9,
+            "RETAIL_TOTAL_SAME": 9.4,
+            "RETAIL_TOTAL_SEQUENTIAL": -2.23233859,
+            "RETAIL_TOTAL_ACCUMULATE": 118817.3,
+            "RETAIL_ACCUMULATE_SAME": 9.7
+          },
+          {
+            "REPORT_DATE": "2018-03-01 00:00:00",
+            "TIME": "2018年03月份",
+            "RETAIL_TOTAL": 29193.6,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 90275.4,
+            "RETAIL_ACCUMULATE_SAME": 9.8
+          },
+          {
+            "REPORT_DATE": "2018-02-01 00:00:00",
+            "TIME": "2018年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 61081.8,
+            "RETAIL_ACCUMULATE_SAME": 9.7
+          },
+          {
+            "REPORT_DATE": "2017-12-01 00:00:00",
+            "TIME": "2017年12月份",
+            "RETAIL_TOTAL": 34734.1,
+            "RETAIL_TOTAL_SAME": 9.4,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.8350426,
+            "RETAIL_TOTAL_ACCUMULATE": 366261.6,
+            "RETAIL_ACCUMULATE_SAME": 10.2
+          },
+          {
+            "REPORT_DATE": "2017-11-01 00:00:00",
+            "TIME": "2017年11月份",
+            "RETAIL_TOTAL": 34108.2,
+            "RETAIL_TOTAL_SAME": 10.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.38754822,
+            "RETAIL_TOTAL_ACCUMULATE": 331527.5,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2017-10-01 00:00:00",
+            "TIME": "2017年10月份",
+            "RETAIL_TOTAL": 34240.9,
+            "RETAIL_TOTAL_SAME": 10,
+            "RETAIL_TOTAL_SEQUENTIAL": 10.91858518,
+            "RETAIL_TOTAL_ACCUMULATE": 297419.4,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2017-09-01 00:00:00",
+            "TIME": "2017年09月份",
+            "RETAIL_TOTAL": 30870.3,
+            "RETAIL_TOTAL_SAME": 10.3,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.7824113,
+            "RETAIL_TOTAL_ACCUMULATE": 263178.4,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2017-08-01 00:00:00",
+            "TIME": "2017年08月份",
+            "RETAIL_TOTAL": 30329.7,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.43128964,
+            "RETAIL_TOTAL_ACCUMULATE": 232308.2,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2017-07-01 00:00:00",
+            "TIME": "2017年07月份",
+            "RETAIL_TOTAL": 29609.8,
+            "RETAIL_TOTAL_SAME": 10.4,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.66358915,
+            "RETAIL_TOTAL_ACCUMULATE": 201978.5,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2017-06-01 00:00:00",
+            "TIME": "2017年06月份",
+            "RETAIL_TOTAL": 29807.6,
+            "RETAIL_TOTAL_SAME": 11,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.18265262,
+            "RETAIL_TOTAL_ACCUMULATE": 172368.7,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2017-05-01 00:00:00",
+            "TIME": "2017年05月份",
+            "RETAIL_TOTAL": 29459.2,
+            "RETAIL_TOTAL_SAME": 10.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 7.99420789,
+            "RETAIL_TOTAL_ACCUMULATE": 142561.1,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2017-04-01 00:00:00",
+            "TIME": "2017年04月份",
+            "RETAIL_TOTAL": 27278.5,
+            "RETAIL_TOTAL_SAME": 10.7,
+            "RETAIL_TOTAL_SEQUENTIAL": -2.10022359,
+            "RETAIL_TOTAL_ACCUMULATE": 113101.9,
+            "RETAIL_ACCUMULATE_SAME": 10.2
+          },
+          {
+            "REPORT_DATE": "2017-03-01 00:00:00",
+            "TIME": "2017年03月份",
+            "RETAIL_TOTAL": 27863.7,
+            "RETAIL_TOTAL_SAME": 10.9,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 85823.4,
+            "RETAIL_ACCUMULATE_SAME": 10
+          },
+          {
+            "REPORT_DATE": "2017-02-01 00:00:00",
+            "TIME": "2017年02月份",
+            "RETAIL_TOTAL": null,
+            "RETAIL_TOTAL_SAME": null,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 57959.7,
+            "RETAIL_ACCUMULATE_SAME": 9.5
+          },
+          {
+            "REPORT_DATE": "2016-12-01 00:00:00",
+            "TIME": "2016年12月份",
+            "RETAIL_TOTAL": 31757,
+            "RETAIL_TOTAL_SAME": 10.9,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.57925933,
+            "RETAIL_TOTAL_ACCUMULATE": 332316,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2016-11-01 00:00:00",
+            "TIME": "2016年11月份",
+            "RETAIL_TOTAL": 30958.5,
+            "RETAIL_TOTAL_SAME": 10.8,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.51640145,
+            "RETAIL_TOTAL_ACCUMULATE": 300559.5,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2016-10-01 00:00:00",
+            "TIME": "2016年10月份",
+            "RETAIL_TOTAL": 31119.2,
+            "RETAIL_TOTAL_SAME": 10,
+            "RETAIL_TOTAL_SEQUENTIAL": 11.23375416,
+            "RETAIL_TOTAL_ACCUMULATE": 269601,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2016-09-01 00:00:00",
+            "TIME": "2016年09月份",
+            "RETAIL_TOTAL": 27976.4,
+            "RETAIL_TOTAL_SAME": 10.7,
+            "RETAIL_TOTAL_SEQUENTIAL": 1.58607968,
+            "RETAIL_TOTAL_ACCUMULATE": 238481.8,
+            "RETAIL_ACCUMULATE_SAME": 10.4
+          },
+          {
+            "REPORT_DATE": "2016-08-01 00:00:00",
+            "TIME": "2016年08月份",
+            "RETAIL_TOTAL": 27539.6,
+            "RETAIL_TOTAL_SAME": 10.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 2.6547485,
+            "RETAIL_TOTAL_ACCUMULATE": 210505.4,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2016-07-01 00:00:00",
+            "TIME": "2016年07月份",
+            "RETAIL_TOTAL": 26827.4,
+            "RETAIL_TOTAL_SAME": 10.2,
+            "RETAIL_TOTAL_SEQUENTIAL": -0.11170106,
+            "RETAIL_TOTAL_ACCUMULATE": 182965.8,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2016-06-01 00:00:00",
+            "TIME": "2016年06月份",
+            "RETAIL_TOTAL": 26857.4,
+            "RETAIL_TOTAL_SAME": 10.6,
+            "RETAIL_TOTAL_SEQUENTIAL": 0.92707069,
+            "RETAIL_TOTAL_ACCUMULATE": 156138.3,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2016-05-01 00:00:00",
+            "TIME": "2016年05月份",
+            "RETAIL_TOTAL": 26610.7,
+            "RETAIL_TOTAL_SAME": 10,
+            "RETAIL_TOTAL_SEQUENTIAL": 7.97255516,
+            "RETAIL_TOTAL_ACCUMULATE": 129280.9,
+            "RETAIL_ACCUMULATE_SAME": 10.2
+          },
+          {
+            "REPORT_DATE": "2016-04-01 00:00:00",
+            "TIME": "2016年04月份",
+            "RETAIL_TOTAL": 24645.8,
+            "RETAIL_TOTAL_SAME": 10.1,
+            "RETAIL_TOTAL_SEQUENTIAL": -1.86468956,
+            "RETAIL_TOTAL_ACCUMULATE": 102670.2,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          },
+          {
+            "REPORT_DATE": "2016-03-01 00:00:00",
+            "TIME": "2016年03月份",
+            "RETAIL_TOTAL": 25114.1,
+            "RETAIL_TOTAL_SAME": 10.5,
+            "RETAIL_TOTAL_SEQUENTIAL": null,
+            "RETAIL_TOTAL_ACCUMULATE": 78024.4,
+            "RETAIL_ACCUMULATE_SAME": 10.3
+          }
+        ],
+        "count": 207
+      },
+      "success": true,
+      "message": "ok",
+      "code": 0
+    }
+  }
+}

@@ -6,6 +6,7 @@ logging:
     filing_process : debug
     filing_query : debug
     io.invest.iagent.service.filingrag: debug
+    io.invest.iagent.rag: debug
   file:
     path: ~/project/github/iagent/workspace/logs/app
   console:

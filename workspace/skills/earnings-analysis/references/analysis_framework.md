@@ -53,61 +53,61 @@
 ### 分析流程
 
 #### 步骤1: 数据提取与验证
-```python
-// 从Excel提取指定季度数据
-balance_sheet, validation = read_and_validate_excel(
-“US_GOOG_balance_20260723_114333.xlsx”,
-“sheet_资产负债表”,
-“2024-07-23”
-)
-
-// 提取特定季度数据
-current_q_data = extract_quarterly_data(balance_sheet, “2026Q2”)
+```code
+   // 从Excel提取指定季度数据
+   balance_sheet, validation = read_and_validate_excel(
+   “US_GOOG_balance_20260723_114333.xlsx”,
+   “sheet_资产负债表”,
+   “2024-07-23”
+   )
+   
+   // 提取特定季度数据
+   current_q_data = extract_quarterly_data(balance_sheet, “2026Q2”)
 ```
 
 
 #### 步骤2: 关键指标计算
-```python
+```code 
 // 计算当季度所有关键指标
 metrics = calculate_metrics(
-balance_sheet,
-income_statement,
-cash_flow,
-“2026Q2”
+   balance_sheet,
+   income_statement,
+   cash_flow,
+   “2026Q2”
 )
 ```
 
 #### 步骤3: 趋势分析
-```python
+```code 
 // 分析收入趋势（最近8个季度）
 revenue_trend = analyze_quarterly_trend(
-income_statement,
-“总收入”,
-periods=8
+   income_statement,
+   “总收入”,
+   periods=8
 )
 
 // 分析利润率趋势
 margin_trend = analyze_quarterly_trend(
-income_statement,
-“毛利率”,
-periods=8
+   income_statement,
+   “毛利率”,
+   periods=8
 )
 ```
 
 #### 步骤4: 比较分析
-```python
+```code
 // 与上一季度比较
 qoq_comparison = compare_periods(
-income_statement,
-“2026Q2”,
-“2026Q1”
+   income_statement,
+   “2026Q2”,
+   “2026Q1”
 )
 
 // 与去年同期比较
 yoy_comparison = compare_periods(
-income_statement,
-“2026Q2”,
-“2025Q2”
+   income_statement,
+   “2026Q2”,
+   “2025Q2”
 )
 ```
 

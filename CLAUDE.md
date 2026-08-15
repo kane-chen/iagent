@@ -42,6 +42,10 @@ workspace/
 └── temp/                         # Temporary files (safe to clean)
 ```
 
+## 设计规范
+- KISS原则：在满足用户需求（功能、性能、安全性）的前提下，尽可能以更小的改动、更简单的方式实现，避免过度设计、过早优化。
+- 易用性原则：在满足用户功能需求的前提，考虑用户易用性，降低后续的运维成本。
+
 ## 编码规范
 
 - **Lombok** (`@Data`, `@Builder`, `@Slf4j`, etc.) is preferred over hand-written getters/setters.

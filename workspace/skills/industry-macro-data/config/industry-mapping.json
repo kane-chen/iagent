@@ -1,0 +1,110 @@
+{
+  "_comment": "两段式配置：indicators 是指标目录（开发者维护，一次性），industries 是行业清单（用户友好，添加行业只需引用指标名）。",
+  "_usage": "普通用户添加行业：在 industries 下加一条形如 '新行业名': {aliases:[...], indicators:['指标名1','指标名2']}。指标名必须在下方 indicators 目录里存在；如需新指标才动 indicators 段（要知道东方财富的 reportName / valueColumn）。",
+
+  "indicators": {
+    "社零总额": {
+      "description": "社会消费品零售总额（当月值），衡量国内消费景气度",
+      "unit": "亿元",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_TOTAL_RETAIL",
+      "valueColumn": "RETAIL_TOTAL",
+      "yoyColumn": "RETAIL_TOTAL_SAME"
+    },
+    "社零累计": {
+      "description": "社会消费品零售总额（年初至今累计）",
+      "unit": "亿元",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_TOTAL_RETAIL",
+      "valueColumn": "RETAIL_TOTAL_ACCUMULATE",
+      "yoyColumn": "RETAIL_ACCUMULATE_SAME"
+    },
+    "CPI同比": {
+      "description": "居民消费价格指数(全国)同比涨幅",
+      "unit": "%",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_CPI",
+      "valueColumn": "NATIONAL_SAME"
+    },
+    "PPI同比": {
+      "description": "工业生产者出厂价格指数同比涨幅",
+      "unit": "%",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_PPI",
+      "valueColumn": "BASE_SAME"
+    },
+    "工业增加值同比": {
+      "description": "规模以上工业增加值当月同比增速",
+      "unit": "%",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_INDUS_GROW",
+      "valueColumn": "BASE_SAME"
+    },
+    "工业增加值累计同比": {
+      "description": "规模以上工业增加值年初至今累计同比增速",
+      "unit": "%",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_INDUS_GROW",
+      "valueColumn": "BASE_ACCUMULATE"
+    },
+    "GDP": {
+      "description": "国内生产总值(累计值)",
+      "unit": "亿元",
+      "freq": "quarter",
+      "reportName": "RPT_ECONOMY_GDP",
+      "valueColumn": "DOMESTICL_PRODUCT_BASE",
+      "yoyColumn": "SUM_SAME"
+    },
+    "新房价格同比": {
+      "description": "70大中城市新建商品住宅价格指数同比",
+      "unit": "%",
+      "freq": "month",
+      "reportName": "RPT_ECONOMY_HOUSE_PRICE",
+      "valueColumn": "NEW_HOUSE_SAME"
+    }
+  },
+
+  "industries": {
+    "电商": {
+      "aliases": ["电子商务", "网络零售", "网购", "e-commerce", "互联网电商"],
+      "indicators": ["社零总额"],
+      "notes": "东方财富公开数据未单独发布'实物商品网上零售额'月度序列；电商渗透率暂不可得，需在报告中另行标注。"
+    },
+    "汽车": {
+      "aliases": ["乘用车", "汽车行业", "auto"],
+      "indicators": ["社零总额"]
+    },
+    "餐饮": {
+      "aliases": ["餐饮业", "餐饮消费"],
+      "indicators": ["社零总额"]
+    },
+    "房地产": {
+      "aliases": ["地产", "房地产开发", "real estate"],
+      "indicators": ["新房价格同比"]
+    },
+    "工业": {
+      "aliases": ["规上工业", "规模以上工业"],
+      "indicators": ["工业增加值同比", "工业增加值累计同比"]
+    },
+    "gdp": {
+      "aliases": ["GDP", "国内生产总值"],
+      "indicators": ["GDP"]
+    },
+    "cpi": {
+      "aliases": ["CPI", "居民消费价格"],
+      "indicators": ["CPI同比"]
+    },
+    "ppi": {
+      "aliases": ["PPI", "工业品出厂价格"],
+      "indicators": ["PPI同比"]
+    }
+  },
+
+  "endpoint": {
+    "baseUrl": "https://datacenter-web.eastmoney.com/api/data/v1/get",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "referer": "https://data.eastmoney.com/",
+    "retries": 3,
+    "backoffSeconds": [1, 2, 4]
+  }
+}

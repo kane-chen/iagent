@@ -17,7 +17,7 @@
     <properties>
         <java.version>17</java.version>
         <junit.version>5.13.4</junit.version>
-        <agentscope.vision>2.0.0</agentscope.vision>
+        <agentscope.vision>2.0.2</agentscope.vision>
     </properties>
 
     <dependencyManagement>
@@ -101,6 +101,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- agent-scope -->
         <dependency>
             <groupId>io.agentscope</groupId>
@@ -120,11 +126,6 @@
         <dependency>
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-reme</artifactId>
-            <version>${agentscope.vision}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.agentscope</groupId>
-            <artifactId>agentscope-extensions-rag-ragflow</artifactId>
             <version>${agentscope.vision}</version>
         </dependency>
         <dependency>

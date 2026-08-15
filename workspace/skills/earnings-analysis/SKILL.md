@@ -10,7 +10,6 @@ description:  通过自动化处理Excel财务数据生成专业的8-12页股权
 
 ## 前置条件
 - **Python环境**: 需要 `pandas`、`openpyxl`、`python-docx`、`matplotlib`、`numpy`。
-- **网络搜索工具**: 必须有权访问 `web_search` 函数/工具。
 - **文件结构**: 工作目录必须包含：
     - `scripts/` 目录（包含分析逻辑）
     - `references/` 目录（包含模板和数据字典）

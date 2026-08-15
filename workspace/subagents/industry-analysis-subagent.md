@@ -42,11 +42,12 @@ tools:
 
 #### 步骤 1：行业体量分析
 - **目的**：定量刻画行业规模与渗透率的时间序列。
-- **skill**：`industry-macro-data`（**placeholder，暂未实现**）
-  - 预期入参：`--industry <行业名> --market <CN|US|...> --quarters <N>`
-  - 预期返回：行业总量（如社零、网络社零）、渗透率、YoY、季节性因子。
-  - **兜底**：若 skill 尚未上线，先用 `web_search` 拉取国家统计局/行业协会的近 N 个季度数据，来源标注为 `[external]`，并在报告中注明"数据源为二手引用，待 industry-macro-data skill 上线后重跑核对"。
-- **产出**：行业总量与渗透率的 N 季度时间序列表 + 一句话趋势判断。
+- **skill**：`industry-macro-data`（已实现，数据源：**东方财富 datacenter**，`datacenter-web.eastmoney.com/api/data/v1/get`）
+  - 入参示例：`python workspace/skills/industry-macro-data/scripts/query_industry.py --industry 电商 --last 12 --freq quarter --pretty`
+  - 返回：indicator 时间序列（含 EM 官方同比列 `yoyPct`）+ 派生指标（如已配置）+ `notes` 字段说明数据缺口。
+  - 目前覆盖：电商/汽车/餐饮（共享 `RPT_ECONOMY_TOTAL_RETAIL` 社零总额）、GDP、CPI、PPI、工业增加值、房地产房价指数。新增行业只需在 `config/industry-mapping.json` 加映射。
+  - **已知缺口**：东方财富未单独发布「实物商品网上零售额」月度序列，`电商渗透率` 派生指标暂缺；需要补齐时用 `web_search` 拉国家统计局公报，来源标注 `[external]`。
+- **产出**：行业总量 / 关键指标的 N 期时间序列表 + 一句话趋势判断（引用 `yoyPct` 列）。
 
 #### 步骤 2：行业主要参与者
 - **目的**：确定分析涵盖的头部公司清单。
@@ -110,7 +111,7 @@ tools:
 
 | 用途 | Skill | 状态 |
 |------|-------|------|
-| 行业体量 / 渗透率 | `industry-macro-data` | **placeholder，未实现**；兜底走 `web_search` |
+| 行业体量 / 渗透率 | `industry-macro-data` | **已实现**（数据源：东方财富 datacenter）；电商行业暂缺"实物商品网上零售额"数据，需用 `web_search` 兜底 |
 | 头部公司识别 | `industry-players-search` | **placeholder，未实现**；兜底走 `web_search` + `stock-ticker` |
 | 股票代码归一 | `stock-ticker` | 已存在 |
 | 公司利润表 / 现金流 | `futu-financial-report` | 已存在 |
