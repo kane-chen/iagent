@@ -64,8 +64,8 @@ class HeadingAwareChunkerIntegrationTest {
 
         ChunkingConfig config = new ChunkingConfig();
         config.setEnableParentChild(true);
-        config.setChildSize(200);
-        config.setParentSize(1024);
+        config.setChildChunkSize(200);
+        config.setParentChunkSize(1024);
         config.setChunkOverlap(40);
 
         List<ParsedChunk> chunks = chunker.split(sb.toString(), config);

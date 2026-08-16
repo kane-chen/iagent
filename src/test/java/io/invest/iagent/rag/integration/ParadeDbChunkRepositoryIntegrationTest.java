@@ -59,7 +59,7 @@ class ParadeDbChunkRepositoryIntegrationTest extends RagIntegrationTestSupport {
         List<ChunkDO> chunks = List.of(
                 newChunk(uid, "c1", "云计算业务收入本季度同比增长20%", "Part II > MD&A"),
                 newChunk(uid, "c2", "供应链风险来自地缘政治和原材料价格波动", "Part I > Risk"),
-                newChunk(uid, "c3", "研发投入重点投向人工智能基础设施"));
+                newChunk(uid, "c3", "研发投入重点投向人工智能基础设施",null));
 
         repo.batchSave(chunks);
 

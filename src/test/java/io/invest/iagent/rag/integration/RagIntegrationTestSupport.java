@@ -43,7 +43,7 @@ public abstract class RagIntegrationTestSupport {
         config.getEmbedding().setUrl(OLLAMA_URL);
         config.getEmbedding().setModel(OLLAMA_MODEL);
         config.getEmbedding().setDimension(EMBED_DIM);
-        config.getChunk().setEnableParentChild(true);
+        config.getChunk().setParentChild(true);
         config.getChunk().setChildSize(384);
         config.getChunk().setParentSize(2048);
         config.getSearch().setVectorTopK(20);
