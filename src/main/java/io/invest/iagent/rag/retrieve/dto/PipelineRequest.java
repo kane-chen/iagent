@@ -2,6 +2,7 @@ package io.invest.iagent.rag.retrieve.dto;
 
 import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.rag.model.RetrieveRequest;
+import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -40,6 +41,10 @@ public class PipelineRequest {
     public boolean webSearchEnabled;
     public String rewritePrompt;
     public String queryExpansionPrompt;
+    /** 标签过滤（来自请求；运行时可被 state.tagFilter 覆盖） */
+    public TagFilter tagFilter;
+    /** 业务域标识，用于应用层 handler 开关 */
+    public String domain;
     private RetrieveMode retrieveMode = RetrieveMode.HYBRID ;
 
     public PipelineRequest(String sessionId, String userId, String query,
@@ -49,7 +54,8 @@ public class PipelineRequest {
                            String chatModelId, String language,
                            String fallbackStrategy, String fallbackResponse, String fallbackPrompt,
                            boolean enableRewrite, boolean webSearchEnabled,
-                           String rewritePrompt, String queryExpansionPrompt) {
+                           String rewritePrompt, String queryExpansionPrompt,
+                           TagFilter tagFilter, String domain) {
         this.sessionId = sessionId;
         this.userId = userId;
         this.query = query;
@@ -71,6 +77,8 @@ public class PipelineRequest {
         this.webSearchEnabled = webSearchEnabled;
         this.rewritePrompt = rewritePrompt;
         this.queryExpansionPrompt = queryExpansionPrompt;
+        this.tagFilter = tagFilter;
+        this.domain = domain;
     }
 
     /**
@@ -96,7 +104,9 @@ public class PipelineRequest {
                 req.enableRewrite,
                 req.webSearchEnabled,
                 req.rewritePrompt,
-                req.queryExpansionPrompt
+                req.queryExpansionPrompt,
+                req.tagFilter,
+                req.domain
         );
         request.setRetrieveMode(req.retrieveMode);
         return request ;

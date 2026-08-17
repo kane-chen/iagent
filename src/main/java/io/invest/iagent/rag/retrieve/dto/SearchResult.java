@@ -21,6 +21,8 @@ public class SearchResult {
     public Map<String, String> metadata = new HashMap<>();
     public String parentId;
     public int chunkIndex;
+    /** chunk 标签（KV），如 ticker/fiscal_period/heading */
+    public Map<String, String> tags = new HashMap<>();
 
     public SearchResult() {}
 
@@ -36,6 +38,7 @@ public class SearchResult {
         this.metadata = new HashMap<>(other.metadata);
         this.parentId = other.parentId;
         this.chunkIndex = other.chunkIndex;
+        this.tags = new HashMap<>(other.tags);
     }
 
     public RetrieveResultItem toRetrieveResultItem() {
@@ -48,6 +51,7 @@ public class SearchResult {
         item.metadata = new HashMap<>(this.metadata);
         item.parentId = this.parentId;
         item.chunkIndex = this.chunkIndex;
+        item.tags = new HashMap<>(this.tags);
         return item;
     }
 }

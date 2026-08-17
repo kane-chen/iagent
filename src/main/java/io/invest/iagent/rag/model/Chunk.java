@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data
 @Builder
@@ -23,4 +24,6 @@ public class Chunk {
     private Boolean isEnabled;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    /** chunk 标签（KV），由文档级标签与 chunker 的 per-chunk 标签合并而来 */
+    private Map<String, String> tags;
 }

@@ -2,6 +2,9 @@ package io.invest.iagent.rag.chunking.dto;
 
 import lombok.Data;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * 分块后的片段（对应 Chunk）
  */
@@ -18,4 +21,6 @@ public class ParsedChunk {
     private String preChunkId;
     private String nextChunkId;
     private String parentChunkId;    // 若为 child，指向 parent
+    /** chunker 产生的 per-chunk 标签（KV），如 heading=面包屑标题 */
+    private Map<String, String> tags = new HashMap<>();
 }

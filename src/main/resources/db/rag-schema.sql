@@ -36,3 +36,30 @@ CREATE INDEX IF NOT EXISTS embeddings_kb_idx ON embeddings (knowledge_base_id);
 CREATE INDEX IF NOT EXISTS embeddings_parent_idx ON embeddings (parent_chunk_id)
     WHERE parent_chunk_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS embeddings_chunk_uk ON embeddings (knowledge_base_id, chunk_id);
+
+-- =========================================================
+--  Chunk 标签（KV）：一个 chunk 可有多个标签；检索支持 EQ/IN + 跨 key AND
+-- =========================================================
+CREATE TABLE IF NOT EXISTS chunk_tags (
+    id                BIGSERIAL PRIMARY KEY,
+    knowledge_base_id VARCHAR(64)  NOT NULL,
+    chunk_id          VARCHAR(64)  NOT NULL,
+    tag_key           VARCHAR(64)  NOT NULL,
+    tag_value         VARCHAR(512) NOT NULL,
+    created_at        TIMESTAMP NOT NULL DEFAULT now(),
+    -- 复用 embeddings(knowledge_base_id, chunk_id) 唯一索引；删除 embedding 时标签级联删除
+    CONSTRAINT chunk_tags_chunk_fk
+        FOREIGN KEY (knowledge_base_id, chunk_id)
+        REFERENCES embeddings (knowledge_base_id, chunk_id) ON DELETE CASCADE,
+    CONSTRAINT chunk_tags_uk UNIQUE (knowledge_base_id, chunk_id, tag_key, tag_value)
+);
+
+-- 过滤主索引：kb + key + value 覆盖 EQ/IN
+CREATE INDEX IF NOT EXISTS chunk_tags_kv_idx
+    ON chunk_tags (knowledge_base_id, tag_key, tag_value);
+-- DISTINCT tag_value（周期归一化取“最新期间”等）
+CREATE INDEX IF NOT EXISTS chunk_tags_key_idx
+    ON chunk_tags (knowledge_base_id, tag_key);
+-- 按 chunk 回填/清理
+CREATE INDEX IF NOT EXISTS chunk_tags_chunk_idx
+    ON chunk_tags (knowledge_base_id, chunk_id);

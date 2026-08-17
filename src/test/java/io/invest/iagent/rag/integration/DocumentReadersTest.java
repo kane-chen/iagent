@@ -1,10 +1,13 @@
 package io.invest.iagent.rag.integration;
 
+import io.invest.AgentConfig4Test;
 import io.invest.iagent.rag.chunking.reader.DocumentReaders;
 import io.invest.iagent.rag.model.Document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -14,10 +17,12 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * CompositeDocumentReader 集成测试：HTML / 纯文本路由。
+ * Document Reader 集成测试：HTML / 纯文本路由。
  * PDF 用例默认跳过（需要准备 PDF 样例文件），可在 workspace 下放置样例后手动启用。
  */
-class CompositeDocumentReaderIntegrationTest {
+@SpringBootTest(classes = AgentConfig4Test.class)
+@TestPropertySource(locations = "classpath:test.properties")
+class DocumentReadersTest {
 
     @Autowired
     private DocumentReaders reader;

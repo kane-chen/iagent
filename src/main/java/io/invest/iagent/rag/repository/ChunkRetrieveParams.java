@@ -1,5 +1,6 @@
 package io.invest.iagent.rag.repository;
 
+import io.invest.iagent.rag.model.TagFilter;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,4 +18,6 @@ public class ChunkRetrieveParams {
     private double rrfVectorWeight = 0.7;
     private double rrfKeywordWeight = 0.3;
     private int rrfK = 60;
+    /** 标签过滤（EQ/IN + 跨 key AND），null 表示不过滤 */
+    private TagFilter tagFilter;
 }

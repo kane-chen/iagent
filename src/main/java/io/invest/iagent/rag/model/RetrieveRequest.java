@@ -49,4 +49,10 @@ public class RetrieveRequest {
     public boolean webSearchEnabled;
     public String rewritePrompt; // Query改写提示词
     public String queryExpansionPrompt; // 查询扩展提示词
+
+    // 标签过滤（EQ/IN + 跨 key AND）
+    public TagFilter tagFilter;
+
+    // 业务域标识：用于应用层 handler 开关（如 filingkb 设为 "filing"）
+    public String domain;
 }

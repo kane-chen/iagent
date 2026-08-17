@@ -1,6 +1,7 @@
 package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.config.RagProperties;
+import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.repository.ChunkRepository;
 import io.invest.iagent.rag.repository.ChunkRetrieveParams;
 import io.invest.iagent.rag.repository.ChunkRetrieveResult;
@@ -62,10 +63,15 @@ public class SearchParallelHandler implements Handler {
             log.warn("Embedding failed, will use keyword search only: {}", e.getMessage());
         }
 
+        // 运行时由 handler 生成的 tagFilter 优先于请求传入的
+        TagFilter tagFilter = cm.getState().tagFilter != null
+                ? cm.getState().tagFilter : cm.getRequest().tagFilter;
+
         ChunkRetrieveParams params = ChunkRetrieveParams.builder()
                 .query(query)
                 .queryEmbedding(queryEmbedding)
                 .knowledgeBaseIds(cm.getRequest().knowledgeBaseIds)
+                .tagFilter(tagFilter)
                 .topK(searchConfig.getVectorTopK())
                 .vectorThreshold(cm.getRequest().vectorThreshold > 0
                         ? cm.getRequest().vectorThreshold : searchConfig.getVectorThreshold())
@@ -116,6 +122,9 @@ public class SearchParallelHandler implements Handler {
         sr.content = r.getContent();
         sr.metadata.put("match_type", r.getMatchType());
         sr.metadata.put("source_id", r.getSourceId());
+        if (r.getTags() != null && !r.getTags().isEmpty()) {
+            sr.tags = new HashMap<>(r.getTags());
+        }
         return sr;
     }
 }

@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 默认分块服务：读取文档 → 选择策略 → 分块 → 映射为 Chunk
@@ -46,6 +48,14 @@ public class DefaultChunkingService implements ChunkingService {
     }
 
     private Chunk parse(ParsedChunk pc, Document doc) {
+        // 合并标签：文档级标签打底，chunker 的 per-chunk 标签覆盖
+        Map<String, String> tags = new HashMap<>();
+        if (doc.getTags() != null) {
+            tags.putAll(doc.getTags());
+        }
+        if (pc.getTags() != null) {
+            tags.putAll(pc.getTags());
+        }
         return Chunk.builder()
                 .chunkId(pc.getId())
                 .knowledgeId(doc.getKnowledgeId())
@@ -54,6 +64,7 @@ public class DefaultChunkingService implements ChunkingService {
                 .content(pc.getContent())
                 .contextHeader(pc.getContextHeader())
                 .parentChunkId(pc.getParentChunkId())
+                .tags(tags.isEmpty() ? null : tags)
                 .build();
     }
 }

@@ -18,5 +18,7 @@ public class RetrieveResultItem {
     public Map<String, String> metadata = new HashMap<>();
     public String parentId; // parent chunk id，用于parent-child回填
     public int chunkIndex; // 用于排序与合并
+    /** chunk 标签（KV），如 ticker/fiscal_period/heading */
+    public Map<String, String> tags = new HashMap<>();
     // getters/setters 略
 }

@@ -32,7 +32,7 @@ public class DefaultKnowledgeService implements KnowledgeService {
 
 
     @Override
-    public void save(Document doc, ChunkingConfig chunkingConfig) {
+    public int save(Document doc, ChunkingConfig chunkingConfig) {
         log.info("Saving document: knowledgeBaseId={}, filePath={}", doc.getKnowledgeBaseId(), doc.getFilePath());
         if (chunkingConfig != null) {
             doc.setChunkingConfig(chunkingConfig);
@@ -42,6 +42,12 @@ public class DefaultKnowledgeService implements KnowledgeService {
         embeddingService.embedding(chunks);
         chunkRepositoryService.save(chunks);
         log.info("Document saved successfully");
+        return chunks.size();
+    }
+
+    @Override
+    public void deleteByKnowledgeId(String knowledgeBaseId, String knowledgeId) {
+        chunkRepositoryService.deleteByKnowledgeId(knowledgeBaseId, knowledgeId);
     }
 
     @Override

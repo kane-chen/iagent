@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.utils.Lists;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
@@ -39,6 +40,8 @@ public class Handlers {
                         Map.Entry::getKey,
                         Collectors.mapping(Map.Entry::getValue, Collectors.toList())
                 ));
+        // 同事件多 handler 时按 @Order 排序，支持应用层定义确定的处理顺序
+        listeners.values().forEach(AnnotationAwareOrderComparator::sort);
         // pipeline
         pipeline = Map.of(
                 RetrieveMode.CHAT,List.of(LOAD_HISTORY, QUERY_UNDERSTAND, CHAT_COMPLETION_STREAM),

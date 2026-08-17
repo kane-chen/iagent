@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -21,4 +23,6 @@ public class ChunkRetrieveResult {
     private String parentChunkId;
     private double score;
     private String matchType;
+    /** chunk 标签（KV），检索时由仓储回填 */
+    private Map<String, String> tags;
 }

@@ -49,6 +49,10 @@ public class HeadingAwareChunker implements Chunker {
                 parent.setType("parent_text");
                 parent.setStart(section.startOffset);
                 parent.setEnd(section.startOffset + Math.min(section.content.length(), config.getParentChunkSize()));
+                // 标题面包屑作为通用 heading 标签
+                if (section.breadcrumb != null && !section.breadcrumb.isBlank()) {
+                    parent.getTags().put("heading", section.breadcrumb);
+                }
                 allChunks.add(parent);
             }
 
@@ -127,6 +131,9 @@ public class HeadingAwareChunker implements Chunker {
             chunk.setStart(baseOffset);
             chunk.setEnd(baseOffset + text.length());
             chunk.setParentChunkId(parentId);
+            if (breadcrumb != null && !breadcrumb.isBlank()) {
+                chunk.getTags().put("heading", breadcrumb);
+            }
             chunks.add(chunk);
             return chunks;
         }
@@ -150,6 +157,9 @@ public class HeadingAwareChunker implements Chunker {
             chunk.setStart(baseOffset + start);
             chunk.setEnd(baseOffset + end);
             chunk.setParentChunkId(parentId);
+            if (breadcrumb != null && !breadcrumb.isBlank()) {
+                chunk.getTags().put("heading", breadcrumb);
+            }
             chunks.add(chunk);
 
             if (end >= text.length()) break;

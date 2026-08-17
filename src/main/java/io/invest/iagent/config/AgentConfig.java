@@ -22,9 +22,12 @@ import io.agentscope.harness.agent.memory.MemoryConfig;
 import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
 import io.agentscope.harness.agent.workspace.LocalFsMode;
+import io.invest.iagent.filingkb.FilingKbBuildService;
+import io.invest.iagent.filingkb.FilingKbQaService;
 import io.invest.iagent.hook.AuditLoggingMiddleware;
 import io.invest.iagent.rag.KnowledgeService;
 import io.invest.iagent.service.filingrag.FilingRagService;
+import io.invest.iagent.tools.filingkb.FilingKbTool;
 import io.invest.iagent.tools.filingrag.FilingQaTool;
 import io.invest.iagent.tools.rag.RagQaTool;
 import io.invest.iagent.tools.web.WebSearchTool;
@@ -53,6 +56,12 @@ public class AgentConfig {
 
     @Autowired(required = false)
     private KnowledgeService knowledgeService;
+
+    @Autowired(required = false)
+    private FilingKbQaService filingKbQaService;
+
+    @Autowired(required = false)
+    private FilingKbBuildService filingKbBuildService;
 
     @PostConstruct
     public void init() {
@@ -101,6 +110,9 @@ public class AgentConfig {
         }
         if (knowledgeService != null) {
             toolkit.registerTool(new RagQaTool(knowledgeService));
+        }
+        if (filingKbQaService != null && filingKbBuildService != null) {
+            toolkit.registerTool(new FilingKbTool(filingKbQaService, filingKbBuildService));
         }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
@@ -174,6 +186,9 @@ public class AgentConfig {
         toolkit.registerTool(new WebSearchTool());
         if (knowledgeService != null) {
             toolkit.registerTool(new RagQaTool(knowledgeService));
+        }
+        if (filingKbQaService != null && filingKbBuildService != null) {
+            toolkit.registerTool(new FilingKbTool(filingKbQaService, filingKbBuildService));
         }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));

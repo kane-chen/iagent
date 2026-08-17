@@ -65,9 +65,11 @@ public class OllamaChatter implements Chatter {
             String apiKey = ragProperties.getLlm().getApiKey() ;
             // request
             JSONObject body = buildRequestBody(model,request);
+            int timeoutSeconds = request.timeoutSeconds != null
+                    ? request.timeoutSeconds : ragProperties.getLlm().getTimeoutSeconds();
             HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/chat/completions"))
-                    .timeout(Duration.ofSeconds(request.timeoutSeconds))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .header("Content-Type", "application/json");
             if (StringUtils.isNotBlank(apiKey)) {
                 reqBuilder.header("Authorization", "Bearer " + apiKey);

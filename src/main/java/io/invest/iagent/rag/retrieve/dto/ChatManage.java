@@ -45,6 +45,7 @@ public class ChatManage {
         PipelineState newState = new PipelineState();
         newState.rewriteQuery = this.state.rewriteQuery;
         newState.intent = this.state.intent;
+        newState.tagFilter = this.state.tagFilter; // 不可变对象，引用拷贝即可
         newState.history = new ArrayList<>(this.state.history);
         newState.entities = new ArrayList<>(this.state.entities);
         newState.graphResult = this.state.graphResult;

@@ -1,5 +1,6 @@
 package io.invest.iagent.rag.retrieve.dto;
 
+import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.retrieve.enums.QueryIntent;
 import lombok.Data;
 
@@ -16,6 +17,8 @@ public class PipelineState {
     public String rewriteQuery;
     public QueryIntent intent;
     public List<String> history = new ArrayList<>(); // 历史对话
+    /** 运行时由 handler 生成的标签过滤（优先于 request.tagFilter） */
+    public TagFilter tagFilter;
     
     // 检索阶段产出
     public List<SearchResult> searchResult = new ArrayList<>(); // 粗排结果

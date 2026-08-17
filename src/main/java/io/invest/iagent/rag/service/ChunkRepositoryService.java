@@ -26,6 +26,15 @@ public class ChunkRepositoryService {
         log.debug("Saved {} chunks to repository", records.size());
     }
 
+    /**
+     * 按知识库 + 业务文档 id 删除所有 chunk（标签随 FK 级联）。
+     * 用于幂等重建：先删后写。
+     */
+    public void deleteByKnowledgeId(String knowledgeBaseId, String knowledgeId) {
+        chunkRepository.deleteByKnowledgeId(knowledgeBaseId, knowledgeId);
+        log.debug("Deleted chunks: knowledgeBaseId={}, knowledgeId={}", knowledgeBaseId, knowledgeId);
+    }
+
     private ChunkDO toDO(Chunk chunk) {
         return ChunkDO.builder()
                 .id(chunk.getId())
@@ -41,6 +50,7 @@ public class ChunkRepositoryService {
                 .embedding(chunk.getEmbedding())
                 .parentChunkId(chunk.getParentChunkId())
                 .isEnabled(chunk.getIsEnabled() != null ? chunk.getIsEnabled() : Boolean.TRUE)
+                .tags(chunk.getTags())
                 .build();
     }
 }
