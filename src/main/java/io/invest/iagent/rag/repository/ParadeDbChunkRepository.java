@@ -53,23 +53,33 @@ public class ParadeDbChunkRepository implements ChunkRepository {
     public void batchSave(List<ChunkDO> entities) {
         if (entities == null || entities.isEmpty()) return;
 
+        // embedding 以 varchar 数组传入，再在 SELECT 中逐元素 ::halfvec；
+        // 直接 varchar[]::halfvec[] PG 不支持（数组类型之间无显式 cast）
         String sql = """
             INSERT INTO embeddings
                 (source_id, source_type, chunk_id, knowledge_id,
                  knowledge_base_id, chunk_type, content, context_header,
                  dimension, embedding, parent_chunk_id, is_enabled)
-            SELECT * FROM UNNEST(
+            SELECT source_id, source_type, chunk_id, knowledge_id,
+                   knowledge_base_id, chunk_type, content, context_header,
+                   dimension, embedding::halfvec, parent_chunk_id, is_enabled
+            FROM UNNEST(
                 ?::varchar[], ?::integer[], ?::varchar[], ?::varchar[],
                 ?::varchar[], ?::varchar[], ?::text[], ?::text[],
-                ?::integer[], ?::halfvec[], ?::varchar[], ?::boolean[]
-            )
+                ?::integer[], ?::varchar[], ?::varchar[], ?::boolean[]
+            ) AS t(source_id, source_type, chunk_id, knowledge_id,
+                   knowledge_base_id, chunk_type, content, context_header,
+                   dimension, embedding, parent_chunk_id, is_enabled)
             """;
 
         jdbcTemplate.execute((ConnectionCallback<Void>) conn -> {
             int n = entities.size();
             try (var ps = conn.prepareStatement(sql)) {
                 ps.setArray(1, conn.createArrayOf("varchar", col(entities, ChunkDO::getSourceId)));
-                ps.setArray(2, conn.createArrayOf("integer", col(entities, ChunkDO::getSourceType)));
+                ps.setArray(2, conn.createArrayOf("integer",
+                        entities.stream()
+                                .map(e -> e.getSourceType() != null ? e.getSourceType() : 0)
+                                .toArray()));
                 ps.setArray(3, conn.createArrayOf("varchar", col(entities, ChunkDO::getChunkId)));
                 ps.setArray(4, conn.createArrayOf("varchar", col(entities, ChunkDO::getKnowledgeId)));
                 ps.setArray(5, conn.createArrayOf("varchar", col(entities, ChunkDO::getKnowledgeBaseId)));
@@ -96,23 +106,30 @@ public class ParadeDbChunkRepository implements ChunkRepository {
 
     @Override
     public List<ChunkRetrieveResult> keywordSearch(ChunkRetrieveParams params) {
+        // 使用 IN(?,?,...)：jdbcTemplate.query 的 Object... 会把 String[] 展开成多个位置参数，
+        // 导致 = ANY(?) 只拿到第一个字符串（scalar），报 "requires array on right side"
+        String kbPlaceholders = params.getKnowledgeBaseIds().stream()
+                .map(id -> "?").collect(Collectors.joining(","));
         String sql = """
             SELECT id, source_id, chunk_id, knowledge_id, knowledge_base_id,
                    chunk_type, context_header, parent_chunk_id, content,
                    paradedb.score(id) AS score
             FROM embeddings
-            WHERE knowledge_base_id = ANY(?)
+            WHERE knowledge_base_id IN (%s)
               AND is_enabled = true
               AND content @@@ paradedb.match('content', ?)
             ORDER BY score DESC
             LIMIT ?
-            """;
+            """.formatted(kbPlaceholders);
+
+        List<Object> args = new ArrayList<>();
+        args.addAll(params.getKnowledgeBaseIds());
+        args.add(params.getQuery());
+        args.add(params.getTopK());
 
         return jdbcTemplate.query(sql,
                 (rs, rowNum) -> mapResult(rs, rs.getDouble("score"), "keyword"),
-                params.getKnowledgeBaseIds().toArray(new String[0]),
-                params.getQuery(),
-                params.getTopK());
+                args.toArray());
     }
 
     @Override
@@ -122,25 +139,30 @@ public class ParadeDbChunkRepository implements ChunkRepository {
         }
 
         String vecLiteral = toHalfVecLiteral(params.getQueryEmbedding());
+        String kbPlaceholders = params.getKnowledgeBaseIds().stream()
+                .map(id -> "?").collect(Collectors.joining(","));
         String sql = """
             SELECT id, source_id, chunk_id, knowledge_id, knowledge_base_id,
                    chunk_type, context_header, parent_chunk_id, content,
                    (1 - (embedding <=> ?::halfvec)) AS score
             FROM embeddings
-            WHERE knowledge_base_id = ANY(?)
+            WHERE knowledge_base_id IN (%s)
               AND is_enabled = true
               AND dimension = ?
             ORDER BY embedding <=> ?::halfvec
             LIMIT ?
-            """;
+            """.formatted(kbPlaceholders);
+
+        List<Object> args = new ArrayList<>();
+        args.add(vecLiteral);
+        args.addAll(params.getKnowledgeBaseIds());
+        args.add(params.getQueryEmbedding().length);
+        args.add(vecLiteral);
+        args.add(params.getTopK());
 
         return jdbcTemplate.query(sql,
                 (rs, rowNum) -> mapResult(rs, rs.getDouble("score"), "vector"),
-                vecLiteral,
-                params.getKnowledgeBaseIds().toArray(new String[0]),
-                params.getQueryEmbedding().length,
-                vecLiteral,
-                params.getTopK());
+                args.toArray());
     }
 
     @Override
@@ -182,12 +204,15 @@ public class ParadeDbChunkRepository implements ChunkRepository {
     public List<ChunkRetrieveResult> findByChunkIds(List<String> chunkIds) {
         if (chunkIds == null || chunkIds.isEmpty()) return Collections.emptyList();
 
+        // 使用 IN(?,?,...) 而非 = ANY(?)：JDBC 直接绑定 String[] 不会被 pgjdbc 转成 PG array，
+        // 会抛 "op ANY/ALL (array) requires array on right side"
+        String placeholders = chunkIds.stream().map(id -> "?").collect(Collectors.joining(","));
         String sql = """
             SELECT id, source_id, chunk_id, knowledge_id, knowledge_base_id,
                    chunk_type, context_header, parent_chunk_id, content, 0.0 AS score
             FROM embeddings
-            WHERE chunk_id = ANY(?)
-            """;
+            WHERE chunk_id IN (%s)
+            """.formatted(placeholders);
 
         return jdbcTemplate.query(sql,
                 (rs, rowNum) -> mapResult(rs, 0.0, "lookup"),

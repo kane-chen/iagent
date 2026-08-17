@@ -81,7 +81,7 @@ public class HeadingAwareChunker implements Chunker {
             int level = headingLevel(line);
             if (level > 0) {
                 // 保存前一个 section
-                if (currentContent.length() > 0) {
+                if (!currentContent.isEmpty()) {
                     sections.add(new Section(currentBreadcrumb, currentContent.toString().trim(), currentStart));
                 }
                 // 更新标题层级
@@ -96,7 +96,7 @@ public class HeadingAwareChunker implements Chunker {
             }
             offset += line.length() + 1;
         }
-        if (currentContent.length() > 0) {
+        if (!currentContent.isEmpty()) {
             sections.add(new Section(currentBreadcrumb, currentContent.toString().trim(), currentStart));
         }
         if (sections.isEmpty()) {

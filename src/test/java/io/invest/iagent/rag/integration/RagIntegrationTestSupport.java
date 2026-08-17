@@ -32,8 +32,8 @@ public abstract class RagIntegrationTestSupport {
 
     protected static final String PG_URL = prop("rag.pg.url", "RAG_PG_URL",
             "jdbc:postgresql://localhost:5432/iagent");
-    protected static final String PG_USER = prop("rag.pg.user", "RAG_PG_USER", "iagent");
-    protected static final String PG_PASSWORD = prop("rag.pg.password", "RAG_PG_PASSWORD", "");
+    protected static final String PG_USER = prop("rag.pg.user", "RAG_PG_USER", "postgres");
+    protected static final String PG_PASSWORD = prop("rag.pg.password", "RAG_PG_PASSWORD", "sagAdmin888");
 
     protected static final String KB_ID = prop("rag.kb", "RAG_KB", "it_test_kb");
 
@@ -76,11 +76,11 @@ public abstract class RagIntegrationTestSupport {
         jdbc.update("DELETE FROM embeddings WHERE knowledge_base_id = ?", kbId);
     }
 
-    private static String prop(String sysKey, String envKey, String def) {
+    private static String prop(String sysKey, String envKey, String defaultValue) {
         String v = System.getProperty(sysKey);
         if (v != null && !v.isBlank()) return v;
         v = System.getenv(envKey);
         if (v != null && !v.isBlank()) return v;
-        return def;
+        return defaultValue;
     }
 }

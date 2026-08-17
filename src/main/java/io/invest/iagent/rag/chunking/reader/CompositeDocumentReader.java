@@ -59,7 +59,6 @@ public class CompositeDocumentReader implements DocumentReader {
 
         StringBuilder sb = new StringBuilder();
         Element body = html.body();
-        if (body == null) return "";
 
         walkHtml(body, sb);
         return sb.toString();

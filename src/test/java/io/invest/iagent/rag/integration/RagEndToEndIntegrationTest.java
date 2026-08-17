@@ -35,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -147,7 +148,7 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
 
         ChunkingConfig chunkingConfig = new ChunkingConfig();
         chunkingConfig.setStrategy(ChunkingConfig.Strategy.AUTO);
-        chunkingConfig.setEnableParentChild(true);
+        chunkingConfig.setEnableParentChild(false);
 
         Document doc = Document.builder()
                 .filePath(docFile.toString())
@@ -167,6 +168,8 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
 
         // 3. 检索：直接命中云计算收入
         RetrieveRequest req = RetrieveRequest.builder()
+                .sessionId(UUID.randomUUID().toString())
+                .userId("u-000001")
                 .query("云计算业务本季度收入是多少？同比增长多少？")
                 .knowledgeBaseIds(List.of(KB_ID))
                 .enableRewrite(true)
@@ -203,6 +206,8 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
 
         RetrieveRequest req = RetrieveRequest.builder()
                 .query("GPU 算力 数据中心 投资")
+                .sessionId(UUID.randomUUID().toString())
+                .userId("u-000001")
                 .knowledgeBaseIds(List.of(KB_ID))
                 .enableRewrite(false)
                 .rerankTopK(3)
