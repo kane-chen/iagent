@@ -1,7 +1,7 @@
 package io.invest.iagent.rag.integration;
 
 import io.invest.iagent.rag.chunking.dto.ParsedChunk;
-import io.invest.iagent.rag.chunking.plugins.HeadingAwareChunker;
+import io.invest.iagent.rag.chunking.chunker.HeadingAwareChunker;
 import io.invest.iagent.rag.model.ChunkingConfig;
 import org.junit.jupiter.api.Test;
 

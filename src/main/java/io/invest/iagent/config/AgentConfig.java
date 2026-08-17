@@ -3,10 +3,8 @@ package io.invest.iagent.config;
 import io.agentscope.core.model.ExecutionConfig;
 import io.agentscope.core.model.GenerateOptions;
 import io.agentscope.core.model.Model;
-import io.agentscope.core.permission.PermissionBehavior;
 import io.agentscope.core.permission.PermissionContextState;
 import io.agentscope.core.permission.PermissionMode;
-import io.agentscope.core.permission.PermissionRule;
 import io.agentscope.core.skill.repository.FileSystemSkillRepository;
 import io.agentscope.core.state.InMemoryAgentStateStore;
 import io.agentscope.core.state.JsonFileAgentStateStore;
@@ -25,7 +23,7 @@ import io.agentscope.harness.agent.memory.compaction.ToolResultEvictionConfig;
 import io.agentscope.harness.agent.middleware.ToolResultEvictionMiddleware;
 import io.agentscope.harness.agent.workspace.LocalFsMode;
 import io.invest.iagent.hook.AuditLoggingMiddleware;
-import io.invest.iagent.rag.RagService;
+import io.invest.iagent.rag.KnowledgeService;
 import io.invest.iagent.service.filingrag.FilingRagService;
 import io.invest.iagent.tools.filingrag.FilingQaTool;
 import io.invest.iagent.tools.rag.RagQaTool;
@@ -54,7 +52,7 @@ public class AgentConfig {
     private FilingRagService filingRagService;
 
     @Autowired(required = false)
-    private RagService ragService;
+    private KnowledgeService knowledgeService;
 
     @PostConstruct
     public void init() {
@@ -101,8 +99,8 @@ public class AgentConfig {
         if (filingRagService != null) {
             toolkit.registerTool(new FilingQaTool(filingRagService));
         }
-        if (ragService != null) {
-            toolkit.registerTool(new RagQaTool(ragService));
+        if (knowledgeService != null) {
+            toolkit.registerTool(new RagQaTool(knowledgeService));
         }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));
@@ -174,8 +172,8 @@ public class AgentConfig {
                 .build();
         Toolkit toolkit = new Toolkit(ToolkitConfig.builder().executionConfig(toolExecutionConfig).build());
         toolkit.registerTool(new WebSearchTool());
-        if (ragService != null) {
-            toolkit.registerTool(new RagQaTool(ragService));
+        if (knowledgeService != null) {
+            toolkit.registerTool(new RagQaTool(knowledgeService));
         }
         // shell-command
         toolkit.registerTool(new ShellCommandTool(Set.of("python","python3")));

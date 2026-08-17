@@ -1,40 +1,39 @@
 package io.invest.iagent.rag.embedding;
 
-import io.invest.iagent.rag.config.RagConfig;
+import io.invest.iagent.rag.config.RagProperties;
+import io.invest.iagent.rag.embedding.embedder.Embedder;
 import io.invest.iagent.rag.model.Chunk;
 import io.invest.iagent.rag.service.EmbeddingService;
-import io.invest.iagent.service.filingrag.embed.EmbeddingProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 默认 Embedding 服务：委托 OllamaEmbeddingProvider 生成向量
+ * 默认 Embedding 服务：委托 Ollama 生成向量
  */
+@Service
 @Slf4j
 public class DefaultEmbeddingService implements EmbeddingService {
 
-    private final EmbeddingProvider provider;
-    private final int batchSize;
-
-    public DefaultEmbeddingService(EmbeddingProvider provider, RagConfig config) {
-        this.provider = provider;
-        this.batchSize = config.getEmbedding().getBatchSize();
-    }
+    @Autowired
+    private Embedder embedder ;
+    @Autowired
+    private RagProperties config ;
 
     @Override
     public float[] embedding(String content) {
-        List<Float> result = provider.embed(content);
-        return toFloatArray(result);
+        return embedder.embed(content);
     }
 
     @Override
     public void embedding(List<Chunk> chunks) {
         if (chunks == null || chunks.isEmpty()) return;
 
-        // 构建 embedding 文本（contextHeader + content）
+        // 构建 embedding 文本（context-Header + content）
         List<String> texts = new ArrayList<>(chunks.size());
         for (Chunk chunk : chunks) {
             String text = chunk.getContent();
@@ -45,26 +44,20 @@ public class DefaultEmbeddingService implements EmbeddingService {
         }
 
         // 分批调用 embedding
-        int dimension = provider.dimension();
+        int batchSize = config.getEmbedding().getBatchSize() ;
+        int dimension = embedder.dimension();
         for (int i = 0; i < texts.size(); i += batchSize) {
             int end = Math.min(i + batchSize, texts.size());
             List<String> batch = texts.subList(i, end);
-            List<List<Float>> vectors = provider.embedBatch(batch);
+            List<float[]> vectors = embedder.embedBatch(batch);
 
             for (int j = 0; j < vectors.size(); j++) {
                 Chunk chunk = chunks.get(i + j);
-                chunk.setEmbedding(toFloatArray(vectors.get(j)));
+                chunk.setEmbedding(vectors.get(j));
                 chunk.setDimension(dimension);
             }
             log.debug("Embedded batch {}/{}, size={}", i + batch.size(), texts.size(), batch.size());
         }
     }
 
-    private float[] toFloatArray(List<Float> list) {
-        float[] arr = new float[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            arr[i] = list.get(i);
-        }
-        return arr;
-    }
 }

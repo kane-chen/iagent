@@ -1,12 +1,10 @@
 package io.invest.iagent.rag.retrieve.dto;
 
 import io.invest.iagent.rag.retrieve.enums.QueryIntent;
-import io.invest.iagent.rag.retrieve.model.EventBus;
-import io.invest.iagent.rag.retrieve.model.SearchResult;
+import io.invest.iagent.rag.retrieve.event.EventBus;
 import lombok.Data;
 
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Pipeline 工作台：组合 Request + State + Context
@@ -26,7 +24,6 @@ public class ChatManage {
     public String getSessionId() { return request.sessionId; }
     public String getQuery() { return request.query; }
     public EventBus getEventBus() { return context.eventBus; }
-    public List<SearchResult> getSearchResult() { return state.searchResult; }
 
     /**
      * 判断是否需要执行检索阶段

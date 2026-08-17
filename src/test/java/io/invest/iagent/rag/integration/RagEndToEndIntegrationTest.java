@@ -1,43 +1,25 @@
 package io.invest.iagent.rag.integration;
 
-import com.zaxxer.hikari.HikariDataSource;
-import io.invest.iagent.rag.DefaultRagService;
-import io.invest.iagent.rag.RagService;
-import io.invest.iagent.rag.chunking.Chunker;
-import io.invest.iagent.rag.chunking.DefaultChunkingService;
-import io.invest.iagent.rag.chunking.plugins.HeadingAwareChunker;
-import io.invest.iagent.rag.chunking.reader.CompositeDocumentReader;
-import io.invest.iagent.rag.chunking.reader.DocumentReader;
-import io.invest.iagent.rag.config.RagConfig;
-import io.invest.iagent.rag.embedding.DefaultEmbeddingService;
+import io.invest.AgentConfig4Test;
+import io.invest.iagent.rag.KnowledgeService;
+import io.invest.iagent.rag.chunking.chunker.ChunkStrategy;
 import io.invest.iagent.rag.model.ChunkingConfig;
 import io.invest.iagent.rag.model.Document;
 import io.invest.iagent.rag.model.RetrieveRequest;
 import io.invest.iagent.rag.model.RetrieveResultItem;
-import io.invest.iagent.rag.repository.ChunkRepository;
-import io.invest.iagent.rag.repository.ParadeDbChunkRepository;
-import io.invest.iagent.rag.retrieve.executor.PluginsManager;
-import io.invest.iagent.rag.retrieve.executor.RagPipelineExecutor;
-import io.invest.iagent.rag.retrieve.plugins.*;
-import io.invest.iagent.rag.service.ChunkRepositoryService;
-import io.invest.iagent.rag.service.ChunkingService;
-import io.invest.iagent.rag.service.EmbeddingService;
-import io.invest.iagent.service.filingrag.embed.EmbeddingProvider;
-import io.invest.iagent.service.filingrag.embed.OllamaEmbeddingProvider;
-import io.invest.iagent.service.filingrag.util.LlmClient;
-import org.junit.jupiter.api.AfterAll;
+import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.TestPropertySource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,72 +28,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>
  * 依赖：Ollama（qwen3-embedding:4b + qwen3.5:4b）、PostgreSQL（pgvector + pg_search）。
  */
-class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
+@SpringBootTest(classes = AgentConfig4Test.class)
+@TestPropertySource(locations = "classpath:test.properties")
+class RagEndToEndIntegrationTest{
 
-    private static HikariDataSource ds;
-    private static RagService ragService;
-    private static JdbcTemplate jdbc;
-    private static ExecutorService executor;
+    protected static final String KB_ID ="it_test_kb"; // it-doc-1
 
-    @BeforeAll
-    static void wire() {
-        RagConfig config = newConfig();
+    @Autowired
+    private KnowledgeService knowledgeService;
 
-        ds = newDataSource();
-        jdbc = newJdbcTemplate(ds);
-
-        // chunking
-        DocumentReader reader = new CompositeDocumentReader();
-        Chunker headingChunker = new HeadingAwareChunker();
-        ChunkingService chunkingService = new DefaultChunkingService(reader,
-                Map.of("headingAwareChunker", headingChunker, "fixedSizeChunker", headingChunker));
-
-        // embedding
-        EmbeddingProvider embeddingProvider = new OllamaEmbeddingProvider(
-                config.getEmbedding().getUrl(),
-                config.getEmbedding().getModel(),
-                config.getEmbedding().getDimension());
-        EmbeddingService embeddingService = new DefaultEmbeddingService(embeddingProvider, config);
-
-        // repository
-        ChunkRepository repository = new ParadeDbChunkRepository(jdbc);
-        ChunkRepositoryService repositoryService = new ChunkRepositoryService(repository);
-
-        // llm
-        LlmClient llmClient = new LlmClient(
-                config.getLlm().getBaseUrl(),
-                config.getLlm().getModel(),
-                config.getLlm().getApiKey().isBlank() ? null : config.getLlm().getApiKey(),
-                config.getLlm().getTimeoutSeconds());
-
-        executor = Executors.newFixedThreadPool(4);
-
-        // plugins (ordered)
-        List<Plugin> plugins = List.of(
-                new QueryUnderstandPlugin(llmClient, config),
-                new SearchParallelPlugin(embeddingService, repository, executor, config),
-                new RerankPlugin(llmClient, config),
-                new MergePlugin(repository),
-                new FilterTopKPlugin(config),
-                new IntoChatMessagePlugin(),
-                new ChatCompletionStreamPlugin(llmClient, config)
-        );
-        PluginsManager pluginsManager = new PluginsManager(plugins);
-        RagPipelineExecutor pipelineExecutor = new RagPipelineExecutor(pluginsManager);
-
-        ragService = new DefaultRagService(chunkingService, embeddingService,
-                repositoryService, pipelineExecutor, config);
-    }
-
-    @AfterAll
-    static void shutdown() {
-        if (executor != null) executor.shutdown();
-        if (ds != null) ds.close();
-    }
+    @Autowired
+    private JdbcTemplate ragJdbcTemplate ;
 
     @BeforeEach
     void clean() {
-        cleanKnowledgeBase(jdbc, KB_ID);
+        cleanKnowledgeBase(ragJdbcTemplate, KB_ID);
+    }
+
+    protected static void cleanKnowledgeBase(JdbcTemplate jdbc, String kbId) {
+        jdbc.update("DELETE FROM embeddings WHERE knowledge_base_id = ?", kbId);
     }
 
     @Test
@@ -147,7 +82,7 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
                 """);
 
         ChunkingConfig chunkingConfig = new ChunkingConfig();
-        chunkingConfig.setStrategy(ChunkingConfig.Strategy.AUTO);
+        chunkingConfig.setStrategy(ChunkStrategy.AUTO);
         chunkingConfig.setEnableParentChild(false);
 
         Document doc = Document.builder()
@@ -158,9 +93,9 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
                 .build();
 
         // 2. 写入
-        ragService.save(doc, chunkingConfig);
+        knowledgeService.save(doc, chunkingConfig);
 
-        Long count = jdbc.queryForObject(
+        Long count = ragJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM embeddings WHERE knowledge_base_id = ?",
                 Long.class, KB_ID);
         assertThat(count).isNotNull().isGreaterThan(0);
@@ -170,12 +105,13 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
         RetrieveRequest req = RetrieveRequest.builder()
                 .sessionId(UUID.randomUUID().toString())
                 .userId("u-000001")
+                .retrieveMode(RetrieveMode.HYBRID)
                 .query("云计算业务本季度收入是多少？同比增长多少？")
                 .knowledgeBaseIds(List.of(KB_ID))
                 .enableRewrite(true)
                 .rerankTopK(5)
                 .build();
-        List<RetrieveResultItem> results = ragService.retrieve(req);
+        List<RetrieveResultItem> results = knowledgeService.retrieve(req);
 
         assertThat(results).isNotEmpty();
         System.out.println("=== Retrieve results ===");
@@ -202,7 +138,7 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
                 .knowledgeBaseId(KB_ID)
                 .knowledgeId("it-doc-fruit")
                 .build();
-        ragService.save(doc, new ChunkingConfig());
+        knowledgeService.save(doc, new ChunkingConfig());
 
         RetrieveRequest req = RetrieveRequest.builder()
                 .query("GPU 算力 数据中心 投资")
@@ -212,7 +148,7 @@ class RagEndToEndIntegrationTest extends RagIntegrationTestSupport {
                 .enableRewrite(false)
                 .rerankTopK(3)
                 .build();
-        List<RetrieveResultItem> results = ragService.retrieve(req);
+        List<RetrieveResultItem> results = knowledgeService.retrieve(req);
 
         // 阈值过滤后可能为空（也可能返回低分片段），只打印结果
         System.out.println("Irrelevant query returned " + results.size() + " chunks");

@@ -4,6 +4,8 @@ import io.invest.iagent.rag.model.Chunk;
 import io.invest.iagent.rag.repository.ChunkDO;
 import io.invest.iagent.rag.repository.ChunkRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -11,13 +13,12 @@ import java.util.List;
  * Chunk 仓储服务：领域模型与数据对象转换
  */
 @Slf4j
+@Service
 public class ChunkRepositoryService {
 
-    private final ChunkRepository chunkRepository;
+    @Autowired
+    private ChunkRepository chunkRepository;
 
-    public ChunkRepositoryService(ChunkRepository chunkRepository) {
-        this.chunkRepository = chunkRepository;
-    }
 
     public void save(List<Chunk> chunks) {
         List<ChunkDO> records = chunks.stream().map(this::toDO).toList();

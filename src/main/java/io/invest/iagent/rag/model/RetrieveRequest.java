@@ -1,5 +1,6 @@
 package io.invest.iagent.rag.model;
 
+import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import lombok.Builder;
 import lombok.Data;
 
@@ -12,37 +13,40 @@ import java.util.List;
 @Builder
 public class RetrieveRequest {
     // 会话与用户
-    public final String sessionId;
-    public final String userId;
-    public final String query;
+    public String sessionId;
+    public String userId;
+    public String query;
+
+    public RetrieveMode retrieveMode = RetrieveMode.HYBRID ;
 
     // 知识库范围
-    public final List<String> knowledgeBaseIds;
-    public final List<String> knowledgeIds;
+    public List<String> knowledgeBaseIds;
+    public List<String> knowledgeIds;
+    
 
     // 检索配置
-    public final double vectorThreshold;
-    public final double keywordThreshold;
-    public final int embeddingTopK;
-    public final String vectorDatabase;
+    public double vectorThreshold;
+    public double keywordThreshold;
+    public int embeddingTopK;
+    public String vectorDatabase;
 
     // 重排配置
-    public final String rerankModelId;
-    public final int rerankTopK;
-    public final double rerankThreshold;
+    public String rerankModelId;
+    public int rerankTopK;
+    public double rerankThreshold;
 
     // 模型与生成配置
-    public final String chatModelId;
-    public final String language;
+    public String chatModelId;
+    public String language;
 
     // Fallback 策略
-    public final String fallbackStrategy; // "fixed" | "model"
-    public final String fallbackResponse;
-    public final String fallbackPrompt;
+    public String fallbackStrategy; // "fixed" | "model"
+    public String fallbackResponse;
+    public String fallbackPrompt;
 
     // 开关与特性
-    public final boolean enableRewrite;
-    public final boolean webSearchEnabled;
-    public final String rewritePrompt; // Query改写提示词
-    public final String queryExpansionPrompt; // 查询扩展提示词
+    public boolean enableRewrite;
+    public boolean webSearchEnabled;
+    public String rewritePrompt; // Query改写提示词
+    public String queryExpansionPrompt; // 查询扩展提示词
 }

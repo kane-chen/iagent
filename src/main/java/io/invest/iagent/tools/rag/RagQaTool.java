@@ -2,7 +2,8 @@ package io.invest.iagent.tools.rag;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import io.invest.iagent.rag.RagService;
+import io.invest.iagent.rag.KnowledgeService;
+import io.invest.iagent.rag.chunking.chunker.ChunkStrategy;
 import io.invest.iagent.rag.model.ChunkingConfig;
 import io.invest.iagent.rag.model.Document;
 import io.invest.iagent.rag.model.RetrieveRequest;
@@ -22,10 +23,10 @@ import java.util.List;
  */
 public class RagQaTool {
 
-    private final RagService ragService;
+    private final KnowledgeService knowledgeService;
 
-    public RagQaTool(RagService ragService) {
-        this.ragService = ragService;
+    public RagQaTool(KnowledgeService knowledgeService) {
+        this.knowledgeService = knowledgeService;
     }
 
     @Tool(name = "rag_qa", description = "基于已构建的通用知识库（ParadeDB + pgvector）检索并回答问题。"
@@ -44,7 +45,7 @@ public class RagQaTool {
                     .rerankTopK(k)
                     .enableRewrite(true)
                     .build();
-            List<RetrieveResultItem> items = ragService.retrieve(request);
+            List<RetrieveResultItem> items = knowledgeService.retrieve(request);
 
             StringBuilder sb = new StringBuilder();
             // 注：当前 RagService.retrieve 仅返回检索结果，完整 LLM 答案生成在 pipeline 中执行；
@@ -97,7 +98,7 @@ public class RagQaTool {
             }
 
             ChunkingConfig chunkingConfig = new ChunkingConfig();
-            chunkingConfig.setStrategy(ChunkingConfig.Strategy.AUTO);
+            chunkingConfig.setStrategy(ChunkStrategy.AUTO);
             chunkingConfig.setEnableParentChild(parentChild == null || parentChild);
 
             Document doc = Document.builder()
@@ -107,7 +108,7 @@ public class RagQaTool {
                     .chunkingConfig(chunkingConfig)
                     .build();
 
-            ragService.save(doc, chunkingConfig);
+            knowledgeService.save(doc, chunkingConfig);
 
             return "索引构建完成：knowledgeBaseId=" + knowledgeBaseId
                     + ", file=" + filePath

@@ -1,8 +1,12 @@
 package io.invest.iagent.rag.retrieve.dto;
 
-import io.invest.iagent.rag.config.RagConfig;
+import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.rag.model.RetrieveRequest;
+import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.Collections;
 import java.util.List;
@@ -11,28 +15,32 @@ import java.util.List;
  * Pipeline 请求参数（不可变）
  */
 @Data
-public final class PipelineRequest {
-    public final String sessionId;
-    public final String userId;
-    public final String query;
-    public final List<String> knowledgeBaseIds;
-    public final List<String> knowledgeIds;
-    public final double vectorThreshold;
-    public final double keywordThreshold;
-    public final int embeddingTopK;
-    public final String vectorDatabase;
-    public final String rerankModelId;
-    public final int rerankTopK;
-    public final double rerankThreshold;
-    public final String chatModelId;
-    public final String language;
-    public final String fallbackStrategy;
-    public final String fallbackResponse;
-    public final String fallbackPrompt;
-    public final boolean enableRewrite;
-    public final boolean webSearchEnabled;
-    public final String rewritePrompt;
-    public final String queryExpansionPrompt;
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class PipelineRequest {
+    public String sessionId;
+    public String userId;
+    public String query;
+    public List<String> knowledgeBaseIds;
+    public List<String> knowledgeIds;
+    public double vectorThreshold;
+    public double keywordThreshold;
+    public int embeddingTopK;
+    public String vectorDatabase;
+    public String rerankModelId;
+    public int rerankTopK;
+    public double rerankThreshold;
+    public String chatModelId;
+    public String language;
+    public String fallbackStrategy;
+    public String fallbackResponse;
+    public String fallbackPrompt;
+    public boolean enableRewrite;
+    public boolean webSearchEnabled;
+    public String rewritePrompt;
+    public String queryExpansionPrompt;
+    private RetrieveMode retrieveMode = RetrieveMode.HYBRID ;
 
     public PipelineRequest(String sessionId, String userId, String query,
                            List<String> knowledgeBaseIds, List<String> knowledgeIds,
@@ -68,9 +76,9 @@ public final class PipelineRequest {
     /**
      * 从外部 RetrieveRequest 和 RagConfig 构建内部 PipelineRequest
      */
-    public static PipelineRequest from(RetrieveRequest req, RagConfig config) {
-        RagConfig.Search search = config.getSearch();
-        return new PipelineRequest(
+    public static PipelineRequest from(RetrieveRequest req, RagProperties config) {
+        RagProperties.Search search = config.getSearch();
+        PipelineRequest request = new PipelineRequest(
                 req.sessionId, req.userId, req.query,
                 req.knowledgeBaseIds, req.knowledgeIds,
                 req.vectorThreshold > 0 ? req.vectorThreshold : search.getVectorThreshold(),
@@ -90,5 +98,7 @@ public final class PipelineRequest {
                 req.rewritePrompt,
                 req.queryExpansionPrompt
         );
+        request.setRetrieveMode(req.retrieveMode);
+        return request ;
     }
 }

@@ -1,7 +1,6 @@
 package io.invest.iagent.rag.retrieve.dto;
 
 import io.invest.iagent.rag.retrieve.enums.QueryIntent;
-import io.invest.iagent.rag.retrieve.model.SearchResult;
 import lombok.Data;
 
 import java.util.ArrayList;

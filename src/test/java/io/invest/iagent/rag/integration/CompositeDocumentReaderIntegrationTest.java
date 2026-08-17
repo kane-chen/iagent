@@ -1,9 +1,10 @@
 package io.invest.iagent.rag.integration;
 
-import io.invest.iagent.rag.chunking.reader.CompositeDocumentReader;
+import io.invest.iagent.rag.chunking.reader.DocumentReaders;
 import io.invest.iagent.rag.model.Document;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class CompositeDocumentReaderIntegrationTest {
 
-    private final CompositeDocumentReader reader = new CompositeDocumentReader();
+    @Autowired
+    private DocumentReaders reader;
 
     @TempDir
     Path tempDir;

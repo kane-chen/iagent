@@ -1,7 +1,7 @@
 package io.invest.iagent.rag.integration;
 
 import com.zaxxer.hikari.HikariDataSource;
-import io.invest.iagent.rag.config.RagConfig;
+import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.service.filingrag.embed.OllamaEmbeddingProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -37,8 +37,8 @@ public abstract class RagIntegrationTestSupport {
 
     protected static final String KB_ID = prop("rag.kb", "RAG_KB", "it_test_kb");
 
-    protected static RagConfig newConfig() {
-        RagConfig config = new RagConfig();
+    protected static RagProperties newConfig() {
+        RagProperties config = new RagProperties();
         config.setEnabled(true);
         config.getEmbedding().setUrl(OLLAMA_URL);
         config.getEmbedding().setModel(OLLAMA_MODEL);

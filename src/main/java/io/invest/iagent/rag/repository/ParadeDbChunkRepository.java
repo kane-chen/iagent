@@ -1,30 +1,26 @@
 package io.invest.iagent.rag.repository;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.stereotype.Component;
 
-import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
  * 基于 PostgreSQL + pgvector(halfvec) + ParadeDB(BM25) 的 Chunk 仓储实现。
  */
+@Component
 @Slf4j
 public class ParadeDbChunkRepository implements ChunkRepository {
 
-    private final JdbcTemplate jdbcTemplate;
-
-    public ParadeDbChunkRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     // =========================================================
     //  写入

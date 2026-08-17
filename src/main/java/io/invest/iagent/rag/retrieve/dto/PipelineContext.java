@@ -1,12 +1,14 @@
 package io.invest.iagent.rag.retrieve.dto;
 
 
-import io.invest.iagent.rag.retrieve.model.EventBus;
+import io.invest.iagent.rag.retrieve.event.EventBus;
+import lombok.Data;
 
 /**
  * Pipeline运行时上下文
  * 对应 Go 中的 PipelineContext
  */
+@Data
 public class PipelineContext {
     // 事件总线（用于流式输出、进度推送）
     public final EventBus eventBus;
