@@ -8,6 +8,7 @@ import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -19,8 +20,8 @@ import java.util.Set;
  * 提升 BM25 召回（向量检索也嵌入增强文本）。
  * <p>运行于 TagParse / PeriodNormalize 之后（@Order(30)），追加词不计入标签。
  */
+@Service
 @Slf4j
-@Order(30)
 public class FilingTermExpansionHandler implements Handler {
 
     /** 追加同义词上限，避免查询过长 */

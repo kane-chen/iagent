@@ -13,7 +13,9 @@ import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +30,7 @@ import java.util.regex.Pattern;
  * 周期解析：仅处理显式周期（2026Q1/FY2025 等）；相对时间（"最新财报"）由
  * {@link FilingPeriodNormalizeHandler} 处理。
  */
+@Service
 @Slf4j
 @Order(10)
 public class FilingTagParseHandler implements Handler {
@@ -36,11 +39,8 @@ public class FilingTagParseHandler implements Handler {
     private static final Pattern TICKER_PATTERN =
             Pattern.compile("\\b(\\d{4,6})(?:\\.HK)?\\b|\\b([A-Z]{2,5})\\b");
 
-    private final Chatter chatter;
-
-    public FilingTagParseHandler(Chatter chatter) {
-        this.chatter = chatter;
-    }
+    @Autowired
+    private Chatter chatter;
 
     @Override
     public List<EventType> activationEvents() {

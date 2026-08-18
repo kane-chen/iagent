@@ -1,5 +1,6 @@
 package io.invest.iagent.filingkb;
 
+import io.invest.iagent.filingkb.config.FilingKbProperties;
 import io.invest.iagent.filingkb.ingest.PeriodParser;
 import io.invest.iagent.filingkb.model.FilingChunk;
 import io.invest.iagent.filingkb.retrieve.FilingTagKeys;
@@ -11,6 +12,8 @@ import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,16 +25,15 @@ import java.util.Map;
  * 经通用 RAG pipeline（含 filingkb 业务 handler）返回带标签与引用的片段。
  * <p>本服务不做 LLM 答案合成，片段交由 BossAgent/qaAgent 组织最终答案。
  */
+@Service
 @Slf4j
 public class FilingKbQaService {
 
-    private final KnowledgeService knowledgeService;
-    private final FilingKbProperties properties;
+    @Autowired
+    private KnowledgeService knowledgeService;
 
-    public FilingKbQaService(KnowledgeService knowledgeService, FilingKbProperties properties) {
-        this.knowledgeService = knowledgeService;
-        this.properties = properties;
-    }
+    @Autowired
+    private FilingKbProperties properties;
 
     /**
      * 检索财报片段。

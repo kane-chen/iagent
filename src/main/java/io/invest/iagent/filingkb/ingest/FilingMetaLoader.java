@@ -13,7 +13,6 @@ import java.util.Locale;
 
 /**
  * 读取 document 目录下的 meta.json，产出建库所需的财报元数据。
- * <p>移植自遗留 DefaultFilingRagService.loadMeta + deriveFiscalPeriodFromDocumentId。
  */
 @Slf4j
 public class FilingMetaLoader {

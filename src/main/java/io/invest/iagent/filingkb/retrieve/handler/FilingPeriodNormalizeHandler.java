@@ -1,5 +1,6 @@
 package io.invest.iagent.filingkb.retrieve.handler;
 
+import io.invest.iagent.filingkb.config.FilingKbProperties;
 import io.invest.iagent.filingkb.model.FiscalPeriod;
 import io.invest.iagent.filingkb.retrieve.FilingTagKeys;
 import io.invest.iagent.rag.model.TagCondition;
@@ -11,6 +12,7 @@ import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 
 import java.util.ArrayList;
@@ -35,13 +37,11 @@ public class FilingPeriodNormalizeHandler implements Handler {
     private static final Pattern PREVIOUS = Pattern.compile("上季度|上一季|环比|前一季");
     private static final Pattern LAST_N = Pattern.compile("(?:最近|近|过去)(\\d+)(?:个季度|期|季)");
 
-    private final ChunkRepository chunkRepository;
-    private final String knowledgeBaseId;
+    @Autowired
+    private ChunkRepository chunkRepository;
+    @Autowired
+    private FilingKbProperties properties;
 
-    public FilingPeriodNormalizeHandler(ChunkRepository chunkRepository, String knowledgeBaseId) {
-        this.chunkRepository = chunkRepository;
-        this.knowledgeBaseId = knowledgeBaseId;
-    }
 
     @Override
     public List<EventType> activationEvents() {
@@ -94,7 +94,7 @@ public class FilingPeriodNormalizeHandler implements Handler {
     private List<FiscalPeriod> loadAvailablePeriods(TagFilter scope) {
         List<String> values;
         try {
-            values = chunkRepository.findTagValues(knowledgeBaseId, FilingTagKeys.FISCAL_PERIOD, scope);
+            values = chunkRepository.findTagValues(properties.getKnowledgeBaseId(), FilingTagKeys.FISCAL_PERIOD, scope);
         } catch (Exception e) {
             log.warn("FilingKB findTagValues failed: {}", e.getMessage());
             return List.of();

@@ -6,8 +6,8 @@ import lombok.Data;
 import java.util.Map;
 
 /**
- * filingkb 检索返回的片段（带标签与引用）。
- * <p>filingkb 不做 LLM 答案合成，片段交由 Agent 组织。
+ * 检索返回的片段（带标签与引用）。
+ * <p>不做 LLM 答案合成，片段交由 Agent 组织。
  */
 @Data
 @Builder

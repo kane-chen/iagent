@@ -1,5 +1,6 @@
 package io.invest.iagent.filingkb;
 
+import io.invest.iagent.filingkb.config.FilingKbProperties;
 import io.invest.iagent.filingkb.ingest.FilingMetaLoader;
 import io.invest.iagent.filingkb.ingest.FilingMetaLoader.FilingMeta;
 import io.invest.iagent.filingkb.ingest.PeriodParser;
@@ -11,6 +12,8 @@ import io.invest.iagent.rag.model.ChunkingConfig;
 import io.invest.iagent.rag.model.Document;
 import io.invest.iagent.utils.WorkspacePaths;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -28,23 +31,22 @@ import java.util.stream.Stream;
  * <p>知识库为单一全局库 {@link FilingKbProperties#getKnowledgeBaseId()}（默认 "filing"），
  * ticker 仅作为过滤标签。幂等重建：先按 knowledgeId 删除再写入。
  */
+@Service
 @Slf4j
 public class FilingKbBuildService {
 
     private static final List<String> DOC_EXTENSIONS = List.of(".pdf", ".html", ".htm");
 
-    private final KnowledgeService knowledgeService;
-    private final FilingKbProperties properties;
-    private final Path workspace;
-    private final FilingMetaLoader metaLoader = new FilingMetaLoader();
+    @Autowired
+    private KnowledgeService knowledgeService;
 
-    public FilingKbBuildService(KnowledgeService knowledgeService,
-                                FilingKbProperties properties,
-                                Path workspace) {
-        this.knowledgeService = knowledgeService;
-        this.properties = properties;
-        this.workspace = workspace;
-    }
+    @Autowired
+    private FilingKbProperties properties;
+
+    @Autowired
+    private Path workspace;
+
+    private final FilingMetaLoader metaLoader = new FilingMetaLoader();
 
     /**
      * 构建单个 ticker 的全部财报文档。
@@ -67,7 +69,7 @@ public class FilingKbBuildService {
             report.addError("list filings dir failed: " + e.getMessage());
             return report;
         }
-
+        docDirs = docDirs.subList(0,1) ;
         for (Path docDir : docDirs) {
             String documentId = docDir.getFileName().toString();
             try {
@@ -163,13 +165,14 @@ public class FilingKbBuildService {
     }
 
     private ChunkingConfig chunkingConfig() {
-        FilingKbProperties.Chunk c = properties.getChunk();
+        FilingKbProperties.Chunk chunk = properties.getChunk();
         ChunkingConfig config = new ChunkingConfig();
-        config.setStrategy(ChunkStrategy.valueOf(c.getStrategy()));
-        config.setEnableParentChild(c.isParentChild());
-        config.setParentChunkSize(c.getParentSize());
-        config.setChildChunkSize(c.getChildSize());
-        config.setChunkOverlap(c.getChunkOverlap());
+        config.setStrategy(ChunkStrategy.valueOf(chunk.getStrategy()));
+        config.setEnableParentChild(chunk.isParentChild());
+        config.setParentChunkSize(chunk.getParentSize());
+        config.setChildChunkSize(chunk.getChildSize());
+        config.setChunkSize(chunk.getChunkSize());
+        config.setChunkOverlap(chunk.getChunkOverlap());
         return config;
     }
 

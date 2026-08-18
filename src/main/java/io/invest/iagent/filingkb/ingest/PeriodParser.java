@@ -7,7 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 财报周期文本解析器（移植自遗留 FilingQaTool.parsePeriod）。
+ * 财报周期文本解析器
  * <p>支持形如 2025Q1 / Q12025 / 2024H1 / FY2025 / 2025FY / 2025 的输入，
  * 输出规范的周期字符串（{@link #canonical(String)}）与财年。
  */

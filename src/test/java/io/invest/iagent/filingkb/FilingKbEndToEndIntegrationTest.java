@@ -4,6 +4,7 @@ import io.invest.AgentConfig4Test;
 import io.invest.iagent.filingkb.model.FilingBuildReport;
 import io.invest.iagent.filingkb.model.FilingChunk;
 import io.invest.iagent.filingkb.retrieve.FilingTagKeys;
+import io.invest.iagent.rag.KnowledgeService;
 import io.invest.iagent.rag.model.RetrieveRequest;
 import io.invest.iagent.rag.model.RetrieveResultItem;
 import io.invest.iagent.rag.model.TagCondition;
@@ -66,7 +67,7 @@ class FilingKbEndToEndIntegrationTest {
     @Autowired
     private FilingKbQaService qaService;
     @Autowired
-    private io.invest.iagent.rag.KnowledgeService knowledgeService;
+    private KnowledgeService knowledgeService;
     @Autowired
     private JdbcTemplate jdbcTemplate;
 

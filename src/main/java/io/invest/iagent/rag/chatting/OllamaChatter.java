@@ -39,7 +39,7 @@ public class OllamaChatter implements Chatter {
     @PostConstruct
     public void init() {
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofSeconds(300))
                 .build();
     }
 

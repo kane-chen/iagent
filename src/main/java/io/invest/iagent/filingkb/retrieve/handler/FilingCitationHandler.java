@@ -8,6 +8,7 @@ import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.List;
  * <p>挂 {@code INTO_CHAT_MESSAGE}（位于 FILTER_TOP_K 之后）。
  * v1 不含页码（PDF reader 未保留页边界，后续增强）。
  */
+@Service
 @Slf4j
 public class FilingCitationHandler implements Handler {
 
@@ -28,7 +30,7 @@ public class FilingCitationHandler implements Handler {
 
     @Override
     public void onEvent(PipelineContext ctx, EventType eventType, ChatManage cm) {
-        if (!FilingHandlerSupport.isFilingDomain(cm)) return;
+        if (!FilingHandlerSupport.isFilingDomain(cm))return;
 
         List<SearchResult> results = !cm.getState().getMergeResult().isEmpty()
                 ? cm.getState().getMergeResult()

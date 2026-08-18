@@ -32,7 +32,7 @@ public class OllamaEmbedder implements Embedder{
     @PostConstruct
     public void init() {
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofSeconds(300))
                 .build();
     }
 
@@ -105,7 +105,7 @@ public class OllamaEmbedder implements Embedder{
     private HttpResponse<String> post(String url, JSONObject body) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(120))
+                .timeout(Duration.ofSeconds(300))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body), StandardCharsets.UTF_8))
                 .build();

@@ -1,12 +1,14 @@
-package io.invest.iagent.filingkb;
+package io.invest.iagent.filingkb.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
- * filingkb 应用层配置（app.filing-kb.*）。
+ * 应用层配置（app.filing-kb.*）。
  * 仅当 app.rag.enabled=true 且 app.filing-kb.enabled=true 时生效。
  */
+@Component
 @Data
 @ConfigurationProperties(prefix = "app.filing-kb")
 public class FilingKbProperties {
@@ -26,6 +28,7 @@ public class FilingKbProperties {
         private boolean parentChild = true;
         private int parentSize = 4096;
         private int childSize = 384;
+        private int chunkSize = 512;
         private int chunkOverlap = 80;
     }
 
