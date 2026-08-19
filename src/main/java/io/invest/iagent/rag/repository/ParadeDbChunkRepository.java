@@ -36,12 +36,25 @@ public class ParadeDbChunkRepository implements ChunkRepository {
 
     @Override
     public void save(ChunkDO entity) {
+        // 幂等写入：(knowledge_base_id, chunk_id) 冲突时覆盖，支持重复导入
         String sql = """
             INSERT INTO embeddings
                 (source_id, source_type, chunk_id, knowledge_id,
                  knowledge_base_id, chunk_type, content, context_header,
                  dimension, embedding, parent_chunk_id, is_enabled)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::halfvec, ?, ?)
+            ON CONFLICT (knowledge_base_id, chunk_id) DO UPDATE SET
+                source_id       = EXCLUDED.source_id,
+                source_type     = EXCLUDED.source_type,
+                knowledge_id    = EXCLUDED.knowledge_id,
+                chunk_type      = EXCLUDED.chunk_type,
+                content         = EXCLUDED.content,
+                context_header  = EXCLUDED.context_header,
+                dimension       = EXCLUDED.dimension,
+                embedding       = EXCLUDED.embedding,
+                parent_chunk_id = EXCLUDED.parent_chunk_id,
+                is_enabled      = EXCLUDED.is_enabled,
+                updated_at      = now()
             """;
         jdbcTemplate.update(sql,
                 entity.getSourceId(), entity.getSourceType(), entity.getChunkId(),
@@ -58,7 +71,9 @@ public class ParadeDbChunkRepository implements ChunkRepository {
         if (entities == null || entities.isEmpty()) return;
 
         // embedding 以 varchar 数组传入，再在 SELECT 中逐元素 ::halfvec；
-        // 直接 varchar[]::halfvec[] PG 不支持（数组类型之间无显式 cast）
+        // 直接 varchar[]::halfvec[] PG 不支持（数组类型之间无显式 cast）。
+        // ON CONFLICT (knowledge_base_id, chunk_id) DO UPDATE：支持重复导入幂等覆盖，
+        // 也避免同一批次内不同文件切出相同 chunk_id 时整批失败。
         String embeddingsSql = """
             INSERT INTO embeddings
                 (source_id, source_type, chunk_id, knowledge_id,
@@ -74,6 +89,18 @@ public class ParadeDbChunkRepository implements ChunkRepository {
             ) AS t(source_id, source_type, chunk_id, knowledge_id,
                    knowledge_base_id, chunk_type, content, context_header,
                    dimension, embedding, parent_chunk_id, is_enabled)
+            ON CONFLICT (knowledge_base_id, chunk_id) DO UPDATE SET
+                source_id       = EXCLUDED.source_id,
+                source_type     = EXCLUDED.source_type,
+                knowledge_id    = EXCLUDED.knowledge_id,
+                chunk_type      = EXCLUDED.chunk_type,
+                content         = EXCLUDED.content,
+                context_header  = EXCLUDED.context_header,
+                dimension       = EXCLUDED.dimension,
+                embedding       = EXCLUDED.embedding,
+                parent_chunk_id = EXCLUDED.parent_chunk_id,
+                is_enabled      = EXCLUDED.is_enabled,
+                updated_at      = now()
             """;
 
         jdbcTemplate.execute((ConnectionCallback<Void>) conn -> {
@@ -103,7 +130,9 @@ public class ParadeDbChunkRepository implements ChunkRepository {
                             entities.stream().map(e -> e.getIsEnabled() != null ? e.getIsEnabled() : Boolean.TRUE).toArray()));
                     ps.executeUpdate();
                 }
-                // 2. 插入标签（同一事务）
+                // 2. 清理待写入 chunk 的旧标签（upsert 不会级联刷新标签，避免残留过期 tag）
+                deleteTags(conn, entities);
+                // 3. 插入标签（同一事务）
                 insertTags(conn, entities);
                 conn.commit();
             } catch (SQLException e) {
@@ -115,6 +144,35 @@ public class ParadeDbChunkRepository implements ChunkRepository {
             return null;
         });
         log.debug("Batch saved {} chunks", entities.size());
+    }
+
+    /** 删除本批次涉及的 (knowledge_base_id, chunk_id) 的所有旧标签，供 upsert 后重插。 */
+    private void deleteTags(Connection conn, List<ChunkDO> entities) throws SQLException {
+        // 去重，避免数组中重复 pair
+        Set<String> seen = new HashSet<>();
+        List<String> kbIds = new ArrayList<>();
+        List<String> chunkIds = new ArrayList<>();
+        for (ChunkDO e : entities) {
+            if (e.getKnowledgeBaseId() == null || e.getChunkId() == null) continue;
+            if (!seen.add(e.getKnowledgeBaseId() + "\0" + e.getChunkId())) continue;
+            kbIds.add(e.getKnowledgeBaseId());
+            chunkIds.add(e.getChunkId());
+        }
+        if (kbIds.isEmpty()) return;
+
+        String sql = """
+            DELETE FROM chunk_tags
+            WHERE (knowledge_base_id, chunk_id) IN (
+                SELECT knowledge_base_id, chunk_id
+                FROM UNNEST(?::varchar[], ?::varchar[])
+                    AS t(knowledge_base_id, chunk_id)
+            )
+            """;
+        try (var ps = conn.prepareStatement(sql)) {
+            ps.setArray(1, conn.createArrayOf("varchar", kbIds.toArray()));
+            ps.setArray(2, conn.createArrayOf("varchar", chunkIds.toArray()));
+            ps.executeUpdate();
+        }
     }
 
     /** 把所有非空 tags 展平为 4 个并行数组批量插入 chunk_tags。 */

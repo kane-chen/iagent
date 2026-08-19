@@ -17,7 +17,8 @@ public class RagProperties {
     private Chunk chunk = new Chunk();
     private Embedding embedding = new Embedding();
     private Search search = new Search();
-    private Llm llm = new Llm();
+    private LlmModel llm = new LlmModel();
+    private LlmModel rerank = new LlmModel();
     private Datasource datasource = new Datasource();
 
     @Data
@@ -52,7 +53,7 @@ public class RagProperties {
     }
 
     @Data
-    public static class Llm {
+    public static class LlmModel {
         private String baseUrl = "http://localhost:11434/v1";
         private String model = "qwen3.5:4b";
         private String apiKey = "";

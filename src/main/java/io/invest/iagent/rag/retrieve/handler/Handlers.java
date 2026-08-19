@@ -31,16 +31,16 @@ public class Handlers {
         // domain
         Map<String,List<String>> sceneHandles = Map.of(
                 "filing",List.of("QUERY_UNDERSTAND","FilingPeriodNormalize","FilingTagParse","FilingTermExpansion"
-                        ,"CHUNK_SEARCH_PARALLEL", "CHUNK_RERANK","CHUNK_MERGE",
-                        "FILTER_TOP_K","FilingCitation","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+                        ,"CHUNK_SEARCH_PARALLEL","CHUNK_MERGE"
+                        ,"FILTER_TOP_K","FilingCitation"
+                        ,"INTO_CHAT_MESSAGE","CHAT_COMPLETION")
         );
         sceneMapping = this.mapping(sceneHandles,handlerMap) ;
         // mode
         Map<String,List<String>> modeHandles = Map.of(
                 RetrieveMode.CHAT.name(),List.of("QUERY_UNDERSTAND","CHAT_COMPLETION"),
-                RetrieveMode.HYBRID.name(),List.of("QUERY_UNDERSTAND","CHUNK_SEARCH_PARALLEL",
-                        "CHUNK_RERANK","CHUNK_MERGE",
-                        "FILTER_TOP_K","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+                RetrieveMode.HYBRID.name(),List.of("QUERY_UNDERSTAND","CHUNK_SEARCH_PARALLEL"
+                        ,"CHUNK_MERGE", "FILTER_TOP_K","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
         );
         modeMapping = this.mapping(modeHandles,handlerMap) ;
 

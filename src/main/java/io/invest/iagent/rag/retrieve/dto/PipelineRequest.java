@@ -29,7 +29,6 @@ public class PipelineRequest {
     public double keywordThreshold;
     public int embeddingTopK;
     public String vectorDatabase;
-    public String rerankModelId;
     public int rerankTopK;
     public double rerankThreshold;
     public String chatModelId;
@@ -50,7 +49,7 @@ public class PipelineRequest {
     public PipelineRequest(String sessionId, String userId, String query,
                            List<String> knowledgeBaseIds, List<String> knowledgeIds,
                            double vectorThreshold, double keywordThreshold, int embeddingTopK, String vectorDatabase,
-                           String rerankModelId, int rerankTopK, double rerankThreshold,
+                           int rerankTopK, double rerankThreshold,
                            String chatModelId, String language,
                            String fallbackStrategy, String fallbackResponse, String fallbackPrompt,
                            boolean enableRewrite, boolean webSearchEnabled,
@@ -65,7 +64,6 @@ public class PipelineRequest {
         this.keywordThreshold = keywordThreshold;
         this.embeddingTopK = embeddingTopK;
         this.vectorDatabase = vectorDatabase;
-        this.rerankModelId = rerankModelId;
         this.rerankTopK = rerankTopK;
         this.rerankThreshold = rerankThreshold;
         this.chatModelId = chatModelId;
@@ -93,7 +91,6 @@ public class PipelineRequest {
                 req.keywordThreshold > 0 ? req.keywordThreshold : search.getKeywordThreshold(),
                 req.embeddingTopK > 0 ? req.embeddingTopK : search.getVectorTopK(),
                 req.vectorDatabase,
-                req.rerankModelId,
                 req.rerankTopK > 0 ? req.rerankTopK : search.getRerankTopK(),
                 req.rerankThreshold,
                 req.chatModelId,

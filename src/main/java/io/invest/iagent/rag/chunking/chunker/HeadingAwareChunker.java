@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 标题感知分块器：识别 Markdown ATX 标题和 SEC 文档标题模式，
@@ -31,6 +33,10 @@ public class HeadingAwareChunker implements Chunker {
         int overlap = config.getChunkOverlap();
         boolean parentChild = config.isEnableParentChild();
 
+        // 批次内 id 去重：同一份文档切分过程中保证 id 唯一，
+        // 跨文档/重复导入由 embeddings(knowledge_base_id, chunk_id) 的 upsert 兜底。
+        Set<String> usedIds = new HashSet<>();
+
         // 按标题拆分为 sections
         List<Section> sections = splitByHeadings(content);
 
@@ -41,10 +47,12 @@ public class HeadingAwareChunker implements Chunker {
             // 生成 parent chunk（整个 section）
             String parentId = null;
             if (parentChild) {
-                parentId = deterministicId(section.breadcrumb + "::parent::" + section.startOffset);
+                String parentContent = truncate(section.content, config.getParentChunkSize());
+                parentId = uniqueId(usedIds, "parent", section.breadcrumb,
+                        section.startOffset, parentContent);
                 ParsedChunk parent = new ParsedChunk();
                 parent.setId(parentId);
-                parent.setContent(truncate(section.content, config.getParentChunkSize()));
+                parent.setContent(parentContent);
                 parent.setContextHeader(section.breadcrumb);
                 parent.setType("parent_text");
                 parent.setStart(section.startOffset);
@@ -59,7 +67,7 @@ public class HeadingAwareChunker implements Chunker {
             // 在 section 内做滑动窗口切分 child chunks
             List<ParsedChunk> children = slidingWindow(
                     section.content, childSize, overlap,
-                    section.breadcrumb, section.startOffset, parentId);
+                    section.breadcrumb, section.startOffset, parentId, usedIds);
             allChunks.addAll(children);
         }
 
@@ -120,11 +128,12 @@ public class HeadingAwareChunker implements Chunker {
     }
 
     private List<ParsedChunk> slidingWindow(String text, int windowSize, int overlap,
-                                             String breadcrumb, int baseOffset, String parentId) {
+                                             String breadcrumb, int baseOffset, String parentId,
+                                             Set<String> usedIds) {
         List<ParsedChunk> chunks = new ArrayList<>();
         if (text.length() <= windowSize) {
             ParsedChunk chunk = new ParsedChunk();
-            chunk.setId(deterministicId(breadcrumb + "::" + baseOffset));
+            chunk.setId(uniqueId(usedIds, "child", breadcrumb, baseOffset, text));
             chunk.setContent(text);
             chunk.setContextHeader(breadcrumb);
             chunk.setType("text");
@@ -150,7 +159,7 @@ public class HeadingAwareChunker implements Chunker {
             if (windowText.isEmpty()) continue;
 
             ParsedChunk chunk = new ParsedChunk();
-            chunk.setId(deterministicId(breadcrumb + "::" + (baseOffset + start)));
+            chunk.setId(uniqueId(usedIds, "child", breadcrumb, baseOffset + start, windowText));
             chunk.setContent(windowText);
             chunk.setContextHeader(breadcrumb);
             chunk.setType("text");
@@ -197,18 +206,40 @@ public class HeadingAwareChunker implements Chunker {
         return s.length() <= maxLen ? s : s.substring(0, maxLen);
     }
 
-    private String deterministicId(String seed) {
+    /**
+     * 生成批次内唯一的稳定 chunk id。
+     * <p>种子包含 kind + 标题面包屑 + 偏移 + chunk 内容，避免不同文档/不同内容仅因标题与位置相近而撞 id；
+     * 若哈希后仍与已分配 id 冲突（同内容重复出现或截断碰撞），追加 {@code -n} 后缀保证唯一。
+     */
+    private String uniqueId(Set<String> usedIds, String kind, String breadcrumb, int offset, String body) {
+        String seed = kind + "::" + safe(breadcrumb) + "::" + offset + "::" + safe(body);
+        String base = hash16(seed);
+        String id = base;
+        int seq = 2;
+        while (!usedIds.add(id)) {
+            id = base + "-" + seq;
+            seq++;
+        }
+        return id;
+    }
+
+    /** SHA-256 截断为 16 个 hex 字符（64 bit），碰撞概率极低；失败时回退到 hashCode。 */
+    private String hash16(String seed) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(seed.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new StringBuilder(16);
             for (int i = 0; i < 8; i++) {
                 sb.append(String.format("%02x", hash[i]));
             }
             return sb.toString();
         } catch (Exception e) {
-            return String.valueOf(seed.hashCode());
+            return Integer.toHexString(seed.hashCode());
         }
+    }
+
+    private String safe(String s) {
+        return s == null ? "" : s;
     }
 
     private record Section(String breadcrumb, String content, int startOffset) {}

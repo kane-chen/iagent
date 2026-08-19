@@ -31,7 +31,6 @@ public class RetrieveRequest {
     public String vectorDatabase;
 
     // 重排配置
-    public String rerankModelId;
     public int rerankTopK;
     public double rerankThreshold;
 
