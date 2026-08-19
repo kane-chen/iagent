@@ -1,7 +1,6 @@
 package io.invest.iagent.rag.retrieve.dto;
 
 
-import io.invest.iagent.rag.retrieve.event.EventBus;
 import lombok.Data;
 
 /**
@@ -10,9 +9,7 @@ import lombok.Data;
  */
 @Data
 public class PipelineContext {
-    // 事件总线（用于流式输出、进度推送）
-    public final EventBus eventBus;
-    
+
     // 消息ID
     public final String messageId;       // 当前生成的助手消息ID
     public final String userMessageId;   // 当前用户消息ID
@@ -20,8 +17,7 @@ public class PipelineContext {
     // 链路追踪ID
     public final String traceId;
 
-    public PipelineContext(EventBus eventBus, String messageId, String userMessageId, String traceId) {
-        this.eventBus = eventBus;
+    public PipelineContext(String messageId, String userMessageId, String traceId) {
         this.messageId = messageId;
         this.userMessageId = userMessageId;
         this.traceId = traceId;

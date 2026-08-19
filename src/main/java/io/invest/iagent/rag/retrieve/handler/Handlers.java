@@ -2,20 +2,16 @@ package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
-import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.compress.utils.Lists;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
-
-import static io.invest.iagent.rag.retrieve.enums.EventType.*;
 
 @Slf4j
 @Service
@@ -24,51 +20,73 @@ public class Handlers {
     @Autowired
     private List<Handler> handlers ;
 
-    private Map<EventType,List<Handler>> listeners;
-
-    private Map<RetrieveMode,List<EventType>> pipeline ;
+    private Map<String,List<Handler>> sceneMapping ;
+    private Map<String,List<Handler>> modeMapping ;
 
     @PostConstruct
     public void init(){
-        // mapping
-        listeners = Optional.ofNullable(handlers).orElse(Lists.newArrayList())
-                .stream()
-                .flatMap(handler -> handler.activationEvents().stream()
-                        .filter(Objects::nonNull)
-                        .map(type -> new AbstractMap.SimpleEntry<>(type, handler)))
-                .collect(Collectors.groupingBy(
+
+        Map<String,Handler> handlerMap = handlers.stream()
+                .collect(Collectors.toMap(Handler::name,t->t)) ;
+        // domain
+        Map<String,List<String>> sceneHandles = Map.of(
+                "filing",List.of("QUERY_UNDERSTAND","FilingPeriodNormalize","FilingTagParse","FilingTermExpansion"
+                        ,"CHUNK_SEARCH_PARALLEL", "CHUNK_RERANK","CHUNK_MERGE",
+                        "FILTER_TOP_K","FilingCitation","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+        );
+        sceneMapping = this.mapping(sceneHandles,handlerMap) ;
+        // mode
+        Map<String,List<String>> modeHandles = Map.of(
+                RetrieveMode.CHAT.name(),List.of("QUERY_UNDERSTAND","CHAT_COMPLETION"),
+                RetrieveMode.HYBRID.name(),List.of("QUERY_UNDERSTAND","CHUNK_SEARCH_PARALLEL",
+                        "CHUNK_RERANK","CHUNK_MERGE",
+                        "FILTER_TOP_K","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+        );
+        modeMapping = this.mapping(modeHandles,handlerMap) ;
+
+    }
+
+    private Map<String,List<Handler>> mapping(Map<String,List<String>> handlerMapping,Map<String,Handler> mapping){
+        if (handlerMapping == null || handlerMapping.isEmpty() || mapping == null || mapping.isEmpty()) {
+            return Map.of();
+        }
+
+        return handlerMapping.entrySet().stream()
+                .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        Collectors.mapping(Map.Entry::getValue, Collectors.toList())
+                        entry -> Optional.ofNullable(entry.getValue())
+                                .orElse(Collections.emptyList())
+                                .stream()
+                                .map(name -> {
+                                    Handler handler = mapping.get(name);
+                                    if (handler == null) {
+                                        throw new IllegalArgumentException("Handler not found for name: [" + name + "]");
+                                    }
+                                    return handler;
+                                })
+                                .collect(Collectors.toList())
                 ));
-        // 同事件多 handler 时按 @Order 排序，支持应用层定义确定的处理顺序
-        listeners.values().forEach(AnnotationAwareOrderComparator::sort);
-        // pipeline
-        pipeline = Map.of(
-                RetrieveMode.CHAT,List.of(LOAD_HISTORY, QUERY_UNDERSTAND, CHAT_COMPLETION_STREAM),
-                RetrieveMode.HYBRID,List.of(LOAD_HISTORY,QUERY_UNDERSTAND,CHUNK_SEARCH_PARALLEL,
-                        CHUNK_RERANK,WEB_FETCH,CHUNK_MERGE,
-                        FILTER_TOP_K,INTO_CHAT_MESSAGE,CHAT_COMPLETION_STREAM)
-        ) ;
     }
 
     public void execute(PipelineContext ctx, ChatManage cm){
-        List<EventType> events = this.buildRagPipeline(cm);
-        for (EventType event: events) {
-            log.debug("Pipeline event: {}", event);
-            List<Handler> handlers = listeners.get(event) ;
-            if(CollectionUtils.isEmpty(handlers)){
-                continue ;
-            }
-            handlers.forEach(t->t.onEvent(ctx,event,cm));
+        List<Handler> handlers = this.getHandlers(cm) ;
+        if(CollectionUtils.isEmpty(handlers)){
+            throw new IllegalArgumentException("handler empty") ;
         }
+        handlers.forEach(t->t.handle(ctx,cm));
     }
 
-    private List<EventType> buildRagPipeline(ChatManage cm) {
-        List<EventType> types = pipeline.get(cm.getRequest().getRetrieveMode()) ;
-        if(Objects.isNull(types)){
-            types = pipeline.get(RetrieveMode.HYBRID) ;
+    private List<Handler> getHandlers(ChatManage chatManage){
+        String domain = chatManage.getRequest().getDomain() ;
+        if(StringUtils.isNotBlank(domain)){
+            List<Handler> handlers = sceneMapping.get(domain) ;
+            if(!CollectionUtils.isEmpty(handlers)){
+                return handlers ;
+            }
         }
-        return types;
+        RetrieveMode mode = Optional.ofNullable(chatManage.getRequest().getRetrieveMode())
+                .orElse(RetrieveMode.HYBRID);
+        return modeMapping.get(mode.name()) ;
     }
 
 }

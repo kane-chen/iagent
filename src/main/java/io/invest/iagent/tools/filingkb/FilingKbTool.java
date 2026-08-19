@@ -2,10 +2,10 @@ package io.invest.iagent.tools.filingkb;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
-import io.invest.iagent.filingkb.FilingKbBuildService;
-import io.invest.iagent.filingkb.FilingKbQaService;
-import io.invest.iagent.filingkb.model.FilingBuildReport;
-import io.invest.iagent.filingkb.model.FilingChunk;
+import io.invest.iagent.rag.filing.FilingBuildService;
+import io.invest.iagent.rag.filing.FilingQaService;
+import io.invest.iagent.rag.filing.model.FilingBuildReport;
+import io.invest.iagent.rag.filing.model.FilingChunk;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -19,10 +19,10 @@ import java.util.List;
  */
 public class FilingKbTool {
 
-    private final FilingKbQaService qaService;
-    private final FilingKbBuildService buildService;
+    private final FilingQaService qaService;
+    private final FilingBuildService buildService;
 
-    public FilingKbTool(FilingKbQaService qaService, FilingKbBuildService buildService) {
+    public FilingKbTool(FilingQaService qaService, FilingBuildService buildService) {
         this.qaService = qaService;
         this.buildService = buildService;
     }

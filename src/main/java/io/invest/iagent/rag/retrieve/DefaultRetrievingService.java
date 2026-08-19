@@ -4,7 +4,6 @@ import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.rag.model.RetrieveRequest;
 import io.invest.iagent.rag.model.RetrieveResultItem;
 import io.invest.iagent.rag.retrieve.dto.*;
-import io.invest.iagent.rag.retrieve.event.EventBus;
 import io.invest.iagent.rag.retrieve.handler.Handlers;
 import io.invest.iagent.rag.service.RetrievingService;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +30,7 @@ public class DefaultRetrievingService implements RetrievingService {
             // context
             PipelineRequest pipelineRequest = PipelineRequest.from(request, ragProperties);
             PipelineState state = new PipelineState();
-            PipelineContext context = new PipelineContext(new EventBus(), null, null, traceId);
+            PipelineContext context = new PipelineContext( null, null, traceId);
             // execute
             ChatManage chatManage = new ChatManage(pipelineRequest, state, context);
             handlers.execute(context,chatManage);

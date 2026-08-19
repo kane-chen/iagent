@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,8 +32,22 @@ public class DefaultEmbeddingService implements EmbeddingService {
 
     @Override
     public void embedding(List<Chunk> chunks) {
-        if (chunks == null || chunks.isEmpty()) return;
+        if (CollectionUtils.isEmpty(chunks)){
+            return;
+        }
+        int dimension = embedder.dimension();
+        chunks.forEach(t->{
+            String text = t.getContent();
+            if (StringUtils.isNotBlank(t.getContextHeader())) {
+                text = t.getContextHeader() + "\n" + text;
+            }
+            float[] vectors = embedder.embed(text);
+            t.setEmbedding(vectors);
+            t.setDimension(dimension);
+        });
+    }
 
+    private void embedding(List<Chunk> chunks, int batchSize, int dimension) {
         // 构建 embedding 文本（context-Header + content）
         List<String> texts = new ArrayList<>(chunks.size());
         for (Chunk chunk : chunks) {
@@ -42,10 +57,7 @@ public class DefaultEmbeddingService implements EmbeddingService {
             }
             texts.add(text);
         }
-
         // 分批调用 embedding
-        int batchSize = config.getEmbedding().getBatchSize() ;
-        int dimension = embedder.dimension();
         for (int i = 0; i < texts.size(); i += batchSize) {
             int end = Math.min(i + batchSize, texts.size());
             List<String> batch = texts.subList(i, end);
@@ -59,5 +71,4 @@ public class DefaultEmbeddingService implements EmbeddingService {
             log.debug("Embedded batch {}/{}, size={}", i + batch.size(), texts.size(), batch.size());
         }
     }
-
 }

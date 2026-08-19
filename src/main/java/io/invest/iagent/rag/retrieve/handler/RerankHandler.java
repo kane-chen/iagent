@@ -7,7 +7,6 @@ import io.invest.iagent.rag.chatting.Chatter;
 import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
-import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -31,12 +30,12 @@ public class RerankHandler implements Handler {
 
 
     @Override
-    public List<EventType> activationEvents() {
-        return Collections.singletonList(EventType.CHUNK_RERANK);
+    public String name() {
+        return "CHUNK_RERANK";
     }
 
     @Override
-    public void onEvent(PipelineContext ctx, EventType eventType, ChatManage cm) {
+    public void handle(PipelineContext ctx, ChatManage cm) {
         List<SearchResult> searchResults = cm.getState().getSearchResult();
         if (!cm.needsRetrieval() || searchResults.isEmpty()){
             return ;
@@ -60,7 +59,6 @@ public class RerankHandler implements Handler {
             log.warn("Rerank failed, using original order: {}", e.getMessage());
             cm.getState().setRerankResult(new ArrayList<>(searchResults));
         }
-
     }
 
     /**
@@ -71,7 +69,7 @@ public class RerankHandler implements Handler {
      * @param llmClient  LLM 客户端
      * @return 重排序后的列表（按分数降序）；LLM 失败时返回原始顺序
      */
-    private static List<SearchResult> rerank(String query, List<SearchResult> results, Chatter llmClient) {
+    private List<SearchResult> rerank(String query, List<SearchResult> results, Chatter llmClient) {
         if (results == null || results.size() <= 1) return results;
 
         try {
@@ -125,7 +123,7 @@ public class RerankHandler implements Handler {
         }
     }
 
-    private static Map<Integer, Double> parseScores(String response, int expectedSize) {
+    private Map<Integer, Double> parseScores(String response, int expectedSize) {
         Map<Integer, Double> scores = new HashMap<>();
         try {
             String json = extractJson(response);
@@ -149,7 +147,7 @@ public class RerankHandler implements Handler {
         return scores;
     }
 
-    private static String extractJson(String text) {
+    private String extractJson(String text) {
         if (StringUtils.isBlank(text)) return "";
         for (int i = 0; i < text.length(); i++) {
             if (text.charAt(i) != '{') continue;

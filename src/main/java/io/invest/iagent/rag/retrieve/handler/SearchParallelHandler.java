@@ -7,7 +7,6 @@ import io.invest.iagent.rag.repository.ChunkRetrieveParams;
 import io.invest.iagent.rag.repository.ChunkRetrieveResult;
 import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
-import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import io.invest.iagent.rag.service.EmbeddingService;
 import lombok.extern.slf4j.Slf4j;
@@ -40,12 +39,12 @@ public class SearchParallelHandler implements Handler {
     private RagProperties config;
 
     @Override
-    public List<EventType> activationEvents() {
-        return Collections.singletonList(EventType.CHUNK_SEARCH_PARALLEL);
+    public String name() {
+        return "CHUNK_SEARCH_PARALLEL";
     }
 
     @Override
-    public void onEvent(PipelineContext ctx, EventType eventType, ChatManage cm) {
+    public void handle(PipelineContext ctx, ChatManage cm) {
         if (!cm.needsRetrieval()){
             return ;
         }
@@ -109,22 +108,21 @@ public class SearchParallelHandler implements Handler {
             log.error("Search failed: {}", e.getMessage(), e);
             throw new RuntimeException("search_failed", e);
         }
-
     }
 
-    private SearchResult toSearchResult(ChunkRetrieveResult r) {
-        SearchResult sr = new SearchResult();
-        sr.id = r.getChunkId();
-        sr.knowledgeId = r.getKnowledgeId();
-        sr.knowledgeBaseId = r.getKnowledgeBaseId();
-        sr.chunkType = "text";
-        sr.score = r.getScore();
-        sr.content = r.getContent();
-        sr.metadata.put("match_type", r.getMatchType());
-        sr.metadata.put("source_id", r.getSourceId());
-        if (r.getTags() != null && !r.getTags().isEmpty()) {
-            sr.tags = new HashMap<>(r.getTags());
+    private SearchResult toSearchResult(ChunkRetrieveResult record) {
+        SearchResult result = new SearchResult();
+        result.id = record.getChunkId();
+        result.knowledgeId = record.getKnowledgeId();
+        result.knowledgeBaseId = record.getKnowledgeBaseId();
+        result.chunkType = "text";
+        result.score = record.getScore();
+        result.content = record.getContent();
+        result.metadata.put("match_type", record.getMatchType());
+        result.metadata.put("source_id", record.getSourceId());
+        if (record.getTags() != null && !record.getTags().isEmpty()) {
+            result.tags = new HashMap<>(record.getTags());
         }
-        return sr;
+        return result;
     }
 }

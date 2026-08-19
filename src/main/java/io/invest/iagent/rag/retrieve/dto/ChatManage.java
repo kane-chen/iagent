@@ -1,7 +1,6 @@
 package io.invest.iagent.rag.retrieve.dto;
 
 import io.invest.iagent.rag.retrieve.enums.QueryIntent;
-import io.invest.iagent.rag.retrieve.event.EventBus;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ public class ChatManage {
 
     public String getSessionId() { return request.sessionId; }
     public String getQuery() { return request.query; }
-    public EventBus getEventBus() { return context.eventBus; }
 
     /**
      * 判断是否需要执行检索阶段

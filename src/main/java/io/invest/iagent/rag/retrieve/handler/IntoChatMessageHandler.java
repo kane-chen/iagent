@@ -2,11 +2,9 @@ package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
-import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -16,12 +14,12 @@ import java.util.List;
 public class IntoChatMessageHandler implements Handler {
 
     @Override
-    public List<EventType> activationEvents() {
-        return Collections.singletonList(EventType.INTO_CHAT_MESSAGE);
+    public String name() {
+        return "INTO_CHAT_MESSAGE";
     }
 
     @Override
-    public void onEvent(PipelineContext ctx, EventType eventType, ChatManage cm) {
+    public void handle(PipelineContext ctx, ChatManage cm) {
         List<SearchResult> results = !cm.getState().getMergeResult().isEmpty()
                 ? cm.getState().getMergeResult()
                 : cm.getState().getSearchResult();

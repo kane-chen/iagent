@@ -4,7 +4,6 @@ import io.invest.iagent.rag.repository.ChunkRepository;
 import io.invest.iagent.rag.repository.ChunkRetrieveResult;
 import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
-import io.invest.iagent.rag.retrieve.enums.EventType;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -24,12 +23,12 @@ public class MergeHandler implements Handler {
     private ChunkRepository chunkRepository;
 
     @Override
-    public List<EventType> activationEvents() {
-        return Collections.singletonList(EventType.CHUNK_MERGE);
+    public String name() {
+        return "CHUNK_MERGE";
     }
 
     @Override
-    public void onEvent(PipelineContext ctx, EventType eventType, ChatManage cm) {
+    public void handle(PipelineContext ctx, ChatManage cm) {
         if (!cm.needsRetrieval()){
             return ;
         }
