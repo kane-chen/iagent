@@ -60,6 +60,11 @@ public class RagProperties {
         private double temperature = 0.2;
         private int maxTokens = 2048;
         private int timeoutSeconds = 180;
+        /**
+         * 服务提供者，仅 rerank 使用：ollama（默认）、xreference（Xinference）。
+         * llm 配置中该字段无实际作用。
+         */
+        private String provider = "ollama";
     }
 
     @Data

@@ -49,9 +49,10 @@ public class QueryUnderstandHandler implements Handler {
 
         // 查询改写
         String rewriteQuery = query;
-        if (cm.getRequest().enableRewrite && chatter != null) {
-            rewriteQuery = rewriteQuery(query);
-        }
+        //TODO
+//        if (cm.getRequest().enableRewrite && chatter != null) {
+//            rewriteQuery = rewriteQuery(query);
+//        }
         cm.getState().setRewriteQuery(StringUtils.defaultIfBlank(rewriteQuery, query));
         log.debug("Query rewrite: '{}' -> '{}'", query, cm.getState().getRewriteQuery());
     }

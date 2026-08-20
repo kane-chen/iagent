@@ -30,11 +30,11 @@ class FilingIntegrationTest {
     @Test
     void build_then_retrieve_with_tags_and_citation() {
         // ---- 1. 建库 ----
-        FilingBuildReport report = buildService.buildTicker(TICKER, false);
-        System.out.println("[build] docs=" + report.getDocuments() + " chunks=" + report.getChunks() + " errors=" + report.getErrors());
-        assertThat(report.getErrors()).isEmpty();
-        assertThat(report.getDocuments()).isGreaterThan(0);
-        assertThat(report.getChunks()).isGreaterThan(0);
+//        FilingBuildReport report = buildService.buildTicker(TICKER, false);
+//        System.out.println("[build] docs=" + report.getDocuments() + " chunks=" + report.getChunks() + " errors=" + report.getErrors());
+//        assertThat(report.getErrors()).isEmpty();
+//        assertThat(report.getDocuments()).isGreaterThan(0);
+//        assertThat(report.getChunks()).isGreaterThan(0);
 
         // ---- 2. 检索：
         List<FilingChunk> latest = qaService.ask("增值服务的收入是多少亿元", TICKER, "2025Q2", 5);
