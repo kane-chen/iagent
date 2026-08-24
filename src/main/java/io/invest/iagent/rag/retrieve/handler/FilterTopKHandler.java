@@ -21,11 +21,11 @@ public class FilterTopKHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
-        if (context.ignoreRetrieval() || context.getState().getMergeResult().isEmpty()) {
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+        if (cm.ignoreRetrieval() || cm.getState().getMergeResult().isEmpty()) {
             return ;
         }
-        int topK = Math.min(config.getSearch().getRerankTopK(), context.getState().getMergeResult().size());
-        context.getState().setMergeResult(context.getState().getMergeResult().subList(0, topK));
+        int topK = Math.min(config.getSearch().getRerankTopK(), cm.getState().getMergeResult().size());
+        cm.getState().setMergeResult(cm.getState().getMergeResult().subList(0, topK));
     }
 }

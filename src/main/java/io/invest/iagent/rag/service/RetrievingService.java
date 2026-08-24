@@ -1,11 +1,9 @@
 package io.invest.iagent.rag.service;
 
 import io.invest.iagent.rag.model.RetrieveRequest;
-import io.invest.iagent.rag.model.RetrieveResultItem;
-
-import java.util.List;
+import io.invest.iagent.rag.model.RetrieveResult;
 
 public interface RetrievingService {
 
-    List<RetrieveResultItem> retrieve(RetrieveRequest request) ;
+    RetrieveResult retrieve(RetrieveRequest request) ;
 }

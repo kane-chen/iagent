@@ -150,7 +150,7 @@ class FilingEndToEndIntegrationTest {
         assertThat(embCountAfterRebuild).isEqualTo(embCount);
 
         // ---- 3. 检索：显式 ticker + 相对时间"最新一期"，应归一化到 2025Q2 ----
-        List<FilingChunk> latest = qaService.ask("最新一期云计算业务的收入是多少亿元", TICKER, null, 5);
+        List<FilingChunk> latest = qaService.ask("最新一期云计算业务的收入是多少亿元", TICKER, null, 5).getChunks();
         assertThat(latest).isNotEmpty();
         System.out.println("=== latest period results ===");
         latest.forEach(c -> System.out.println(c.getCitation() + " | " + c.getContent()));
@@ -164,7 +164,7 @@ class FilingEndToEndIntegrationTest {
         assertThat(top.getContent()).contains("100");
 
         // ---- 4. 检索：显式指定 2025Q1，应命中 Q1（80亿元 / 18%）----
-        List<FilingChunk> q1 = qaService.ask("云计算业务收入是多少", TICKER, "2025Q1", 5);
+        List<FilingChunk> q1 = qaService.ask("云计算业务收入是多少", TICKER, "2025Q1", 5).getChunks();
         assertThat(q1).isNotEmpty();
         assertThat(q1.get(0).getTags()).containsEntry(FilingTagKeys.FISCAL_PERIOD, "2025Q1");
         assertThat(q1.get(0).getContent()).contains("80");
@@ -181,7 +181,7 @@ class FilingEndToEndIntegrationTest {
                 .tagFilter(TagFilter.of(TagCondition.eq(FilingTagKeys.FISCAL_PERIOD, "2025Q2")))
                 .build();
         // 通过 KnowledgeService 直接检索（domain=null），filingkb handler 不应执行
-        List<RetrieveResultItem> generic = knowledgeService.retrieve(nonFiling);
+        List<RetrieveResultItem> generic = knowledgeService.retrieve(nonFiling).getItems();
         assertThat(generic).isNotEmpty();
         for (RetrieveResultItem item : generic) {
             Map<String, String> meta = item.getMetadata();

@@ -3,9 +3,7 @@ package io.invest.iagent.rag;
 import io.invest.iagent.rag.model.ChunkingConfig;
 import io.invest.iagent.rag.model.Document;
 import io.invest.iagent.rag.model.RetrieveRequest;
-import io.invest.iagent.rag.model.RetrieveResultItem;
-
-import java.util.List;
+import io.invest.iagent.rag.model.RetrieveResult;
 
 public interface KnowledgeService {
 
@@ -18,6 +16,6 @@ public interface KnowledgeService {
      */
     void deleteByKnowledgeId(String knowledgeBaseId, String knowledgeId);
 
-    List<RetrieveResultItem> retrieve(RetrieveRequest request) ;
+    RetrieveResult retrieve(RetrieveRequest request) ;
 
 }

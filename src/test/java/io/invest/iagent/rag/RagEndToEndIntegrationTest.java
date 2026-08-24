@@ -5,6 +5,7 @@ import io.invest.iagent.rag.chunking.chunker.ChunkStrategy;
 import io.invest.iagent.rag.model.ChunkingConfig;
 import io.invest.iagent.rag.model.Document;
 import io.invest.iagent.rag.model.RetrieveRequest;
+import io.invest.iagent.rag.model.RetrieveResult;
 import io.invest.iagent.rag.model.RetrieveResultItem;
 import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,7 +110,7 @@ class RagEndToEndIntegrationTest{
                 .enableRewrite(true)
                 .rerankTopK(5)
                 .build();
-        List<RetrieveResultItem> results = knowledgeService.retrieve(req);
+        List<RetrieveResultItem> results = knowledgeService.retrieve(req).getItems();
 
         assertThat(results).isNotEmpty();
         System.out.println("=== Retrieve results ===");
@@ -146,7 +147,7 @@ class RagEndToEndIntegrationTest{
                 .enableRewrite(false)
                 .rerankTopK(3)
                 .build();
-        List<RetrieveResultItem> results = knowledgeService.retrieve(req);
+        List<RetrieveResultItem> results = knowledgeService.retrieve(req).getItems();
 
         // 阈值过滤后可能为空（也可能返回低分片段），只打印结果
         System.out.println("Irrelevant query returned " + results.size() + " chunks");

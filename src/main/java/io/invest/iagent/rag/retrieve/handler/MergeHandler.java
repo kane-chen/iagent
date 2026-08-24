@@ -67,12 +67,12 @@ public class MergeHandler implements Handler {
         try {
             List<ChunkRetrieveResult> parents = chunkRepository.findByChunkIds(parentIds);
             Map<String, String> parentContent = new HashMap<>();
-            for (ChunkRetrieveResult p : parents) {
-                parentContent.put(p.getChunkId(), p.getContent());
+            for (ChunkRetrieveResult chunk : parents) {
+                parentContent.put(chunk.getChunkId(), chunk.getContent());
             }
-            for (SearchResult r : results) {
-                if (StringUtils.isNotBlank(r.parentId) && parentContent.containsKey(r.parentId)) {
-                    r.content = parentContent.get(r.parentId) + "\n" + r.content;
+            for (SearchResult result : results) {
+                if (StringUtils.isNotBlank(result.parentId) && parentContent.containsKey(result.parentId)) {
+                    result.content = parentContent.get(result.parentId) + "\n" + result.content;
                 }
             }
         } catch (Exception e) {

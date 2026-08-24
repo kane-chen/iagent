@@ -23,9 +23,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 基于 Xinference（<a href="https://inference.readthedocs.io/">inference.readthedocs.io</a>）的 Reranker。
+ * 基于 X inference（<a href="https://inference.readthedocs.io/">inference.readthedocs.io</a>）的 Reranker。
  *
- * <p>调用 Xinference 提供的 OpenAI 兼容接口 {@code POST {baseUrl}/v1/rerank}，对召回文档按相关性打分。
+ * <p>调用 X inference 提供的 OpenAI 兼容接口 {@code POST {baseUrl}/v1/rerank}，对召回文档按相关性打分。
  * 通过 {@code app.rag.rerank.provider=xinference} 启用。</p>
  */
 @Service
@@ -98,10 +98,9 @@ public class XinferenceReranker implements Reranker {
         body.put("query", query);
         body.put("documents", docTexts);
         body.put("top_n",documents.size());
-//        body.put("return_documents", false);
 
         String baseUrl = StringUtils.removeEnd(ragProperties.getRerank().getBaseUrl(), "/");
-        // Xinference 的 OpenAI 兼容路径统一在 /v1 下；若用户已在 base-url 中配置了 /v1，则不重复追加
+        // X inference 的 OpenAI 兼容路径统一在 /v1 下；若用户已在 base-url 中配置了 /v1，则不重复追加
         String url = (baseUrl.endsWith("/v1") ? baseUrl : baseUrl + "/v1") + "/rerank";
 
         HttpRequest.Builder builder = HttpRequest.newBuilder()

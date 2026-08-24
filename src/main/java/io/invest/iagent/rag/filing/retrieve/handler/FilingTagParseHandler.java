@@ -45,14 +45,14 @@ public class FilingTagParseHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
-        if (!FilingHandlerSupport.isFilingDomain(context)) return;
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+        if (!FilingHandlerSupport.isFilingDomain(cm)) return;
 
-        String query = context.getState().getRewriteQuery() != null
-                ? context.getState().getRewriteQuery() : context.getQuery();
+        String query = cm.getState().getRewriteQuery() != null
+                ? cm.getState().getRewriteQuery() : cm.getQuery();
         if (StringUtils.isBlank(query)) return;
 
-        TagFilter filter = FilingHandlerSupport.mutableStateFilter(context);
+        TagFilter filter = FilingHandlerSupport.mutableStateFilter(cm);
 
         // ticker：预填优先
         if (FilingHandlerSupport.findCondition(filter, FilingTagKeys.TICKER).isEmpty()) {

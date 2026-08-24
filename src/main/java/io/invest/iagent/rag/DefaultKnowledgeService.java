@@ -51,7 +51,7 @@ public class DefaultKnowledgeService implements KnowledgeService {
     }
 
     @Override
-    public List<RetrieveResultItem> retrieve(RetrieveRequest request) {
+    public RetrieveResult retrieve(RetrieveRequest request) {
         return retrievingService.retrieve(request) ;
     }
 }

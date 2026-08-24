@@ -38,15 +38,15 @@ public class ChatCompletionHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
         try {
-            String userPrompt = this.buildUserPrompt(context);
+            String userPrompt = this.buildUserPrompt(cm);
             String answer = chatter.chat(SYSTEM_PROMPT,userPrompt) ;
             // answer
             if (StringUtils.isBlank(answer)) {
                 answer = "抱歉，未能生成回答。";
             }
-            context.getState().setChatResponse(answer);
+            cm.getState().setChatResponse(answer);
         } catch (Exception e) {
             log.error("Chat completion failed: {}", e.getMessage(), e);
             throw new RuntimeException("model_call_failed", e);

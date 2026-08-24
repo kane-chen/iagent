@@ -27,14 +27,14 @@ public class FilingCitationHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
-        if (!FilingHandlerSupport.isFilingDomain(context)){
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+        if (!FilingHandlerSupport.isFilingDomain(cm)){
             return;
         }
 
-        List<SearchResult> results = !context.getState().getMergeResult().isEmpty()
-                ? context.getState().getMergeResult()
-                : context.getState().getSearchResult();
+        List<SearchResult> results = !cm.getState().getMergeResult().isEmpty()
+                ? cm.getState().getMergeResult()
+                : cm.getState().getSearchResult();
         if (results.isEmpty()){
             return;
         }

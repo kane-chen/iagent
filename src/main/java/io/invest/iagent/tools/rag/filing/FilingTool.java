@@ -4,6 +4,7 @@ import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
 import io.invest.iagent.rag.filing.FilingBuildService;
 import io.invest.iagent.rag.filing.FilingQaService;
+import io.invest.iagent.rag.filing.model.FilingAnswer;
 import io.invest.iagent.rag.filing.model.FilingBuildReport;
 import io.invest.iagent.rag.filing.model.FilingChunk;
 import org.apache.commons.lang3.StringUtils;
@@ -27,9 +28,10 @@ public class FilingTool {
         this.buildService = buildService;
     }
 
-    @Tool(name = "filing_kb_qa", description = "检索财报知识库以回答上市公司财报相关问题（收入、利润、现金流、同比环比、指引等）。"
-            + "支持按股票代码和财报周期过滤，自动解析\"最新财报/去年同期/近N个季度\"等相对时间，"
-            + "并对金融术语做同义词扩展。返回带引用编号的片段，供你组织最终答案并标注引用。"
+    @Tool(name = "filing_kb_qa", description = "检索财报知识库并直接给出上市公司财报相关问题（收入、利润、现金流、同比环比、指引等）的答案。"
+            + "支持按股票代码和财报周期过滤，自动解析\"最新财报/去年同期/近N个季度\"等相对时间，并对金融术语做同义词扩展。"
+            + "工具内部已完成混合检索、重排与 LLM 答案合成，会直接返回基于知识库片段生成的回答，并在引用数据处标注来源片段编号；"
+            + "若 LLM 合成不可用，则回退为返回带 [Cn] 引用编号的片段列表，由你组织最终答案。"
             + "股票代码和周期为可选：不填时尝试从问题中解析。")
     public String qa(
             @ToolParam(name = "question", description = "关于财报的问题") String question,
@@ -39,7 +41,12 @@ public class FilingTool {
     ) {
         try {
             int k = topK == null || topK <= 0 ? 5 : topK;
-            List<FilingChunk> chunks = qaService.ask(question, ticker, period, k);
+            FilingAnswer answer = qaService.ask(question, ticker, period, k);
+            List<FilingChunk> chunks = answer.getChunks();
+            // pipeline 已执行 CHAT_COMPLETION，优先返回 LLM 基于片段生成的答案
+            if (StringUtils.isNotBlank(answer.getChatResponse())) {
+                return answer.getChatResponse();
+            }
             if (chunks == null || chunks.isEmpty()) {
                 return "财报知识库中未检索到与问题相关的片段。请确认知识库已构建（filing_kb_build）或调整问题/股票代码/周期。";
             }

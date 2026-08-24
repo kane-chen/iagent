@@ -2,6 +2,7 @@ package io.invest.iagent.rag.retrieve;
 
 import io.invest.iagent.rag.config.RagProperties;
 import io.invest.iagent.rag.model.RetrieveRequest;
+import io.invest.iagent.rag.model.RetrieveResult;
 import io.invest.iagent.rag.model.RetrieveResultItem;
 import io.invest.iagent.rag.retrieve.dto.*;
 import io.invest.iagent.rag.retrieve.handler.Handlers;
@@ -24,7 +25,7 @@ public class DefaultRetrievingService implements RetrievingService {
     private RagProperties ragProperties;
 
     @Override
-    public List<RetrieveResultItem> retrieve(RetrieveRequest request) {
+    public RetrieveResult retrieve(RetrieveRequest request) {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
         try {
             // context
@@ -37,9 +38,16 @@ public class DefaultRetrievingService implements RetrievingService {
             // result
             List<SearchResult> results = !state.mergeResult.isEmpty()
                     ? state.mergeResult : state.searchResult;
-            return results.stream()
+            List<RetrieveResultItem> items = results.stream()
                     .map(SearchResult::toRetrieveResultItem)
                     .toList();
+            RetrieveResult result = new RetrieveResult();
+            result.setSessionId(request.getSessionId());
+            result.setUserId(request.getUserId());
+            result.setQuery(request.getQuery());
+            result.setChatResponse(state.getChatResponse());
+            result.setItems(items);
+            return result;
         } catch (Exception e) {
             log.error("Retrieve failed: {}", e.getMessage(), e);
             throw new RuntimeException("RAG retrieve failed", e);

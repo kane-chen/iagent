@@ -2,10 +2,12 @@ package io.invest.iagent.rag.filing;
 
 import io.invest.iagent.rag.filing.config.FilingKbProperties;
 import io.invest.iagent.rag.filing.ingest.PeriodParser;
+import io.invest.iagent.rag.filing.model.FilingAnswer;
 import io.invest.iagent.rag.filing.model.FilingChunk;
 import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import io.invest.iagent.rag.KnowledgeService;
 import io.invest.iagent.rag.model.RetrieveRequest;
+import io.invest.iagent.rag.model.RetrieveResult;
 import io.invest.iagent.rag.model.RetrieveResultItem;
 import io.invest.iagent.rag.model.TagCondition;
 import io.invest.iagent.rag.model.TagFilter;
@@ -43,7 +45,7 @@ public class FilingQaService {
      * @param period   调用方已明确的财报周期（可空，支持 2026Q1/FY2025 等）
      * @param topK     返回片段数，&lt;=0 取配置默认值
      */
-    public List<FilingChunk> ask(String question, String ticker, String period, int topK) {
+    public FilingAnswer ask(String question, String ticker, String period, int topK) {
         if (StringUtils.isBlank(question)) {
             throw new IllegalArgumentException("question is required");
         }
@@ -61,7 +63,8 @@ public class FilingQaService {
                 .domain(FilingTagKeys.DOMAIN)
                 .build();
 
-        List<RetrieveResultItem> items = knowledgeService.retrieve(request);
+        RetrieveResult result = knowledgeService.retrieve(request);
+        List<RetrieveResultItem> items = result.getItems();
         List<FilingChunk> chunks = new ArrayList<>();
         int i = 1;
         for (RetrieveResultItem item : items) {
@@ -76,7 +79,11 @@ public class FilingQaService {
             i++;
         }
         log.debug("FilingKB ask returned {} chunks for question: {}", chunks.size(), question);
-        return chunks;
+
+        FilingAnswer answer = new FilingAnswer();
+        answer.setChatResponse(result.getChatResponse());
+        answer.setChunks(chunks);
+        return answer;
     }
 
     /**

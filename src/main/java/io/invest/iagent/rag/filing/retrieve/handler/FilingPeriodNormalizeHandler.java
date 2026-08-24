@@ -90,15 +90,15 @@ public class FilingPeriodNormalizeHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
-        if (!FilingHandlerSupport.isFilingDomain(context))return;
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+        if (!FilingHandlerSupport.isFilingDomain(cm))return;
 
-        String query = context.getState().getRewriteQuery() != null
-                ? context.getState().getRewriteQuery() : context.getQuery();
+        String query = cm.getState().getRewriteQuery() != null
+                ? cm.getState().getRewriteQuery() : cm.getQuery();
         if (StringUtils.isBlank(query)) return;
 
         // 显式周期已由 TagParseHandler 解析，不做相对归一化
-        TagFilter filter = context.getState().tagFilter != null ? context.getState().tagFilter : context.getRequest().tagFilter;
+        TagFilter filter = cm.getState().tagFilter != null ? cm.getState().tagFilter : cm.getRequest().tagFilter;
         if (filter != null && FilingHandlerSupport.findCondition(filter, FilingTagKeys.FISCAL_PERIOD).isPresent()) {
             return;
         }
@@ -124,7 +124,7 @@ public class FilingPeriodNormalizeHandler implements Handler {
             case LAST_N -> latestN(available, intent.n());
         };
 
-        TagFilter stateFilter = FilingHandlerSupport.mutableStateFilter(context);
+        TagFilter stateFilter = FilingHandlerSupport.mutableStateFilter(cm);
         // 移除可能存在的空占位，再写入枚举结果
         stateFilter.add(resolved.size() == 1
                 ? TagCondition.eq(FilingTagKeys.FISCAL_PERIOD, resolved.get(0))

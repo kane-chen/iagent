@@ -29,10 +29,10 @@ public class FilingTermExpansionHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext context) {
-        if (!FilingHandlerSupport.isFilingDomain(context)) return;
+    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+        if (!FilingHandlerSupport.isFilingDomain(cm)) return;
 
-        String query = context.getState().getRewriteQuery();
+        String query = cm.getState().getRewriteQuery();
         if (StringUtils.isBlank(query)) return;
 
         Set<String> seeds = FinancialTermDictionary.extractSeeds(query);
@@ -50,7 +50,7 @@ public class FilingTermExpansionHandler implements Handler {
         if (toAppend.isEmpty()) return;
 
         String enriched = query + " " + String.join(" ", toAppend);
-        context.getState().setRewriteQuery(enriched);
+        cm.getState().setRewriteQuery(enriched);
         log.debug("FilingKB term expansion appended {} terms", toAppend.size());
     }
 }
