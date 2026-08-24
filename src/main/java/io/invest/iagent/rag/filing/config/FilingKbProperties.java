@@ -5,12 +5,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * 应用层配置（app.filing-kb.*）。
- * 仅当 app.rag.enabled=true 且 app.filing-kb.enabled=true 时生效。
+ * 应用层配置（app.rag.filing.*）。
+ * 仅当 app.rag.enabled=true 且 app.rag.filing.enabled=true 时生效。
  */
 @Component
 @Data
-@ConfigurationProperties(prefix = "app.filing-kb")
+@ConfigurationProperties(prefix = "app.rag.filing")
 public class FilingKbProperties {
 
     private boolean enabled = false;

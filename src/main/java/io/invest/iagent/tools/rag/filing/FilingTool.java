@@ -1,4 +1,4 @@
-package io.invest.iagent.tools.filingkb;
+package io.invest.iagent.tools.rag.filing;
 
 import io.agentscope.core.tool.Tool;
 import io.agentscope.core.tool.ToolParam;
@@ -17,12 +17,12 @@ import java.util.List;
  *   <li>{@code filing_kb_build} — 将 workspace/portfolio 下的财报文件处理后入库。</li>
  * </ul>
  */
-public class FilingKbTool {
+public class FilingTool {
 
     private final FilingQaService qaService;
     private final FilingBuildService buildService;
 
-    public FilingKbTool(FilingQaService qaService, FilingBuildService buildService) {
+    public FilingTool(FilingQaService qaService, FilingBuildService buildService) {
         this.qaService = qaService;
         this.buildService = buildService;
     }
