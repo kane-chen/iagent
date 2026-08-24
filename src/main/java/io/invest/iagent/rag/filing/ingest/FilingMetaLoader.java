@@ -27,6 +27,8 @@ public class FilingMetaLoader {
         /** 规范化周期：YYYYQn / YYYYHn / FYyyyy（可空） */
         private String fiscalPeriod;
         private String filingDate;
+        /** 财报正文文件名（meta.json 中 primaryFile.name，可空）；美股目录下用于排除 SEC index 等附属文件 */
+        private String primaryFileName;
     }
 
     /**
@@ -59,6 +61,13 @@ public class FilingMetaLoader {
                     date = json.getString("reportDate");
                 }
                 builder.filingDate(date);
+                JSONObject primary = json.getJSONObject("primaryFile");
+                if (primary != null) {
+                    String name = primary.getString("name");
+                    if (name != null && !name.isBlank()) {
+                        builder.primaryFileName(name);
+                    }
+                }
             } catch (IOException e) {
                 log.warn("Failed to read meta.json at {}: {}", metaFile, e.getMessage());
             }

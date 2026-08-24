@@ -97,7 +97,8 @@ public class XinferenceReranker implements Reranker {
         body.put("model", ragProperties.getRerank().getModel());
         body.put("query", query);
         body.put("documents", docTexts);
-        body.put("return_documents", false);
+        body.put("top_n",documents.size());
+//        body.put("return_documents", false);
 
         String baseUrl = StringUtils.removeEnd(ragProperties.getRerank().getBaseUrl(), "/");
         // Xinference 的 OpenAI 兼容路径统一在 /v1 下；若用户已在 base-url 中配置了 /v1，则不重复追加
@@ -107,9 +108,8 @@ public class XinferenceReranker implements Reranker {
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(ragProperties.getRerank().getTimeoutSeconds()))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer "+ragProperties.getRerank().getApiKey())
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)));
-        // apiKey 可选（本地 Xinference 默认可空）
+        // apiKey
         if (StringUtils.isNotBlank(ragProperties.getRerank().getApiKey())) {
             builder.header("Authorization", "Bearer " + ragProperties.getRerank().getApiKey());
         }

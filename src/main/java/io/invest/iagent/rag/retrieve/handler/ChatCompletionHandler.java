@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class ChatCompletionHandler implements Handler {
 
     private static final String SYSTEM_PROMPT = """
-            你是一个专业的投资分析助手。请基于用户提供的知识库片段回答问题。
+            你是一个专业的投资问题问答助手。请基于用户提供的知识库片段回答问题。
             要求：
             1. 只基于知识库片段回答，不要编造信息
             2. 如果知识库片段不足以回答问题，请明确说明
@@ -45,9 +45,9 @@ public class ChatCompletionHandler implements Handler {
         try {
             // call
             String userPrompt = String.format("""
-                    ## 用户原始请求
+                    ## 用户问题
                     %s
-                    ## 知识库上下文
+                    ## 知识库片段
                     %s
                     """,query,contexts) ;
             String answer = chatter.chat(SYSTEM_PROMPT,userPrompt) ;

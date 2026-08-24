@@ -39,6 +39,7 @@ import hmac
 import json
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -73,6 +74,11 @@ DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
 
 VALID_FORM_TYPES = {"FY", "H1", "H2", "Q1", "Q2", "Q3", "Q4"}
+
+# 同一份公告可能被归类为多个等价 form_type（如中期"截至6月30日止三/六个月"业绩
+# 同时归 H1 和 Q2，落地的是同一个 PDF）。去重时保留优先级最高的一个：
+# 季度 > 半年 > 年度。数值越大优先级越高。
+_FORM_PRIORITY = {"Q1": 3, "Q2": 3, "Q3": 3, "Q4": 3, "H1": 2, "H2": 2, "FY": 1}
 
 # Futu WAF 会话失效信号 —— 命中任一都需要重新登录：
 #  - HTTP 439：Futu 自定义的"频次/会话已失效"状态码
@@ -1069,6 +1075,33 @@ def build_hk_target_dir(workspace: Path, profile: MarketProfile, ticker: str,
     return workspace / "portfolio" / ticker / "filings" / doc_id, doc_id
 
 
+def _remove_duplicate_dir(dup_dir: Path, announcement_id: str, winner_form: str) -> None:
+    """删除同一公告因多分类而落地的低优先级重复目录。
+
+    安全校验：仅当目录存在、且其 meta.json 的 announcementId 与当前公告一致时才删除，
+    避免误删目录名恰好相同但来源不同的财报。删除失败只告警，不中断主流程。
+    """
+    if not dup_dir.is_dir():
+        return
+    meta_path = dup_dir / "meta.json"
+    if meta_path.is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if str(meta.get("announcementId")) != str(announcement_id):
+                # 目录名相同但来自不同公告，不能删
+                logger.warning("Skip removing %s: announcementId mismatch", dup_dir)
+                return
+        except (OSError, ValueError) as e:
+            logger.warning("Skip removing %s: cannot read meta.json (%s)", dup_dir, e)
+            return
+    try:
+        shutil.rmtree(dup_dir)
+        print(f"[downloader]   removed duplicate {dup_dir.name} (kept {winner_form})",
+              file=sys.stderr)
+    except OSError as e:
+        logger.warning("Failed to remove duplicate dir %s: %s", dup_dir, e)
+
+
 def build_sec_target_dir(workspace: Path, ticker: str, seed_url: str) -> tuple[Path, str]:
     """SEC 用 accession number 作 dir 名（与现有 fil_0001104659-25-049400 一致）。"""
     # seed_url 形如 https://www.sec.gov/Archives/edgar/data/1737806/000110465926067186/tm...
@@ -1204,7 +1237,25 @@ def process_one_ticker(session: requests.Session, cookies: dict, entry: CompanyE
                             "reason": "filter did not match"})
             continue
 
-        # 每条 announcement 只拉一次详情页；同 URL 落地成多份 meta（H1 报同时归 H1 和 Q2）
+        # 同一份公告可能命中多个等价 form_type（如中期业绩同时归 H1 和 Q2，落地的是
+        # 同一个 PDF）。过滤后只保留优先级最高的一个，避免下载/建库重复：
+        # 季度 > 半年 > 年度。显式 --filing-types 已在上方过滤，这里只在白名单内
+        # 取最高优先级，因此用户指定 H1 时仍会保留 H1。
+        if len(remaining) > 1:
+            winner = max(remaining, key=lambda c: _FORM_PRIORITY.get(c.form_type, 0))
+            dropped = [c for c in remaining if c is not winner]
+            remaining = [winner]
+            # 清理历史遗留的重复目录（同一公告落地的低优先级副本，如 H1 vs Q2）。
+            # 仅对 HK 风格目录（按 fiscal_year/form_type 命名）生效；SEC 用 accession
+            # 号命名，不会因 form_type 产生多份。
+            if profile.download_style != "sec_folder":
+                for c in dropped:
+                    dup_dir, _ = build_hk_target_dir(
+                        Path(args.workspace).resolve(), profile,
+                        sanitize_ticker(entry.ticker), c.fiscal_year, c.form_type)
+                    _remove_duplicate_dir(dup_dir, ann.news_id, winner.form_type)
+
+        # 每条 announcement 只拉一次详情页
         pdf_url = fetch_notice_pdf_url(session, ann.detail_url, cookies, profile)
         time.sleep(config.sleep_between_docs)  # 详情页请求节流
 

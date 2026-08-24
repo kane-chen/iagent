@@ -28,6 +28,16 @@ class FilingIntegrationTest {
     private FilingQaService qaService;
 
     @Test
+    void build_1() {
+        String ticker = "BABA" ;
+        FilingBuildReport report = buildService.buildTicker(ticker,false,"2025Q1","2026Q2",null);
+        System.out.println("[build] docs=" + report.getDocuments() + " chunks=" + report.getChunks() + " errors=" + report.getErrors());
+        assertThat(report.getErrors()).isEmpty();
+        assertThat(report.getDocuments()).isGreaterThan(0);
+        assertThat(report.getChunks()).isGreaterThan(0);
+    }
+
+        @Test
     void build_then_retrieve_with_tags_and_citation() {
         // ---- 1. 建库 ----
 //        FilingBuildReport report = buildService.buildTicker(TICKER, false);
@@ -37,7 +47,7 @@ class FilingIntegrationTest {
 //        assertThat(report.getChunks()).isGreaterThan(0);
 
         // ---- 2. 检索：
-        List<FilingChunk> latest = qaService.ask("增值服务的收入是多少亿元", TICKER, "2025Q2", 5);
+        List<FilingChunk> latest = qaService.ask("2025Q2增值服务的收入是多少亿元", TICKER, "2025Q2", 5);
         assertThat(latest).isNotEmpty();
         System.out.println("=== latest period results ===");
         latest.forEach(c -> System.out.println(c.getCitation() + " | " + c.getContent()));
