@@ -47,7 +47,7 @@ class FilingIntegrationTest {
 //        assertThat(report.getChunks()).isGreaterThan(0);
 
         // ---- 2. 检索：
-        List<FilingChunk> latest = qaService.ask("2025Q2增值服务的收入是多少亿元", TICKER, "2025Q2", 5).getChunks();
+        List<FilingChunk> latest = qaService.ask("2025Q2增值服务的收入是多少亿元", TICKER, "2025Q2", 3).getChunks();
         assertThat(latest).isNotEmpty();
         System.out.println("=== latest period results ===");
         latest.forEach(c -> System.out.println(c.getCitation() + " | " + c.getContent()));

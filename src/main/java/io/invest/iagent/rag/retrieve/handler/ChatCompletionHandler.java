@@ -38,28 +38,28 @@ public class ChatCompletionHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineRuntime runtime, PipelineContext cm) {
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
         try {
-            String userPrompt = this.buildUserPrompt(cm);
+            String userPrompt = this.buildUserPrompt(context);
             String answer = chatter.chat(SYSTEM_PROMPT,userPrompt) ;
             // answer
             if (StringUtils.isBlank(answer)) {
                 answer = "抱歉，未能生成回答。";
             }
-            cm.getState().setChatResponse(answer);
+            context.getState().setChatResponse(answer);
         } catch (Exception e) {
             log.error("Chat completion failed: {}", e.getMessage(), e);
             throw new RuntimeException("model_call_failed", e);
         }
     }
 
-    private String buildUserPrompt(PipelineContext cm){
-        String knowledge = this.formatKnowledge(cm) ;
+    private String buildUserPrompt(PipelineContext context){
+        String knowledge = this.formatKnowledge(context) ;
         if(StringUtils.isBlank(knowledge)){
             knowledge = "无知识库上下文" ;
         }
-        String query = cm.getQuery() ;
-        String rewriteQuery = StringUtils.firstNonBlank(cm.getState().getRewriteQuery(),query) ;
+        String query = context.getQuery() ;
+        String rewriteQuery = StringUtils.firstNonBlank(context.getState().getRewriteQuery(),query) ;
         return  String.format("""
                     ## 用户问题
                     * 原始问题：%s
@@ -69,10 +69,10 @@ public class ChatCompletionHandler implements Handler {
                     """,query,rewriteQuery,knowledge) ;
     }
 
-    private String formatKnowledge(PipelineContext cm){
-        List<SearchResult> results = !cm.getState().getMergeResult().isEmpty()
-                ? cm.getState().getMergeResult()
-                : cm.getState().getSearchResult();
+    private String formatKnowledge(PipelineContext context){
+        List<SearchResult> results = !context.getState().getMergeResult().isEmpty()
+                ? context.getState().getMergeResult()
+                : context.getState().getSearchResult();
         if(CollectionUtils.isEmpty(results)){
             return null ;
         }
