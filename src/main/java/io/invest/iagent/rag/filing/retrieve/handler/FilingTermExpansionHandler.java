@@ -1,8 +1,8 @@
 package io.invest.iagent.rag.filing.retrieve.handler;
 
 import io.invest.iagent.rag.filing.term.FinancialTermDictionary;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -29,10 +29,10 @@ public class FilingTermExpansionHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!FilingHandlerSupport.isFilingDomain(cm)) return;
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (!FilingHandlerSupport.isFilingDomain(context)) return;
 
-        String query = cm.getState().getRewriteQuery();
+        String query = context.getState().getRewriteQuery();
         if (StringUtils.isBlank(query)) return;
 
         Set<String> seeds = FinancialTermDictionary.extractSeeds(query);
@@ -50,7 +50,7 @@ public class FilingTermExpansionHandler implements Handler {
         if (toAppend.isEmpty()) return;
 
         String enriched = query + " " + String.join(" ", toAppend);
-        cm.getState().setRewriteQuery(enriched);
+        context.getState().setRewriteQuery(enriched);
         log.debug("FilingKB term expansion appended {} terms", toAppend.size());
     }
 }

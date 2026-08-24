@@ -6,13 +6,12 @@ import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import io.invest.iagent.rag.model.TagCondition;
 import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.repository.ChunkRepository;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -91,15 +90,15 @@ public class FilingPeriodNormalizeHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!FilingHandlerSupport.isFilingDomain(cm))return;
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (!FilingHandlerSupport.isFilingDomain(context))return;
 
-        String query = cm.getState().getRewriteQuery() != null
-                ? cm.getState().getRewriteQuery() : cm.getQuery();
+        String query = context.getState().getRewriteQuery() != null
+                ? context.getState().getRewriteQuery() : context.getQuery();
         if (StringUtils.isBlank(query)) return;
 
         // 显式周期已由 TagParseHandler 解析，不做相对归一化
-        TagFilter filter = cm.getState().tagFilter != null ? cm.getState().tagFilter : cm.getRequest().tagFilter;
+        TagFilter filter = context.getState().tagFilter != null ? context.getState().tagFilter : context.getRequest().tagFilter;
         if (filter != null && FilingHandlerSupport.findCondition(filter, FilingTagKeys.FISCAL_PERIOD).isPresent()) {
             return;
         }
@@ -125,7 +124,7 @@ public class FilingPeriodNormalizeHandler implements Handler {
             case LAST_N -> latestN(available, intent.n());
         };
 
-        TagFilter stateFilter = FilingHandlerSupport.mutableStateFilter(cm);
+        TagFilter stateFilter = FilingHandlerSupport.mutableStateFilter(context);
         // 移除可能存在的空占位，再写入枚举结果
         stateFilter.add(resolved.size() == 1
                 ? TagCondition.eq(FilingTagKeys.FISCAL_PERIOD, resolved.get(0))

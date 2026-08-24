@@ -28,12 +28,12 @@ public class DefaultRetrievingService implements RetrievingService {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
         try {
             // context
+            PipelineRuntime runtime = new PipelineRuntime( null, null, traceId);
             PipelineRequest pipelineRequest = PipelineRequest.from(request, ragProperties);
             PipelineState state = new PipelineState();
-            PipelineContext context = new PipelineContext( null, null, traceId);
+            PipelineContext context = new PipelineContext(pipelineRequest, state, runtime);
             // execute
-            ChatManage chatManage = new ChatManage(pipelineRequest, state, context);
-            handlers.execute(context,chatManage);
+            handlers.execute(runtime,context);
             // result
             List<SearchResult> results = !state.mergeResult.isEmpty()
                     ? state.mergeResult : state.searchResult;

@@ -1,8 +1,8 @@
 package io.invest.iagent.rag.filing.retrieve.handler;
 
 import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
@@ -27,14 +27,14 @@ public class FilingCitationHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!FilingHandlerSupport.isFilingDomain(cm)){
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (!FilingHandlerSupport.isFilingDomain(context)){
             return;
         }
 
-        List<SearchResult> results = !cm.getState().getMergeResult().isEmpty()
-                ? cm.getState().getMergeResult()
-                : cm.getState().getSearchResult();
+        List<SearchResult> results = !context.getState().getMergeResult().isEmpty()
+                ? context.getState().getMergeResult()
+                : context.getState().getSearchResult();
         if (results.isEmpty()){
             return;
         }

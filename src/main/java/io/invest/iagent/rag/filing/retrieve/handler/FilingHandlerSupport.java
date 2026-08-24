@@ -3,7 +3,7 @@ package io.invest.iagent.rag.filing.retrieve.handler;
 import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import io.invest.iagent.rag.model.TagCondition;
 import io.invest.iagent.rag.model.TagFilter;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
+import io.invest.iagent.rag.retrieve.dto.PipelineContext;
 
 import java.util.Optional;
 
@@ -15,7 +15,7 @@ final class FilingHandlerSupport {
     private FilingHandlerSupport() {}
 
     /** 仅当请求 domain="filing" 时执行 */
-    static boolean isFilingDomain(ChatManage cm) {
+    static boolean isFilingDomain(PipelineContext cm) {
         return cm != null && cm.getRequest() != null
                 && FilingTagKeys.DOMAIN.equals(cm.getRequest().domain);
     }
@@ -24,7 +24,7 @@ final class FilingHandlerSupport {
      * 取 state.tagFilter（运行时优先），为空则回退请求中的预填 filter；
      * 若都为空则新建并写入 state。返回可变的 state.tagFilter。
      */
-    static TagFilter mutableStateFilter(ChatManage cm) {
+    static TagFilter mutableStateFilter(PipelineContext cm) {
         if (cm.getState().tagFilter == null) {
             TagFilter prefill = cm.getRequest().tagFilter;
             cm.getState().tagFilter = new TagFilter();

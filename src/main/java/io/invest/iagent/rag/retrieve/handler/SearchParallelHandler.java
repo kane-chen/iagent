@@ -5,8 +5,8 @@ import io.invest.iagent.rag.model.TagFilter;
 import io.invest.iagent.rag.repository.ChunkRepository;
 import io.invest.iagent.rag.repository.ChunkRetrieveParams;
 import io.invest.iagent.rag.repository.ChunkRetrieveResult;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import io.invest.iagent.rag.service.EmbeddingService;
 import lombok.extern.slf4j.Slf4j;
@@ -44,14 +44,14 @@ public class SearchParallelHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!cm.needsRetrieval()){
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (context.ignoreRetrieval()){
             return ;
         }
 
-        String query = cm.getState().getRewriteQuery();
+        String query = context.getState().getRewriteQuery();
         if (query == null || query.isBlank()) {
-            query = cm.getQuery();
+            query = context.getQuery();
         }
 
         RagProperties.Search searchConfig = config.getSearch();
@@ -63,19 +63,19 @@ public class SearchParallelHandler implements Handler {
         }
 
         // 运行时由 handler 生成的 tagFilter 优先于请求传入的
-        TagFilter tagFilter = cm.getState().tagFilter != null
-                ? cm.getState().tagFilter : cm.getRequest().tagFilter;
+        TagFilter tagFilter = context.getState().tagFilter != null
+                ? context.getState().tagFilter : context.getRequest().tagFilter;
 
         ChunkRetrieveParams params = ChunkRetrieveParams.builder()
                 .query(query)
                 .queryEmbedding(queryEmbedding)
-                .knowledgeBaseIds(cm.getRequest().knowledgeBaseIds)
+                .knowledgeBaseIds(context.getRequest().knowledgeBaseIds)
                 .tagFilter(tagFilter)
                 .topK(searchConfig.getVectorTopK())
-                .vectorThreshold(cm.getRequest().vectorThreshold > 0
-                        ? cm.getRequest().vectorThreshold : searchConfig.getVectorThreshold())
-                .keywordThreshold(cm.getRequest().keywordThreshold > 0
-                        ? cm.getRequest().keywordThreshold : searchConfig.getKeywordThreshold())
+                .vectorThreshold(context.getRequest().vectorThreshold > 0
+                        ? context.getRequest().vectorThreshold : searchConfig.getVectorThreshold())
+                .keywordThreshold(context.getRequest().keywordThreshold > 0
+                        ? context.getRequest().keywordThreshold : searchConfig.getKeywordThreshold())
                 .rrfK(searchConfig.getRrfK())
                 .rrfVectorWeight(searchConfig.getRrfVectorWeight())
                 .rrfKeywordWeight(searchConfig.getRrfKeywordWeight())
@@ -100,7 +100,7 @@ public class SearchParallelHandler implements Handler {
                     .map(this::toSearchResult)
                     .collect(Collectors.toList());
 
-            cm.getState().setSearchResult(results);
+            context.getState().setSearchResult(results);
 
             log.debug("Search returned {} results (keyword={}, vector={})",
                     results.size(), keywordResults.size(), vectorResults.size());

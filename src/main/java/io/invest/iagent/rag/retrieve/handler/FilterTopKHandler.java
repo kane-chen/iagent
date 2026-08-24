@@ -1,8 +1,8 @@
 package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.config.RagProperties;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,11 +21,11 @@ public class FilterTopKHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!cm.needsRetrieval() || cm.getState().getMergeResult().isEmpty()) {
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (context.ignoreRetrieval() || context.getState().getMergeResult().isEmpty()) {
             return ;
         }
-        int topK = Math.min(config.getSearch().getRerankTopK(), cm.getState().getMergeResult().size());
-        cm.getState().setMergeResult(cm.getState().getMergeResult().subList(0, topK));
+        int topK = Math.min(config.getSearch().getRerankTopK(), context.getState().getMergeResult().size());
+        context.getState().setMergeResult(context.getState().getMergeResult().subList(0, topK));
     }
 }

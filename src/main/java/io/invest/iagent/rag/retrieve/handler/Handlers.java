@@ -1,7 +1,7 @@
 package io.invest.iagent.rag.retrieve.handler;
 
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.enums.RetrieveMode;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -33,14 +33,14 @@ public class Handlers {
                 "filing",List.of("QUERY_UNDERSTAND","FilingPeriodNormalize","FilingTagParse","FilingTermExpansion"
                         ,"CHUNK_SEARCH_PARALLEL","CHUNK_MERGE","CHUNK_RERANK"
                         ,"FILTER_TOP_K","FilingCitation"
-                        ,"INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+                        ,"CHAT_COMPLETION")
         );
         sceneMapping = this.mapping(sceneHandles,handlerMap) ;
         // mode
         Map<String,List<String>> modeHandles = Map.of(
                 RetrieveMode.CHAT.name(),List.of("QUERY_UNDERSTAND","CHAT_COMPLETION"),
                 RetrieveMode.HYBRID.name(),List.of("QUERY_UNDERSTAND","CHUNK_SEARCH_PARALLEL"
-                        ,"CHUNK_MERGE", "FILTER_TOP_K","INTO_CHAT_MESSAGE","CHAT_COMPLETION")
+                        ,"CHUNK_MERGE", "FILTER_TOP_K","CHAT_COMPLETION")
         );
         modeMapping = this.mapping(modeHandles,handlerMap) ;
 
@@ -68,7 +68,7 @@ public class Handlers {
                 ));
     }
 
-    public void execute(PipelineContext ctx, ChatManage cm){
+    public void execute(PipelineRuntime ctx, PipelineContext cm){
         List<Handler> handlers = this.getHandlers(cm) ;
         if(CollectionUtils.isEmpty(handlers)){
             throw new IllegalArgumentException("handler empty") ;
@@ -76,15 +76,15 @@ public class Handlers {
         handlers.forEach(t->t.handle(ctx,cm));
     }
 
-    private List<Handler> getHandlers(ChatManage chatManage){
-        String domain = chatManage.getRequest().getDomain() ;
+    private List<Handler> getHandlers(PipelineContext context){
+        String domain = context.getRequest().getDomain() ;
         if(StringUtils.isNotBlank(domain)){
             List<Handler> handlers = sceneMapping.get(domain) ;
             if(!CollectionUtils.isEmpty(handlers)){
                 return handlers ;
             }
         }
-        RetrieveMode mode = Optional.ofNullable(chatManage.getRequest().getRetrieveMode())
+        RetrieveMode mode = Optional.ofNullable(context.getRequest().getRetrieveMode())
                 .orElse(RetrieveMode.HYBRID);
         return modeMapping.get(mode.name()) ;
     }

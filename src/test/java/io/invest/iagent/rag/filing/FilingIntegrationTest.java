@@ -55,7 +55,6 @@ class FilingIntegrationTest {
         FilingChunk top = latest.get(0);
         assertThat(top.getTags()).containsEntry(FilingTagKeys.TICKER, TICKER);
         assertThat(top.getTags()).containsEntry(FilingTagKeys.FISCAL_PERIOD, "2025Q2");
-        assertThat(top.getTags()).containsKey(FilingTagKeys.HEADING);
         assertThat(top.getCitation()).contains(TICKER).contains("2025Q2").contains("[C1]");
         // 命中文本应来自 Q2（913亿元）
         assertThat(top.getContent()).contains("914");

@@ -7,8 +7,8 @@ import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import io.invest.iagent.rag.chatting.Chatter;
 import io.invest.iagent.rag.model.TagCondition;
 import io.invest.iagent.rag.model.TagFilter;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.handler.Handler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -45,14 +45,14 @@ public class FilingTagParseHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!FilingHandlerSupport.isFilingDomain(cm)) return;
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (!FilingHandlerSupport.isFilingDomain(context)) return;
 
-        String query = cm.getState().getRewriteQuery() != null
-                ? cm.getState().getRewriteQuery() : cm.getQuery();
+        String query = context.getState().getRewriteQuery() != null
+                ? context.getState().getRewriteQuery() : context.getQuery();
         if (StringUtils.isBlank(query)) return;
 
-        TagFilter filter = FilingHandlerSupport.mutableStateFilter(cm);
+        TagFilter filter = FilingHandlerSupport.mutableStateFilter(context);
 
         // ticker：预填优先
         if (FilingHandlerSupport.findCondition(filter, FilingTagKeys.TICKER).isEmpty()) {

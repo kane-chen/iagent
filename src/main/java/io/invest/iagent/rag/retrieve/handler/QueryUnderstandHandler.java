@@ -1,8 +1,8 @@
 package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.chatting.Chatter;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.enums.QueryIntent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -25,27 +25,27 @@ public class QueryUnderstandHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        String query = cm.getQuery();
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        String query = context.getQuery();
         if (StringUtils.isBlank(query)) {
-            cm.getState().setIntent(QueryIntent.CLARIFICATION);
-            cm.getState().setRewriteQuery(query);
+            context.getState().setIntent(QueryIntent.CLARIFICATION);
+            context.getState().setRewriteQuery(query);
             return ;
         }
 
         // 简单意图识别
         String q = query.toLowerCase();
         if (q.contains("你好") || q.contains("hi") || q.contains("hello")) {
-            cm.getState().setIntent(QueryIntent.GREETING);
-            cm.getState().setRewriteQuery(query);
+            context.getState().setIntent(QueryIntent.GREETING);
+            context.getState().setRewriteQuery(query);
             return ;
         }
         if (q.contains("网页") || q.contains("网络搜索") || q.contains("上网")) {
-            cm.getState().setIntent(QueryIntent.WEB_SEARCH);
-            cm.getState().setRewriteQuery(query);
+            context.getState().setIntent(QueryIntent.WEB_SEARCH);
+            context.getState().setRewriteQuery(query);
             return ;
         }
-        cm.getState().setIntent(QueryIntent.KB_SEARCH);
+        context.getState().setIntent(QueryIntent.KB_SEARCH);
 
         // 查询改写
         String rewriteQuery = query;
@@ -53,8 +53,8 @@ public class QueryUnderstandHandler implements Handler {
 //        if (cm.getRequest().enableRewrite && chatter != null) {
 //            rewriteQuery = rewriteQuery(query);
 //        }
-        cm.getState().setRewriteQuery(StringUtils.defaultIfBlank(rewriteQuery, query));
-        log.debug("Query rewrite: '{}' -> '{}'", query, cm.getState().getRewriteQuery());
+        context.getState().setRewriteQuery(StringUtils.defaultIfBlank(rewriteQuery, query));
+        log.debug("Query rewrite: '{}' -> '{}'", query, context.getState().getRewriteQuery());
     }
 
     private String rewriteQuery(String query) {

@@ -33,9 +33,6 @@ public class PipelineState {
     // 合并与过滤阶段产出
     public List<SearchResult> mergeResult = new ArrayList<>();
     
-    // 上下文构建阶段产出
-    public String renderedContexts;
-    
     // 用户输入内容（可能包含图片描述等）
     public String userContent;
     public String imageDescription;

@@ -2,8 +2,8 @@ package io.invest.iagent.rag.retrieve.handler;
 
 import io.invest.iagent.rag.repository.ChunkRepository;
 import io.invest.iagent.rag.repository.ChunkRetrieveResult;
-import io.invest.iagent.rag.retrieve.dto.ChatManage;
 import io.invest.iagent.rag.retrieve.dto.PipelineContext;
+import io.invest.iagent.rag.retrieve.dto.PipelineRuntime;
 import io.invest.iagent.rag.retrieve.dto.SearchResult;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -28,15 +28,15 @@ public class MergeHandler implements Handler {
     }
 
     @Override
-    public void handle(PipelineContext ctx, ChatManage cm) {
-        if (!cm.needsRetrieval()){
+    public void handle(PipelineRuntime runtime, PipelineContext context) {
+        if (context.ignoreRetrieval()){
             return ;
         }
 
         // 修复：优先使用 rerank-Result，否则使用 search Result
-        List<SearchResult> input = !cm.getState().getRerankResult().isEmpty()
-                ? cm.getState().getRerankResult()
-                : cm.getState().getSearchResult();
+        List<SearchResult> input = !context.getState().getRerankResult().isEmpty()
+                ? context.getState().getRerankResult()
+                : context.getState().getSearchResult();
 
         // 去重（按 id）
         Map<String, SearchResult> dedup = new LinkedHashMap<>();
@@ -51,7 +51,7 @@ public class MergeHandler implements Handler {
         // 按分数降序
         merged.sort((a, b) -> Double.compare(b.score, a.score));
 
-        cm.getState().setMergeResult(merged);
+        context.getState().setMergeResult(merged);
         log.debug("Merge completed: {} results", merged.size());
     }
 
