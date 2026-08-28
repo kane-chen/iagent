@@ -31,7 +31,7 @@ public class Handlers {
         // domain
         Map<String,List<String>> sceneHandles = Map.of(
                 "filing",List.of("QUERY_UNDERSTAND","FilingPeriodNormalize","FilingTagParse","FilingTermExpansion"
-                        ,"CHUNK_SEARCH_PARALLEL","CHUNK_MERGE","CHUNK_RERANK"
+                        ,"CHUNK_SEARCH_PARALLEL","CHUNK_MERGE","FilingRerank"
                         ,"FILTER_TOP_K","FilingCitation"
                         ,"CHAT_COMPLETION")
         );

@@ -302,27 +302,63 @@ public class ParadeDbChunkRepository implements ChunkRepository {
         for (int i = 0; i < keywordResults.size(); i++) {
             ChunkRetrieveResult r = keywordResults.get(i);
             String key = r.getChunkId() != null ? r.getChunkId() : r.getSourceId();
-            accumMap.computeIfAbsent(key, id -> new RrfAccumulator(r))
-                    .addScore(params.getRrfKeywordWeight() / (k + i + 1));
+            RrfAccumulator acc = accumMap.computeIfAbsent(key, id -> new RrfAccumulator(r));
+            acc.addScore(params.getRrfKeywordWeight() / (k + i + 1));
+            acc.fromKeyword = true;
         }
 
         for (int i = 0; i < vectorResults.size(); i++) {
             ChunkRetrieveResult r = vectorResults.get(i);
             String key = r.getChunkId() != null ? r.getChunkId() : r.getSourceId();
-            accumMap.computeIfAbsent(key, id -> new RrfAccumulator(r))
-                    .addScore(params.getRrfVectorWeight() / (k + i + 1));
+            RrfAccumulator acc = accumMap.computeIfAbsent(key, id -> new RrfAccumulator(r));
+            acc.addScore(params.getRrfVectorWeight() / (k + i + 1));
+            acc.fromVector = true;
         }
 
-        return accumMap.values().stream()
+        // 按 RRF 分数降序
+        List<RrfAccumulator> sorted = accumMap.values().stream()
                 .sorted(Comparator.comparingDouble(RrfAccumulator::getScore).reversed())
-                .limit(params.getTopK())
-                .map(acc -> {
-                    ChunkRetrieveResult r = acc.getPrototype();
-                    r.setScore(acc.getScore());
-                    r.setMatchType("hybrid");
-                    return r;
-                })
                 .collect(Collectors.toList());
+
+        int topK = params.getTopK();
+        int channelCount = (keywordResults.isEmpty() ? 0 : 1) + (vectorResults.isEmpty() ? 0 : 1);
+
+        // 席位不足以给每路保底时（如 topK=1），直接按分数截断
+        if (topK < channelCount) {
+            return sorted.stream()
+                    .limit(topK)
+                    .map(this::toHybridResult)
+                    .collect(Collectors.toList());
+        }
+
+        // 每路先保底保留一个该路最高分条目，避免某一路被整体截断
+        Set<RrfAccumulator> selected = new LinkedHashSet<>();
+        if (!keywordResults.isEmpty()) {
+            sorted.stream().filter(a -> a.fromKeyword).findFirst().ifPresent(selected::add);
+        }
+        if (!vectorResults.isEmpty()) {
+            sorted.stream().filter(a -> a.fromVector).filter(a -> !selected.contains(a))
+                    .findFirst().ifPresent(selected::add);
+        }
+        // 剩余席位按 RRF 分数顺序填充
+        for (RrfAccumulator acc : sorted) {
+            if (selected.size() >= topK) {
+                break;
+            }
+            selected.add(acc);
+        }
+
+        return selected.stream()
+                .sorted(Comparator.comparingDouble(RrfAccumulator::getScore).reversed())
+                .map(this::toHybridResult)
+                .collect(Collectors.toList());
+    }
+
+    private ChunkRetrieveResult toHybridResult(RrfAccumulator acc) {
+        ChunkRetrieveResult r = acc.getPrototype();
+        r.setScore(acc.getScore());
+        r.setMatchType("hybrid");
+        return r;
     }
 
     @Override
@@ -492,6 +528,10 @@ public class ParadeDbChunkRepository implements ChunkRepository {
     private static class RrfAccumulator {
         private final ChunkRetrieveResult prototype;
         private double score;
+        /** 是否来自关键词检索结果（两路命中同一 chunk 时两个标记皆为 true） */
+        boolean fromKeyword;
+        /** 是否来自向量检索结果 */
+        boolean fromVector;
 
         RrfAccumulator(ChunkRetrieveResult prototype) {
             this.prototype = prototype;

@@ -31,7 +31,7 @@ public class AgentFilingTest {
     private HarnessAgent agent;
 
     @Autowired
-    private HarnessAgent qaAgent;
+    private HarnessAgent filingRagAgent;
 
     private RuntimeContext context;
 

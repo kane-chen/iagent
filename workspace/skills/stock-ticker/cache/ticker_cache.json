@@ -103,5 +103,40 @@
         "matchScore": 1.0
       }
     ]
+  },
+  "腾讯控股": {
+    "company": "腾讯控股",
+    "timestamp": 1787910255,
+    "timestampIso": "2026-08-28T09:44:15+00:00",
+    "results": [
+      {
+        "symbol": "00700",
+        "name": "腾讯控股",
+        "exchange": 116,
+        "exchangeName": "HKG",
+        "marketRegion": null,
+        "securityType": "港股",
+        "companyType": null,
+        "annualReportType": null,
+        "quarterlyReportType": null,
+        "semiAnnualReportType": null,
+        "filingAuthority": null,
+        "matchScore": 1.0
+      },
+      {
+        "symbol": "80700",
+        "name": "腾讯控股-R",
+        "exchange": 116,
+        "exchangeName": "HKG",
+        "marketRegion": null,
+        "securityType": "港股",
+        "companyType": null,
+        "annualReportType": null,
+        "quarterlyReportType": null,
+        "semiAnnualReportType": null,
+        "filingAuthority": null,
+        "matchScore": 1.0
+      }
+    ]
   }
 }

@@ -42,6 +42,8 @@ public class RerankHandler implements Handler {
             // rerank
             String query = StringUtils.defaultIfBlank(context.getState().getRewriteQuery(), context.getQuery());
             List<SearchResult> reranked = reranker.rerank(query, searchResults);
+            // post rank
+            reranked = this.postRerank(context,reranked) ;
             // fill
             int topK = Math.min(config.getSearch().getRerankTopK(), reranked.size());
             context.getState().setRerankResult(new ArrayList<>(reranked.subList(0, topK)));
@@ -50,6 +52,14 @@ public class RerankHandler implements Handler {
             log.warn("Rerank failed, using original order: {}", e.getMessage());
             context.getState().setRerankResult(new ArrayList<>(searchResults));
         }
+    }
+
+    /**
+     * 重排后置钩子：在相关性重排之后、topK 截断之前对候选列表做二次排序。
+     * 默认原样返回；子类可叠加业务排序因子（如财报周期轮转，避免单一周期霸榜导致其它周期丢失）。
+     */
+    protected List<SearchResult> postRerank(PipelineContext context,List<SearchResult> reranked){
+        return reranked ;
     }
 
 }

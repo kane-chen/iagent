@@ -36,5 +36,7 @@ public class FilingKbProperties {
     public static class Search {
         /** 默认返回给 Agent 的片段数 */
         private int defaultTopK = 5;
+        /** 多周期检索时按财报周期轮转重排（周期因子），避免 top-K 被单一周期霸榜导致其它周期丢失 */
+        private boolean periodRerankEnabled = true;
     }
 }

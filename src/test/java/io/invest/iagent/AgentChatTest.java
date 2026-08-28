@@ -23,7 +23,7 @@ public class AgentChatTest {
     private HarnessAgent agent;
 
     @Autowired
-    private HarnessAgent qaAgent;
+    private HarnessAgent filingRagAgent;
 
     private RuntimeContext context;
 
@@ -76,7 +76,7 @@ public class AgentChatTest {
             System.out.print("助手: ");
             UserMessage userMsg = new UserMessage(input);
 
-            Msg response = qaAgent.call(userMsg, context).block();
+            Msg response = filingRagAgent.call(userMsg, context).block();
             System.out.println("助手: " + Objects.requireNonNull(response).getTextContent());
 
         }

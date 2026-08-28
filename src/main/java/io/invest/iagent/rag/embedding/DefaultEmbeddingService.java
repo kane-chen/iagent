@@ -36,6 +36,11 @@ public class DefaultEmbeddingService implements EmbeddingService {
             return;
         }
         int dimension = embedder.dimension();
+        int batchSize = config.getEmbedding().getBatchSize() ;
+        this.embedding(chunks,batchSize,dimension);
+    }
+
+    private void embeddingSingle(List<Chunk> chunks,int dimension){
         chunks.forEach(t->{
             String text = t.getContent();
             if (StringUtils.isNotBlank(t.getContextHeader())) {
