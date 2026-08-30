@@ -1,0 +1,88 @@
+# 标准财务指标目录树（跨公司统一）
+# - code: 稳定英文编码，入库 metric_code
+# - name_cn/name_en: 中英文名
+# - statement: income(利润表) / balance(资产负债表) / cashflow(现金流量表)
+# - parent: 父指标编码（分层展示）；null 为顶层
+# - value_type: FLOW(期间量) / STOCK(时点数) / RATIO(比率)
+# - unit: million(百万财报币种) / percent(百分比)
+# - derived: true 表示由其他指标计算得出
+# - aliases: 查询时的别名（中英文，小写匹配）
+# sort_order 控制同层展示顺序
+
+metrics:
+  # ===================== 利润表 =====================
+  - { code: REVENUE,            name_cn: 营业总收入,       name_en: Total revenue,            statement: income, parent: null,                sort_order: 10,  value_type: FLOW,  unit: million, aliases: [营业收入, 营收, 收入, revenue, total revenue] }
+  - { code: TOTAL_OPERATING_COST, name_cn: 营业总成本,    name_en: Total operating cost,     statement: income, parent: null,                sort_order: 20,  value_type: FLOW,  unit: million, aliases: [营业总成本, total operating cost] }
+  - { code: COST_OF_REVENUE,    name_cn: 营业成本,        name_en: Cost of revenue,          statement: income, parent: TOTAL_OPERATING_COST, sort_order: 21, value_type: FLOW, unit: million, aliases: [销售成本, 营业成本, cost of revenue, cost of sales, cogs] }
+  - { code: OPERATING_EXPENSES, name_cn: 营业费用,        name_en: Operating expenses,       statement: income, parent: TOTAL_OPERATING_COST, sort_order: 22, value_type: FLOW, unit: million, aliases: [营业费用, 运营费用, operating expenses, opex] }
+  - { code: SELLING_EXPENSE,    name_cn: 销售费用,        name_en: Selling expense,          statement: income, parent: OPERATING_EXPENSES, sort_order: 221, value_type: FLOW, unit: million, aliases: [销售费用, 销售及分销成本, 营销费用, selling expense, s&m, sales and marketing] }
+  - { code: GA_EXPENSE,         name_cn: 管理费用,        name_en: G&A expense,              statement: income, parent: OPERATING_EXPENSES, sort_order: 222, value_type: FLOW, unit: million, aliases: [管理费用, 行政开支, 一般及行政费用, g&a, general and administrative] }
+  - { code: RD_EXPENSE,         name_cn: 研发费用,        name_en: R&D expense,              statement: income, parent: OPERATING_EXPENSES, sort_order: 223, value_type: FLOW, unit: million, aliases: [研发费用, 研发开支, r&d, research and development] }
+  - { code: SGA_EXPENSE,        name_cn: 销售管理费用合计, name_en: Selling & administrative, statement: income, parent: OPERATING_EXPENSES, sort_order: 224, value_type: FLOW, unit: million, aliases: [销售和管理费用, sg&a, selling general administrative] }
+  - { code: SBC_EXPENSE,        name_cn: 股份支付费用,    name_en: Share-based compensation, statement: income, parent: OPERATING_EXPENSES, sort_order: 225, value_type: FLOW, unit: million, aliases: [股份支付, 股权激励费用, 股份酬金, sbc, share based compensation, stock based compensation, stock compensation expense] }
+  - { code: GROSS_PROFIT,       name_cn: 毛利,            name_en: Gross profit,             statement: income, parent: null,                sort_order: 30,  value_type: FLOW,  unit: million, derived: true, aliases: [毛利, gross profit, gross income] }
+  - { code: OPERATING_INCOME,   name_cn: 营业利润,        name_en: Operating income,         statement: income, parent: null,                sort_order: 40,  value_type: FLOW,  unit: million, aliases: [营业利润, 经营利润, operating income, operating profit] }
+  - { code: DA_EXPENSE,         name_cn: 折旧与摊销,      name_en: D&A (income statement),   statement: income, parent: null,                sort_order: 45,  value_type: FLOW,  unit: million, aliases: [折旧摊销, 折旧与摊销, depreciation amortization] }
+  - { code: NET_FINANCE_COST,   name_cn: 财务费用净额,    name_en: Net finance cost,         statement: income, parent: null,                sort_order: 50,  value_type: FLOW,  unit: million, aliases: [财务费用, 财务成本, 财务费用净额, finance cost, financial expenses] }
+  - { code: FINANCE_INCOME,     name_cn: 财务收入,        name_en: Finance income,           statement: income, parent: NET_FINANCE_COST,   sort_order: 51,  value_type: FLOW,  unit: million, aliases: [财务收入, 利息收入, finance income] }
+  - { code: INTEREST_EXPENSE,   name_cn: 利息费用,        name_en: Interest expense,         statement: income, parent: NET_FINANCE_COST,   sort_order: 52,  value_type: FLOW,  unit: million, aliases: [利息费用, 利息开支, interest expense] }
+  - { code: PRETAX_INCOME,      name_cn: 税前利润,        name_en: Pre-tax income,           statement: income, parent: null,                sort_order: 60,  value_type: FLOW,  unit: million, aliases: [税前利润, 利润总额, pretax income, income before tax] }
+  - { code: INCOME_TAX,         name_cn: 所得税,          name_en: Income tax,               statement: income, parent: null,                sort_order: 70,  value_type: FLOW,  unit: million, aliases: [所得税, 所得税费用, income tax, tax expense] }
+  - { code: NET_INCOME,         name_cn: 净利润,          name_en: Net income,               statement: income, parent: null,                sort_order: 80,  value_type: FLOW,  unit: million, aliases: [净利润, 本年利润, net income, net profit] }
+  - { code: NET_INCOME_PARENT,  name_cn: 归母净利润,      name_en: Net income to parent,     statement: income, parent: NET_INCOME,         sort_order: 81,  value_type: FLOW,  unit: million, aliases: [归母净利润, 归属母公司净利润, 归属于母公司股东净利润, net income attributable to parent] }
+  - { code: EBITDA,             name_cn: EBITDA,          name_en: EBITDA,                  statement: income, parent: null,                sort_order: 41,  value_type: FLOW,  unit: million, aliases: [息税折旧摊销前利润, ebitda, 息税折旧及摊销前利润] }
+  - { code: ADJUSTED_EBITDA,    name_cn: Adjusted EBITDA, name_en: Adjusted EBITDA,          statement: income, parent: null,                sort_order: 42,  value_type: FLOW,  unit: million, aliases: [调整后ebitda, adjusted ebitda, 经调整ebitda] }
+  - { code: EBIT,               name_cn: 息税前利润,       name_en: EBIT,                    statement: income, parent: null,                sort_order: 43,  value_type: FLOW,  unit: million, aliases: [息税前利润, ebit] }
+  - { code: ADJUSTED_EBITA,     name_cn: 调整后EBITA,     name_en: Adjusted EBITA,          statement: income, parent: null,                sort_order: 44,  value_type: FLOW,  unit: million, aliases: [调整后ebita, 经调整ebita, adjusted ebita, ebita利润率, 分部ebita] }
+  - { code: NON_GAAP_NET_INCOME, name_cn: Non-GAAP净利润, name_en: Non-GAAP net income,      statement: income, parent: null,                sort_order: 82,  value_type: FLOW,  unit: million, aliases: [non-gaap净利润, 非公认会计准则净利润, 经调整净利润, 调整后净利润, non gaap net income, adjusted net income] }
+
+  # ===================== 资产负债表 =====================
+  - { code: TOTAL_ASSETS,            name_cn: 资产总计,       name_en: Total assets,             statement: balance, parent: null,                    sort_order: 100, value_type: STOCK, unit: million, aliases: [资产合计, 资产总计, 总资产, total assets] }
+  - { code: TOTAL_CURRENT_ASSETS,    name_cn: 流动资产合计,   name_en: Total current assets,     statement: balance, parent: TOTAL_ASSETS,           sort_order: 110, value_type: STOCK, unit: million, aliases: [流动资产合计, 流动资产, current assets] }
+  - { code: CASH_AND_EQUIVALENTS,    name_cn: 货币资金,       name_en: Cash & equivalents,       statement: balance, parent: TOTAL_CURRENT_ASSETS,   sort_order: 111, value_type: STOCK, unit: million, aliases: [货币资金, 现金及现金等价物, 现金, cash, cash and equivalents] }
+  - { code: SHORT_TERM_INVESTMENTS,  name_cn: 短期投资,       name_en: Short-term investments,   statement: balance, parent: TOTAL_CURRENT_ASSETS,   sort_order: 112, value_type: STOCK, unit: million, aliases: [短期投资, short term investments] }
+  - { code: ACCOUNTS_RECEIVABLE,     name_cn: 应收账款,       name_en: Accounts receivable,      statement: balance, parent: TOTAL_CURRENT_ASSETS,   sort_order: 113, value_type: STOCK, unit: million, aliases: [应收账款, 净应收账款, accounts receivable, receivables] }
+  - { code: INVENTORY,               name_cn: 存货,           name_en: Inventory,                statement: balance, parent: TOTAL_CURRENT_ASSETS,   sort_order: 114, value_type: STOCK, unit: million, aliases: [存货, inventory] }
+  - { code: TOTAL_NONCURRENT_ASSETS, name_cn: 非流动资产合计, name_en: Total non-current assets, statement: balance, parent: TOTAL_ASSETS,           sort_order: 120, value_type: STOCK, unit: million, aliases: [非流动资产合计, 非流动资产, non current assets] }
+  - { code: PPE,                     name_cn: 固定资产净额,   name_en: Fixed assets / PP&E,      statement: balance, parent: TOTAL_NONCURRENT_ASSETS, sort_order: 121, value_type: STOCK, unit: million, aliases: [固定资产, 固定资产净额, 物业厂房设备, ppe, fixed assets, property plant equipment] }
+  - { code: INTANGIBLES,             name_cn: 无形资产,       name_en: Intangible assets,        statement: balance, parent: TOTAL_NONCURRENT_ASSETS, sort_order: 122, value_type: STOCK, unit: million, aliases: [无形资产, intangible assets] }
+  - { code: GOODWILL,                name_cn: 商誉,           name_en: Goodwill,                 statement: balance, parent: TOTAL_NONCURRENT_ASSETS, sort_order: 123, value_type: STOCK, unit: million, aliases: [商誉, goodwill] }
+  - { code: TOTAL_LIABILITIES,           name_cn: 负债总计,       name_en: Total liabilities,        statement: balance, parent: null,                       sort_order: 200, value_type: STOCK, unit: million, aliases: [负债合计, 负债总计, 总负债, total liabilities] }
+  - { code: TOTAL_CURRENT_LIABILITIES,   name_cn: 流动负债合计,   name_en: Total current liabilities, statement: balance, parent: TOTAL_LIABILITIES,          sort_order: 210, value_type: STOCK, unit: million, aliases: [流动负债合计, 流动负债, current liabilities] }
+  - { code: SHORT_TERM_BORROWING,        name_cn: 短期借款,      name_en: Short-term borrowing,     statement: balance, parent: TOTAL_CURRENT_LIABILITIES,  sort_order: 211, value_type: STOCK, unit: million, aliases: [短期借款, short term borrowing, short term debt] }
+  - { code: ACCOUNTS_PAYABLE,            name_cn: 应付账款,      name_en: Accounts payable,         statement: balance, parent: TOTAL_CURRENT_LIABILITIES,  sort_order: 212, value_type: STOCK, unit: million, aliases: [应付账款, accounts payable, payables] }
+  - { code: TOTAL_NONCURRENT_LIABILITIES, name_cn: 非流动负债合计, name_en: Non-current liabilities, statement: balance, parent: TOTAL_LIABILITIES,          sort_order: 220, value_type: STOCK, unit: million, aliases: [非流动负债合计, 非流动负债, non current liabilities] }
+  - { code: LONG_TERM_BORROWING,         name_cn: 长期借款,      name_en: Long-term borrowing,      statement: balance, parent: TOTAL_NONCURRENT_LIABILITIES, sort_order: 221, value_type: STOCK, unit: million, aliases: [长期借款, long term borrowing, long term debt] }
+  - { code: BONDS_PAYABLE,               name_cn: 应付债券,      name_en: Bonds payable,            statement: balance, parent: TOTAL_NONCURRENT_LIABILITIES, sort_order: 222, value_type: STOCK, unit: million, aliases: [应付债券, bonds payable] }
+  - { code: LEASE_LIABILITY,             name_cn: 租赁负债,      name_en: Lease liabilities,        statement: balance, parent: TOTAL_NONCURRENT_LIABILITIES, sort_order: 223, value_type: STOCK, unit: million, aliases: [租赁负债, lease liability] }
+  - { code: TOTAL_EQUITY,           name_cn: 股东权益合计,   name_en: Total equity,             statement: balance, parent: null,                  sort_order: 300, value_type: STOCK, unit: million, aliases: [股东权益合计, 股东权益, 所有者权益, total equity, shareholders equity] }
+  - { code: EQUITY_PARENT,          name_cn: 归母权益,       name_en: Equity to parent,         statement: balance, parent: TOTAL_EQUITY,         sort_order: 301, value_type: STOCK, unit: million, aliases: [归母权益, 归属母公司所有者权益, 归属于母公司股东权益, equity attributable to parent] }
+  - { code: SHARE_CAPITAL,          name_cn: 股本,           name_en: Share capital,            statement: balance, parent: TOTAL_EQUITY,         sort_order: 302, value_type: STOCK, unit: million, aliases: [股本, share capital] }
+  - { code: CAPITAL_RESERVE,        name_cn: 资本公积,       name_en: Capital reserve,          statement: balance, parent: TOTAL_EQUITY,         sort_order: 303, value_type: STOCK, unit: million, aliases: [资本公积, capital reserve, additional paid in capital] }
+  - { code: RETAINED_EARNINGS,      name_cn: 留存收益,       name_en: Retained earnings,        statement: balance, parent: TOTAL_EQUITY,         sort_order: 304, value_type: STOCK, unit: million, aliases: [留存收益, 未分配利润, 储备, retained earnings] }
+  - { code: TREASURY_STOCK,         name_cn: 库藏股,         name_en: Treasury stock,           statement: balance, parent: TOTAL_EQUITY,         sort_order: 305, value_type: STOCK, unit: million, aliases: [库藏股, 库存股, treasury stock] }
+
+  # ===================== 现金流量表 =====================
+  - { code: OPERATING_CF,     name_cn: 经营活动现金流净额, name_en: Operating cash flow,      statement: cashflow, parent: null,          sort_order: 400, value_type: FLOW, unit: million, aliases: [经营活动现金流, 经营活动现金流量净额, 经营现金流, ocf, operating cash flow, cash from operations] }
+  - { code: CF_DA,            name_cn: 折旧摊销(现金流),  name_en: D&A (cash flow),          statement: cashflow, parent: OPERATING_CF, sort_order: 401, value_type: FLOW, unit: million, aliases: [折旧摊销-现金流] }
+  - { code: AR_CHANGE,        name_cn: 应收账款变动,      name_en: Change in receivables,    statement: cashflow, parent: OPERATING_CF, sort_order: 402, value_type: FLOW, unit: million, aliases: [应收账款变动, change in accounts receivable] }
+  - { code: INVENTORY_CHANGE, name_cn: 存货变动,          name_en: Change in inventory,      statement: cashflow, parent: OPERATING_CF, sort_order: 403, value_type: FLOW, unit: million, aliases: [存货变动, change in inventory] }
+  - { code: AP_CHANGE,        name_cn: 应付账款变动,      name_en: Change in payables,       statement: cashflow, parent: OPERATING_CF, sort_order: 404, value_type: FLOW, unit: million, aliases: [应付账款变动, change in accounts payable] }
+  - { code: INVESTING_CF,     name_cn: 投资活动现金流净额, name_en: Investing cash flow,      statement: cashflow, parent: null,          sort_order: 410, value_type: FLOW, unit: million, aliases: [投资活动现金流, 投资活动现金流量净额, 投资现金流, investing cash flow, cash from investing] }
+  - { code: CAPEX,            name_cn: 资本开支,          name_en: Capital expenditure,      statement: cashflow, parent: INVESTING_CF, sort_order: 411, value_type: FLOW, unit: million, aliases: [资本开支, 资本支出, 购建固定资产, capex, capital expenditure, capital expenditures, purchases of property plant equipment] }
+  - { code: FINANCING_CF,     name_cn: 筹资活动现金流净额, name_en: Financing cash flow,      statement: cashflow, parent: null,          sort_order: 420, value_type: FLOW, unit: million, aliases: [筹资活动现金流, 融资活动现金流, 筹资活动现金流量净额, 融资现金流, financing cash flow, cash from financing] }
+  - { code: DIVIDENDS_PAID,   name_cn: 股利支付,          name_en: Dividends paid,           statement: cashflow, parent: FINANCING_CF, sort_order: 421, value_type: FLOW, unit: million, aliases: [派息, 支付股利, 分红, 派付股息, dividends paid, dividend payment] }
+  - { code: SHARE_BUYBACK,    name_cn: 股票回购金额,      name_en: Share repurchase,         statement: cashflow, parent: FINANCING_CF, sort_order: 422, value_type: FLOW, unit: million, aliases: [回购, 股份回购, 股票回购, 回购股票, share repurchase, share buyback, stock repurchase, repurchase of common stock] }
+  - { code: CASH_END,         name_cn: 期末现金余额,      name_en: Cash end of period,       statement: cashflow, parent: null,          sort_order: 430, value_type: FLOW, unit: million, aliases: [期末现金, 期末现金及现金等价物余额, 现金期末余额, cash end, ending cash balance] }
+  - { code: CASH_NET_INCREASE, name_cn: 现金净增加额,     name_en: Net increase in cash,     statement: cashflow, parent: null,          sort_order: 440, value_type: FLOW, unit: million, aliases: [现金净增加额, 现金及现金等价物净增加, net increase in cash] }
+  - { code: FREE_CASH_FLOW,   name_cn: 自由现金流,        name_en: Free cash flow,           statement: cashflow, parent: null,          sort_order: 450, value_type: FLOW, unit: million, derived: true, aliases: [自由现金流, fcf, free cash flow] }
+
+  # ===================== 派生比率（查询时计算） =====================
+  - { code: GROSS_MARGIN,       name_cn: 毛利率,       name_en: Gross margin,       statement: derived, parent: null, sort_order: 500, value_type: RATIO, unit: percent, derived: true, aliases: [毛利率, gross margin] }
+  - { code: OPERATING_MARGIN,   name_cn: 营业利润率,   name_en: Operating margin,   statement: derived, parent: null, sort_order: 510, value_type: RATIO, unit: percent, derived: true, aliases: [营业利润率, 经营利润率, operating margin] }
+  - { code: NET_MARGIN,         name_cn: 净利率,       name_en: Net margin,         statement: derived, parent: null, sort_order: 520, value_type: RATIO, unit: percent, derived: true, aliases: [净利率, 净利润率, net margin] }
+  - { code: SELLING_EXPENSE_RATIO,   name_cn: 销售费用率, name_en: Selling expense ratio,   statement: derived, parent: null, sort_order: 530, value_type: RATIO, unit: percent, derived: true, aliases: [销售费用率] }
+  - { code: GA_EXPENSE_RATIO,        name_cn: 管理费用率, name_en: G&A expense ratio,        statement: derived, parent: null, sort_order: 540, value_type: RATIO, unit: percent, derived: true, aliases: [管理费用率] }
+  - { code: RD_EXPENSE_RATIO,        name_cn: 研发费用率, name_en: R&D expense ratio,        statement: derived, parent: null, sort_order: 550, value_type: RATIO, unit: percent, derived: true, aliases: [研发费用率] }
+  - { code: ROE, name_cn: ROE(净资产收益率), name_en: Return on equity, statement: derived, parent: null, sort_order: 560, value_type: RATIO, unit: percent, derived: true, aliases: [roe, 净资产收益率, return on equity] }
+  - { code: ROA, name_cn: ROA(总资产收益率), name_en: Return on assets, statement: derived, parent: null, sort_order: 570, value_type: RATIO, unit: percent, derived: true, aliases: [roa, 总资产收益率, return on assets] }

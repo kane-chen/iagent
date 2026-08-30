@@ -1,0 +1,32 @@
+# RAG 补充提取指标清单：futu API 三大表不提供、需从财报文件中通过 RAG 提取的指标。
+# 仅列在此处的指标会触发 LLM 结构化提取；三大表标准字段一律以 futu API 为准。
+# - code: 标准指标编码（必须存在于 metric-catalog.yml）
+# - aliases: 检索时的同义词扩展（中英文）
+# - hint: 给提取 LLM 的提示，说明在财报什么位置、以什么口径披露
+# - min_confidence: 低于该置信度的提取结果不入库（0-100）
+
+metrics:
+  - code: SBC_EXPENSE
+    min_confidence: 60
+    aliases: [股份支付, 股权激励费用, 股份酬金, share-based compensation, stock-based compensation, share based compensation]
+    hint: 通常在现金流量表补充资料（将净利润调节为经营活动现金流）或附注"以股份为基础的薪酬"中披露，英文财报为 Share-based compensation / Stock-based compensation expense。取报告期费用发生额（非累计授予数）。
+
+  - code: ADJUSTED_EBITDA
+    min_confidence: 70
+    aliases: [调整后EBITDA, 经调整EBITDA, Adjusted EBITDA]
+    hint: 非 GAAP 指标，通常在业绩公告（earnings release）的 Non-GAAP 调整表中披露。注意区分 EBITDA 与 Adjusted EBITDA，优先取公司明确定义的 Adjusted EBITDA。
+
+  - code: NON_GAAP_NET_INCOME
+    min_confidence: 70
+    aliases: [Non-GAAP净利润, 非公认会计准则净利润, 经调整净利润, 调整后净利润, Non-GAAP net income, adjusted net income]
+    hint: 非 GAAP 指标，在业绩公告 Non-GAAP 调整表中披露，常与 Non-GAAP EPS 相邻。取归属于公司的非 GAAP 净利润。
+
+  - code: DIVIDENDS_PAID
+    min_confidence: 60
+    aliases: [派息, 支付股利, 分红, 派付股息, dividends paid, dividend payment]
+    hint: 在现金流量表筹资活动中披露（"分配股利、利润或偿付利息支付的现金"中的股利部分，或英文 Dividends paid）。取报告期实际支付金额。
+
+  - code: SHARE_BUYBACK
+    min_confidence: 60
+    aliases: [股份回购, 股票回购, 回购股票, 回购股份, share repurchase, share buyback, repurchase of common stock]
+    hint: 在现金流量表筹资活动（"回购股票支付的现金"/Repurchases of common stock）或股本变动附注中披露。取报告期回购支出金额。

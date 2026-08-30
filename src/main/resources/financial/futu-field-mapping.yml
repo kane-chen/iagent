@@ -1,0 +1,143 @@
+# futu get_financials_statements 字段映射：市场 → 报表 → 标准指标编码 → futu field_id 列表
+# - field_id 命名空间按市场划分：美股 8xxx / 港股 5xxx / A股 3xxx；同一 id 在不同报表含义不同，故按报表分组
+# - 值为 field_id 列表：多个 id 表示求和（如港股 CapEx = 购建固定资产 5071 + 购建无形资产 5073）
+# - financial_type: futu 财报类型（10=美股单季+年报，11=港股/A股累计 Q1/H1/9M/FY）
+# - cumulative: true 表示 API 返回的是年内累计值，入库前需差分出单季度
+# 未列出的指标表示该市场 API 不提供（值留空，或由派生/RAG 补充）
+
+markets:
+  us:
+    financial_type: 10
+    cumulative: false
+    income:
+      REVENUE: [8002]
+      TOTAL_OPERATING_COST: [8003]
+      GROSS_PROFIT: [8004]
+      OPERATING_EXPENSES: [8005]
+      SGA_EXPENSE: [8007]
+      SELLING_EXPENSE: [8008]
+      GA_EXPENSE: [8009]
+      RD_EXPENSE: [8010]
+      DA_EXPENSE: [8011]
+      NET_FINANCE_COST: [8012]
+      INTEREST_EXPENSE: [8013]
+      OPERATING_INCOME: [8017]
+      PRETAX_INCOME: [8034]
+      INCOME_TAX: [8035]
+      NET_INCOME: [8037]
+      NET_INCOME_PARENT: [8043]
+    balance:
+      TOTAL_ASSETS: [8001]
+      TOTAL_CURRENT_ASSETS: [8002]
+      CASH_AND_EQUIVALENTS: [8003]
+      SHORT_TERM_INVESTMENTS: [8004]
+      ACCOUNTS_RECEIVABLE: [8005]
+      INVENTORY: [8008]
+      TOTAL_NONCURRENT_ASSETS: [8022]
+      PPE: [8024]
+      INTANGIBLES: [8030]
+      GOODWILL: [8031]
+      TOTAL_LIABILITIES: [8055]
+      TOTAL_CURRENT_LIABILITIES: [8056]
+      SHORT_TERM_BORROWING: [8057]
+      ACCOUNTS_PAYABLE: [8058]
+      TOTAL_NONCURRENT_LIABILITIES: [8083]
+      LONG_TERM_BORROWING: [8084]
+      BONDS_PAYABLE: [8085]
+      TOTAL_EQUITY: [8100]
+      EQUITY_PARENT: [8101]
+      SHARE_CAPITAL: [8102]
+      CAPITAL_RESERVE: [8103]
+      RETAINED_EARNINGS: [8104]
+      TREASURY_STOCK: [8106]
+    cashflow:
+      OPERATING_CF: [8015]
+      CF_DA: [8016]
+      AR_CHANGE: [8019]
+      INVENTORY_CHANGE: [8020]
+      AP_CHANGE: [8021]
+      INVESTING_CF: [8042]
+      CAPEX: [8046]
+      FINANCING_CF: [8056]
+      CASH_END: [8067]
+      CASH_NET_INCREASE: [8068]
+
+  hk:
+    financial_type: 11
+    cumulative: true
+    income:
+      REVENUE: [5001]
+      TOTAL_OPERATING_COST: [5005]
+      COST_OF_REVENUE: [5008]
+      GROSS_PROFIT: [5010]
+      OPERATING_EXPENSES: [5013]
+      SELLING_EXPENSE: [5015]
+      GA_EXPENSE: [5016]
+      RD_EXPENSE: [5017]
+      OPERATING_INCOME: [5034]
+      FINANCE_INCOME: [5035]
+      NET_FINANCE_COST: [5036]
+      PRETAX_INCOME: [5040]
+      INCOME_TAX: [5043]
+      NET_INCOME: [5045]
+      NET_INCOME_PARENT: [5051]
+    balance:
+      TOTAL_ASSETS: [5001]
+      CASH_AND_EQUIVALENTS: [5003]
+      PPE: [5030]
+      GOODWILL: [5035]
+      TOTAL_LIABILITIES: [5060]
+      SHORT_TERM_BORROWING: [5062]
+      TOTAL_NONCURRENT_LIABILITIES: [5088]
+      LONG_TERM_BORROWING: [5089]
+      LEASE_LIABILITY: [5091]
+      TOTAL_EQUITY: [5109]
+      EQUITY_PARENT: [5110]
+      SHARE_CAPITAL: [5111]
+      RETAINED_EARNINGS: [5113]
+    cashflow:
+      OPERATING_CF: [5058]
+      CF_DA: [5059]
+      CAPEX: [5071, 5073]
+      INVESTING_CF: [5076]
+      FINANCING_CF: [5086]
+      CASH_END: [5100]
+
+  cn:
+    financial_type: 11
+    cumulative: true
+    income:
+      REVENUE: [3001]
+      TOTAL_OPERATING_COST: [3009]
+      SELLING_EXPENSE: [3013]
+      GA_EXPENSE: [3014]
+      RD_EXPENSE: [3015]
+      NET_FINANCE_COST: [3017]
+      INTEREST_EXPENSE: [3018]
+      DA_EXPENSE: [3020]
+      OPERATING_INCOME: [3032]
+      PRETAX_INCOME: [3038]
+      INCOME_TAX: [3039]
+      NET_INCOME: [3043]
+      NET_INCOME_PARENT: [3047]
+    balance:
+      TOTAL_ASSETS: [3001]
+      TOTAL_CURRENT_ASSETS: [3002]
+      CASH_AND_EQUIVALENTS: [3003]
+      INVENTORY: [3016]
+      TOTAL_NONCURRENT_ASSETS: [3025]
+      GOODWILL: [3032]
+      TOTAL_LIABILITIES: [3055]
+      SHORT_TERM_BORROWING: [3057]
+      TOTAL_NONCURRENT_LIABILITIES: [3079]
+      LONG_TERM_BORROWING: [3080]
+      TOTAL_EQUITY: [3097]
+      EQUITY_PARENT: [3098]
+      RETAINED_EARNINGS: [3103]
+    cashflow:
+      OPERATING_CF: [3001]
+      CF_DA: [3002]
+      INVESTING_CF: [3033]
+      CAPEX: [3043]
+      FINANCING_CF: [3051]
+      CASH_END: [3068]
