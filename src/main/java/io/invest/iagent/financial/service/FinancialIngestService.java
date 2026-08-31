@@ -56,18 +56,20 @@ public class FinancialIngestService {
             List<MetricValueDO> values = r.values();
             repository.batchUpsertMetrics(values);
 
-            String coveredPeriods = values.stream()
+            List<String> coveredPeriodList = values.stream()
                     .map(MetricValueDO::getFiscalPeriod).distinct()
-                    .sorted().collect(Collectors.joining(","));
+                    .sorted().collect(Collectors.toList());
+            String coveredPeriods = String.join(",", coveredPeriodList);
             String status = r.errors().isEmpty() ? "SUCCESS" : "PARTIAL";
             repository.recordBatch(r.company().getTicker(), "FUTU_API", status,
                     coveredPeriods, JSON.toJSONString(r.errors()));
 
             List<String> warnings = new java.util.ArrayList<>(r.errors());
-            // RAG 补充指标提取（API 缺失指标，best-effort，不影响主流程）
+            // RAG 补充指标提取（API 缺失指标，best-effort，不影响主流程），按本次采集期间逐期提取
             if (ragMetricExtractor != null) {
                 try {
-                    RagMetricExtractor.RagExtractResult rag = ragMetricExtractor.extract(r.company().getTicker());
+                    RagMetricExtractor.RagExtractResult rag =
+                            ragMetricExtractor.extract(r.company().getTicker(), coveredPeriodList);
                     warnings.addAll(rag.warnings());
                 } catch (Exception e) {
                     log.warn("RAG 补充指标提取异常（忽略）: {}", e.getMessage());

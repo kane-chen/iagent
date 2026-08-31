@@ -13,6 +13,7 @@ import io.invest.iagent.financial.repository.FinancialRepository;
 import io.invest.iagent.rag.filing.FilingQaService;
 import io.invest.iagent.rag.filing.model.FilingAnswer;
 import io.invest.iagent.rag.filing.model.FilingChunk;
+import io.invest.iagent.rag.filing.model.FiscalPeriod;
 import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,22 +24,21 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 /**
  * RAG 补充指标提取：futu API 不提供的指标（SBC、Adjusted EBITDA、Non-GAAP 净利润、
- * 分红、回购）从财报知识库中按年度报告提取。复用 filing RAG 管线
+ * 分红、回购）从财报知识库中提取。复用 filing RAG 管线
  * （混合检索 + 重排 + LLM 合成），要求模型返回结构化 JSON，按置信度阈值入库。
  *
- * <p>仅处理 FY 期间：年报对这五类指标披露最完整，且规避港股/A股中报累计口径与
- * 单季口径标签不一致的问题。知识库未构建时跳过并给出提示。
+ * <p>按调用方给定的期间列表逐期处理（季度/年度均可，如 [2025Q1, 2025Q2, 2025Q3, FY2025]）：
+ * 每个期间单独发起一次检索提问，检索标签只带该期间，避免单次请求知识库上下文过大。
+ * 知识库未构建时跳过并给出提示。
  */
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "app.financial", name = "enabled", havingValue = "true")
 public class RagMetricExtractor {
-
-    /** RAG 提取最多回溯的年报期数 */
-    private static final int MAX_FY_PERIODS = 4;
 
     @Autowired
     private FinancialRepository repository;
@@ -63,8 +63,12 @@ public class RagMetricExtractor {
 
     /**
      * 对指定公司执行 RAG 补充指标提取（best-effort，异常不抛出）。
+     *
+     * @param ticker  股票代码
+     * @param periods 待提取期间列表（如 [2025Q1, 2025Q2, 2025Q3, FY2025]），
+     *                逐期检索提取；null/空直接跳过
      */
-    public RagExtractResult extract(String ticker) {
+    public RagExtractResult extract(String ticker, List<String> periods) {
         List<String> warnings = new ArrayList<>();
         if (!properties.isRagExtractEnabled()) {
             return new RagExtractResult(0, warnings);
@@ -77,26 +81,22 @@ public class RagMetricExtractor {
             return new RagExtractResult(0, warnings);
         }
 
-        // 取最近 N 个 FY 期间
-        List<String> fyPeriods = repository.findMetricPeriods(ticker).stream()
-                .filter(p -> p.startsWith("FY"))
-                .sorted()
-                .toList();
-        if (fyPeriods.isEmpty()) {
-            warnings.add("RAG 补充指标提取跳过：库中尚无年报期间数据，请先采集三大表。");
+        // 规范化期间：解析为 canonical（2025Q1/FY2025），去重并按时间升序；无法识别的告警跳过
+        List<String> targetPeriods = normalizePeriods(periods, warnings);
+        if (targetPeriods.isEmpty()) {
+            warnings.add("RAG 补充指标提取跳过：无有效期间（形如 2025Q1、FY2025）。");
             return new RagExtractResult(0, warnings);
         }
-        fyPeriods = fyPeriods.size() > MAX_FY_PERIODS
-                ? fyPeriods.subList(fyPeriods.size() - MAX_FY_PERIODS, fyPeriods.size())
-                : fyPeriods;
 
+        List<String> metricCodes = extraMetrics.stream().map(RagExtraMetric::getCode).toList();
         int totalExtracted = 0;
-        boolean kbMissing = false;
-        for (String period : fyPeriods) {
+        int attempted = 0;
+        int noChunkPeriods = 0;
+        for (String period : targetPeriods) {
             try {
-                // 已有高优先级来源（FUTU_API/DERIVED）或已提取过 RAG 值的指标跳过
+                // 已有高优先级来源（FUTU_API/DERIVED）值的指标跳过；RAG 来源或缺失的重新提取
                 List<MetricValueDO> existing = repository.queryMetrics(
-                        ticker, extraMetrics.stream().map(RagExtraMetric::getCode).toList(), List.of(period));
+                        ticker, metricCodes, List.of(period));
                 List<RagExtraMetric> missing = new ArrayList<>();
                 for (RagExtraMetric m : extraMetrics) {
                     boolean has = existing.stream().anyMatch(v ->
@@ -110,14 +110,15 @@ public class RagMetricExtractor {
                     continue;
                 }
 
+                // 一个周期一次提问：检索标签只带当前期间，避免知识库上下文过大
+                attempted++;
                 String question = buildQuestion(ticker, period, missing);
                 FilingAnswer answer = filingQaService.ask(question, ticker, period, properties.getRagTopK());
                 List<FilingChunk> chunks = answer.getChunks();
                 if (chunks == null || chunks.isEmpty()) {
-                    // 第一个期间就检索不到片段，基本可判定知识库未构建
-                    kbMissing = true;
-                    log.info("RAG extract: no chunks for {} {}，知识库可能未构建", ticker, period);
-                    break;
+                    noChunkPeriods++;
+                    log.info("RAG extract: no chunks for {} {}，知识库可能未构建该期间", ticker, period);
+                    continue;
                 }
                 if (answer.getChatResponse() == null || answer.getChatResponse().isBlank()) {
                     continue;
@@ -134,20 +135,38 @@ public class RagMetricExtractor {
             }
         }
 
-        if (kbMissing) {
+        // 所有期间都检索不到片段，基本可判定知识库未构建
+        if (attempted > 0 && noChunkPeriods == attempted) {
             warnings.add("RAG 补充指标提取跳过：财报知识库未检索到片段。请先调用 filing_kb_build 构建 "
                     + ticker + " 的财报知识库后重试 financial_data_build。");
         }
         repository.recordBatch(ticker, "RAG", totalExtracted > 0 ? "SUCCESS" : "PARTIAL",
-                String.join(",", fyPeriods), "extracted=" + totalExtracted);
+                String.join(",", targetPeriods), "extracted=" + totalExtracted);
         return new RagExtractResult(totalExtracted, warnings);
+    }
+
+    /** 规范化期间列表：解析为 canonical 形式，去重并按时间升序；无法识别的告警跳过。 */
+    private List<String> normalizePeriods(List<String> periods, List<String> warnings) {
+        if (periods == null || periods.isEmpty()) {
+            return List.of();
+        }
+        TreeSet<FiscalPeriod> set = new TreeSet<>();
+        for (String p : periods) {
+            FiscalPeriod fp = FiscalPeriod.parse(p);
+            if (fp == null) {
+                warnings.add("RAG 补充指标提取跳过无法识别的期间: " + p + "（形如 2025Q1、FY2025）");
+                continue;
+            }
+            set.add(fp);
+        }
+        return set.stream().map(FiscalPeriod::canonical).toList();
     }
 
     /** 构造结构化提取问题（要求模型仅输出 JSON）。 */
     private String buildQuestion(String ticker, String period, List<RagExtraMetric> metrics) {
         StringBuilder sb = new StringBuilder();
         sb.append("请从检索到的财报片段中，提取公司 ").append(ticker).append(" 在 ").append(period)
-                .append(" 财年（年度报告，全年累计口径）的下列财务指标数值：\n");
+                .append(" ").append(periodScope(period)).append("的下列财务指标数值：\n");
         for (RagExtraMetric m : metrics) {
             MetricDef def = metricCatalog.get(m.getCode());
             String name = def != null ? def.getNameCn() : m.getCode();
@@ -165,12 +184,41 @@ public class RagMetricExtractor {
                 严格要求：
                 1. 只能使用检索片段中明确披露的数据，不得推测或计算（片段没有就 found=false）；
                 2. 金额一律换算为"百万"单位（原文为千元则除以1000，为十亿美元则乘以1000）；
-                3. 分红、回购为现金流量表/权益变动表中的全年实际发生额；
+                3. 分红、回购为现金流量表/权益变动表中该期间的实际发生额；
                 4. 只输出一个 JSON 对象，不要输出任何解释文字，格式：
                 {"METRIC_CODE": {"found": true, "value": 123.45, "unit": "million", "confidence": 90, "evidence": "原文短句"}, ...}
                 confidence 为 0-100 的整数，表达你对数值与口径的把握。
                 """);
         return sb.toString();
+    }
+
+    /** 期间口径描述：FY 年报全年累计；H 中报年内累计；Q 季报当季单季。 */
+    private String periodScope(String period) {
+        FiscalPeriod fp = FiscalPeriod.parse(period);
+        if (fp != null) {
+            if (fp.ordinal() == 5) {
+                return "财年（年度报告，全年累计口径）";
+            }
+            if (fp.canonical().contains("H")) {
+                return "中期（半年度报告，年内累计口径）";
+            }
+        }
+        return "季度（季度报告，该季度单季口径）";
+    }
+
+    /** 根据期间标签推断存储口径：FY→FY，H1/H2→CUMULATIVE，Qn→SINGLE_Q。 */
+    private PeriodType periodTypeOf(String period) {
+        FiscalPeriod fp = FiscalPeriod.parse(period);
+        if (fp == null) {
+            return PeriodType.SINGLE_Q;
+        }
+        if (fp.ordinal() == 5) {
+            return PeriodType.FY;
+        }
+        if (fp.canonical().contains("H")) {
+            return PeriodType.CUMULATIVE;
+        }
+        return PeriodType.SINGLE_Q;
     }
 
     /** 解析模型 JSON 回答，按置信度阈值产出 RAG 来源指标行。 */
@@ -228,7 +276,7 @@ public class RagMetricExtractor {
             out.add(MetricValueDO.builder()
                     .ticker(ticker)
                     .fiscalPeriod(period)
-                    .periodType(PeriodType.FY.name())
+                    .periodType(periodTypeOf(period).name())
                     .metricCode(m.getCode())
                     .value(value)
                     .unit("million")
