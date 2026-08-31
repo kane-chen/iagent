@@ -1,5 +1,7 @@
 package io.invest.iagent.skill;
 
+import io.invest.iagent.utils.PythonCmd;
+
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
 import io.agentscope.harness.agent.HarnessAgent;
@@ -164,7 +166,7 @@ public class SegmentFinancialReportSkillTest {
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
 
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 "--ticker", ticker,
                 "--excel"
         );

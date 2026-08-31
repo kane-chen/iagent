@@ -1,5 +1,7 @@
 package io.invest.iagent.skill;
 
+import io.invest.iagent.utils.PythonCmd;
+
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -192,7 +194,7 @@ public class FutuFinancialReportSkillTest {
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
 
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 ticker,
                 "--type", type,
                 "--num", limit+""

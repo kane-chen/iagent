@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iAgent 财务分析</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --up: #e04536;        /* 红涨 */
+    --down: #18a058;      /* 绿跌 */
+    --muted: #8a94a6;
+    --text: #1f2733;
+    --border: #e5e8ef;
+    --accent: #2563eb;
+    --bg: #f4f6fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px;
+  }
+  header {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: #fff; padding: 18px 28px; display: flex; align-items: center; gap: 20px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 19px; font-weight: 600; white-space: nowrap; }
+  header h1 small { font-weight: 400; opacity: .75; margin-left: 8px; font-size: 13px; }
+  .search { display: flex; gap: 8px; flex: 1; min-width: 280px; max-width: 520px; }
+  .search input {
+    flex: 1; padding: 9px 14px; border-radius: 8px; border: none; font-size: 14px; outline: none;
+  }
+  .search button {
+    padding: 9px 22px; border-radius: 8px; border: none; background: #f59e0b; color: #1f2733;
+    font-weight: 600; cursor: pointer; font-size: 14px;
+  }
+  .search button:hover { background: #fbbf24; }
+  .meta-line { padding: 14px 28px 0; color: var(--muted); display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .meta-line b { color: var(--text); }
+  .warnings {
+    margin: 12px 28px 0; padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; color: #92400e; display: none;
+  }
+  .warnings.show { display: block; }
+  .cards { padding: 18px 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card {
+    background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 18px;
+    box-shadow: 0 1px 3px rgba(16,24,40,.06); display: flex; flex-direction: column; gap: 10px;
+  }
+  .card-title { display: flex; align-items: center; justify-content: space-between; }
+  .card-title .name { font-size: 15px; font-weight: 600; }
+  .card-title .code { font-size: 11px; color: var(--muted); background: #f1f4f9; border-radius: 4px; padding: 2px 6px; }
+  .card-value { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+  .card-value .unit { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .i-val .unit { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .card-sub { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .yoy { font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .yoy.up   { color: var(--up);   background: rgba(224,69,54,.10); }
+  .yoy.down { color: var(--down); background: rgba(24,160,88,.10); }
+  .yoy.none { color: var(--muted); background: #f1f4f9; }
+  .card-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+  .btn {
+    padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: #fff;
+    cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #1d4ed8; }
+  .item-rows { display: flex; flex-direction: column; gap: 8px; }
+  .item-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #f8fafc;
+    border-radius: 8px; font-size: 13px;
+  }
+  .item-row .i-name { color: var(--muted); width: 84px; flex-shrink: 0; }
+  .item-row .i-val { font-weight: 600; min-width: 90px; }
+  .item-row .i-actions { margin-left: auto; display: flex; gap: 6px; }
+  .link-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0; }
+  .link-btn:hover { text-decoration: underline; }
+  .empty { margin: 60px auto; text-align: center; color: var(--muted); max-width: 420px; line-height: 1.8; }
+  .footnote { padding: 0 28px 30px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+
+  /* 弹窗 */
+  .modal-mask {
+    display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 100;
+    justify-content: center; align-items: flex-start; padding: 40px 16px; overflow-y: auto;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 14px; width: 100%; max-width: 1080px; padding: 22px 24px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.2);
+  }
+  .modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .modal-head h2 { font-size: 17px; }
+  .modal-head .ctrl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .modal-head select, .modal-head input[type=number] {
+    padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none;
+  }
+  .modal-head .spacer { flex: 1; }
+  .close-btn { border: none; background: #f1f4f9; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 15px; color: var(--muted); }
+  .close-btn:hover { background: #e5e8ef; }
+  #trendChart { width: 100%; height: 420px; }
+  .modal-msg { padding: 40px; text-align: center; color: var(--muted); display: none; }
+  .modal-msg.show { display: block; }
+
+  /* 构成表 */
+  .comp-wrap { border: 1px solid var(--border); border-radius: 10px; max-height: 68vh; overflow: auto; }
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .comp-table th, .comp-table td {
+    border-bottom: 1px solid #f1f4f9; padding: 7px 12px; text-align: right; white-space: nowrap;
+  }
+  .comp-table thead th {
+    background: #f8fafc; position: sticky; top: 0; z-index: 2; font-weight: 600;
+  }
+  .comp-table .name-cell {
+    text-align: left; position: sticky; left: 0; background: #fff; z-index: 1;
+    box-shadow: 2px 0 6px -4px rgba(0,0,0,.15);
+  }
+  .comp-table thead .name-col {
+    text-align: left; position: sticky; left: 0; z-index: 3; background: #f8fafc;
+    box-shadow: 2px 0 6px -4px rgba(0,0,0,.15); min-width: 240px;
+  }
+  .comp-table tbody tr:hover td { background: #f8fafc; }
+  .comp-table tbody tr.target td { background: #eff6ff; font-weight: 600; }
+  .comp-table tbody tr.target .name-cell { box-shadow: inset 3px 0 0 var(--accent), 2px 0 6px -4px rgba(0,0,0,.15); }
+  .comp-table .toggle { display: inline-block; width: 16px; text-align: center; color: var(--muted); cursor: pointer; user-select: none; }
+  .comp-table .toggle.dot { cursor: default; }
+  .comp-table .name-cell em { color: var(--muted); font-style: normal; font-size: 11px; margin-left: 4px; font-weight: 400; }
+  .c-val { font-weight: 600; }
+  .c-ratio { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .basis-hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 iAgent 财务分析<small>核心指标 · 趋势 · 构成</small></h1>
+  <div class="search">
+    <input id="tickerInput" placeholder="输入股票代码，如 00700 / BABA / 600519" />
+    <button id="searchBtn">查询</button>
+  </div>
+</header>
+
+<div class="meta-line" id="metaLine" style="display:none"></div>
+<div class="warnings" id="warningsBox"></div>
+
+<div id="dashboard">
+  <div class="empty">
+    输入股票代码开始查询。<br>
+    核心指标展示最近一个季度的<b>净利润、经营利润、资本开支、资产负债表</b>数值与同比；<br>
+    点击卡片上的「趋势」查看最近 16 个季度（可调整）折线图，点击「构成」查看指标分层因子。
+  </div>
+</div>
+
+<div class="footnote" id="footnote" style="display:none">
+  说明：金额单位为百万财报币种（页面不做换算）；同比标签遵循红涨绿跌；构成表单元格内小字为占比（利润表/现金流量表为占收入比，如毛利率、费用率；资产负债表为占总资产比）；数据来自 iAgent 财务数据库（futu API 采集，库中期间不足时自动补采，首次查询可能较慢）。
+</div>
+
+<!-- 趋势弹窗 -->
+<div class="modal-mask" id="trendModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="trendTitle">趋势</h2>
+      <span class="ctrl">期数
+        <input type="number" id="trendQuarters" min="4" max="40" step="1" value="16" style="width:70px">
+      </span>
+      <span class="ctrl">口径
+        <select id="trendPtype">
+          <option value="SINGLE_Q">单季度</option>
+          <option value="CUMULATIVE">年内累计</option>
+          <option value="FY">年报</option>
+        </select>
+      </span>
+      <span class="spacer"></span>
+      <button class="close-btn" data-close="trendModal">✕</button>
+    </div>
+    <div id="trendChart"></div>
+    <div class="modal-msg" id="trendMsg"></div>
+  </div>
+</div>
+
+<!-- 构成弹窗 -->
+<div class="modal-mask" id="compModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="compTitle">构成</h2>
+      <span class="basis-hint" id="compBasis"></span>
+      <span class="ctrl">季度数
+        <input type="number" id="compQuarters" min="1" max="40" step="1" value="8" style="width:70px">
+      </span>
+      <span class="spacer"></span>
+      <button class="close-btn" data-close="compModal">✕</button>
+    </div>
+    <div class="comp-wrap" id="compTree"></div>
+    <div class="modal-msg" id="compMsg"></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { ticker: null, dashboard: null, trendChart: null, compData: null, compCollapsed: new Set() };
+
+// ---------- 格式化 ----------
+/** 库中金额单位即百万财报币种，按百万千分位展示（不做单位换算） */
+function fmtMoney(v) {
+  if (v === null || v === undefined) return '—';
+  const n = Number(v);
+  return (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 1 });
+}
+/** 金额单位后缀（比率指标无单位） */
+const UNIT_MILLION = '<span class="unit">百万</span>';
+function fmtYoy(y) {
+  if (y === null || y === undefined) return '<span class="yoy none">同比 —</span>';
+  const n = Number(y);
+  const cls = n >= 0 ? 'up' : 'down';
+  const arrow = n >= 0 ? '▲' : '▼';
+  return `<span class="yoy ${cls}">同比 ${arrow} ${Math.abs(n).toFixed(1)}%</span>`;
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function api(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function showWarnings(ws) {
+  const box = $('#warningsBox');
+  if (ws && ws.length) {
+    box.innerHTML = '⚠️ ' + ws.map(esc).join('<br>⚠️ ');
+    box.classList.add('show');
+  } else {
+    box.classList.remove('show');
+  }
+}
+
+// ---------- 仪表盘 ----------
+async function loadDashboard() {
+  const ticker = $('#tickerInput').value.trim();
+  if (!ticker) return;
+  state.ticker = ticker;
+  $('#dashboard').innerHTML = '<div class="empty">加载中…（首次查询可能触发数据采集，请稍候）</div>';
+  try {
+    const d = await api('/api/financial/dashboard?ticker=' + encodeURIComponent(ticker));
+    state.dashboard = d;
+    showWarnings(d.warnings);
+    if (!d.hasData) {
+      $('#metaLine').style.display = 'none';
+      $('#footnote').style.display = 'none';
+      $('#dashboard').innerHTML = `<div class="empty">${esc(d.message || '暂无数据')}</div>`;
+      return;
+    }
+    $('#metaLine').style.display = 'flex';
+    $('#metaLine').innerHTML =
+      `<span>公司：<b>${esc(d.companyName || d.ticker)}</b></span>` +
+      `<span>代码：<b>${esc(d.ticker)}</b></span>` +
+      (d.market ? `<span>市场：<b>${esc(d.market)}</b></span>` : '') +
+      `<span>金额单位：<b>百万${d.currency ? ' ' + esc(d.currency) : ''}</b></span>` +
+      `<span>最新期间：<b>${esc(d.period)}</b>（单季度口径）</span>`;
+    $('#footnote').style.display = 'block';
+    renderCards(d);
+  } catch (e) {
+    $('#dashboard').innerHTML = `<div class="empty">查询失败：${esc(e.message)}</div>`;
+  }
+}
+
+function renderCards(d) {
+  const html = d.cards.map(card => {
+    if (card.items && card.items.length) {
+      // 资产负债表卡片：多行子指标
+      const rows = card.items.map(it => `
+        <div class="item-row">
+          <span class="i-name">${esc(it.name)}</span>
+          <span class="i-val">${fmtMoney(it.value)}${it.value === null ? '' : '<span class="unit">百万</span>'}</span>
+          ${fmtYoy(it.yoy)}
+          <span class="i-actions">
+            <button class="link-btn" onclick="openTrend('${it.code}','${esc(it.name)}')">趋势</button>
+            <button class="link-btn" onclick="openComposition('${it.code}','${esc(it.name)}')">构成</button>
+          </span>
+        </div>`).join('');
+      return `<div class="card">
+        <div class="card-title"><span class="name">${esc(card.title)}</span><span class="code">BALANCE</span></div>
+        <div class="item-rows">${rows}</div>
+      </div>`;
+    }
+    return `<div class="card">
+      <div class="card-title"><span class="name">${esc(card.title)}</span><span class="code">${esc(card.code)}</span></div>
+      <div class="card-value">${card.value === null ? '—' : fmtMoney(card.value) + UNIT_MILLION}</div>
+      <div class="card-sub">${fmtYoy(card.yoy)}<span>vs 去年同期</span></div>
+      <div class="card-actions">
+        <button class="btn primary" onclick="openTrend('${card.code}','${esc(card.title)}')">📈 趋势</button>
+        <button class="btn" onclick="openComposition('${card.code}','${esc(card.title)}')">🧩 构成</button>
+      </div>
+    </div>`;
+  }).join('');
+  $('#dashboard').innerHTML = `<div class="cards">${html}</div>`;
+}
+
+// ---------- 趋势 ----------
+async function openTrend(code, name) {
+  $('#trendTitle').textContent = `${name}（${code}）· 趋势`;
+  $('#trendModal').classList.add('show');
+  $('#trendChart').style.display = 'none';
+  $('#trendMsg').classList.add('show');
+  $('#trendMsg').textContent = '加载中…';
+  await loadTrend(code, name);
+}
+
+async function loadTrend(code, name) {
+  const quarters = $('#trendQuarters').value || 16;
+  const ptype = $('#trendPtype').value;
+  try {
+    const d = await api(`/api/financial/trend?ticker=${encodeURIComponent(state.ticker)}`
+      + `&metric=${encodeURIComponent(code)}&quarters=${quarters}&periodType=${ptype}`);
+    if (!d.hasData) {
+      $('#trendChart').style.display = 'none';
+      $('#trendMsg').classList.add('show');
+      $('#trendMsg').textContent = d.message || '暂无数据';
+      return;
+    }
+    $('#trendMsg').classList.remove('show');
+    $('#trendChart').style.display = 'block';
+    if (!state.trendChart) state.trendChart = echarts.init($('#trendChart'));
+    renderTrendChart(d);
+  } catch (e) {
+    $('#trendMsg').textContent = '查询失败：' + e.message;
+  }
+}
+
+function renderTrendChart(d) {
+  const periods = d.points.map(p => p.period);
+  const isPercent = d.unit === 'percent';
+  // 金额单位即百万财报币种，不做换算；比率指标保持原值
+  const vals = d.points.map(p => p.value === null ? null : Number(p.value));
+  const yoys = d.points.map(p => p.yoy === null ? null : Number(p.yoy));
+  const valUnit = isPercent ? '%' : '百万';
+
+  state.trendChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      valueFormatter: v => v === null || v === undefined ? '—'
+        : (isPercent ? Number(v).toFixed(2) + '%'
+                     : Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' 百万')
+    },
+    legend: { data: [`数值(${valUnit})`, '同比(%)'], top: 0 },
+    grid: { left: 60, right: 60, top: 40, bottom: 40 },
+    xAxis: { type: 'category', data: periods, axisLabel: { rotate: 45 } },
+    yAxis: [
+      { type: 'value', name: valUnit, scale: true },
+      { type: 'value', name: '同比%', axisLabel: { formatter: '{value}%' },
+        splitLine: { show: false } }
+    ],
+    series: [
+      {
+        name: `数值(${valUnit})`, type: 'line', smooth: true, connectNulls: true,
+        data: vals, symbolSize: 6, lineStyle: { width: 2.5, color: '#2563eb' },
+        itemStyle: { color: '#2563eb' },
+        areaStyle: { color: 'rgba(37,99,235,.08)' }
+      },
+      {
+        name: '同比(%)', type: 'line', yAxisIndex: 1, connectNulls: true,
+        data: yoys, symbolSize: 5,
+        lineStyle: { width: 2, type: 'dashed', color: '#f59e0b' },
+        itemStyle: { color: '#f59e0b' }
+      }
+    ]
+  }, true);
+  state.trendChart.resize();
+}
+
+// ---------- 构成（分层指标 × 最近 N 期表格） ----------
+async function openComposition(code, name) {
+  $('#compTitle').textContent = `${name}（${code}）· 指标构成`;
+  $('#compModal').classList.add('show');
+  $('#compTree').innerHTML = '';
+  $('#compMsg').classList.add('show');
+  $('#compMsg').textContent = '加载中…';
+  state.compData = null;
+  state.compCollapsed = new Set();
+  await loadComposition(code);
+}
+
+async function loadComposition(code) {
+  const quarters = $('#compQuarters').value || 8;
+  try {
+    const d = await api(`/api/financial/composition?ticker=${encodeURIComponent(state.ticker)}`
+      + `&metric=${encodeURIComponent(code)}&quarters=${quarters}`);
+    if (!d.hasData) {
+      state.compData = null;
+      $('#compTree').innerHTML = '';
+      $('#compMsg').classList.add('show');
+      $('#compMsg').textContent = d.message || '暂无数据';
+      return;
+    }
+    $('#compMsg').classList.remove('show');
+    $('#compBasis').textContent =
+      `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为${d.ratioBasis || '占比'}`;
+    state.compData = d;
+    renderCompTable();
+  } catch (e) {
+    $('#compMsg').classList.add('show');
+    $('#compMsg').textContent = '查询失败：' + e.message;
+  }
+}
+
+/** 渲染分层表格：行=分层指标（可折叠），列=期间（最新在左），单元格=值+占比。 */
+function renderCompTable() {
+  const d = state.compData;
+  if (!d) return;
+  let html = '<table class="comp-table"><thead><tr>'
+    + '<th class="name-col">指标（分层）</th>'
+    + d.periods.map(p => `<th>${esc(p)}</th>`).join('')
+    + '</tr></thead><tbody>';
+
+  const walk = (nodes, level) => {
+    for (const n of nodes) {
+      const hasKids = n.children && n.children.length > 0;
+      const collapsed = state.compCollapsed.has(n.code);
+      html += `<tr class="${n.target ? 'target' : ''}">`
+        + `<td class="name-cell" style="padding-left:${12 + (level - 1) * 18}px">`
+        + (hasKids
+            ? `<span class="toggle" onclick="toggleComp('${n.code}')">${collapsed ? '▶' : '▼'}</span>`
+            : '<span class="toggle dot">·</span>')
+        + esc(n.name) + (n.derived ? '<em>[派生]</em>' : '')
+        + '</td>'
+        + n.cells.map(c => `<td><div class="c-val">${fmtMoney(c.value)}</div>`
+            + (c.ratio !== null && c.ratio !== undefined
+                ? `<div class="c-ratio">${Number(c.ratio).toFixed(1)}%</div>` : '')
+            + '</td>').join('')
+        + '</tr>';
+      if (hasKids && !collapsed) {
+        walk(n.children, level + 1);
+      }
+    }
+  };
+  walk(d.tree, 1);
+  html += '</tbody></table>';
+  $('#compTree').innerHTML = html;
+}
+
+/** 折叠/展开某一分层节点（重绘保持状态）。 */
+function toggleComp(code) {
+  if (state.compCollapsed.has(code)) {
+    state.compCollapsed.delete(code);
+  } else {
+    state.compCollapsed.add(code);
+  }
+  renderCompTable();
+}
+
+// ---------- 事件绑定 ----------
+$('#searchBtn').addEventListener('click', loadDashboard);
+$('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });
+$('#trendQuarters').addEventListener('change', () => {
+  const code = $('#trendTitle').textContent.match(/（([A-Z_]+)）/);
+  if (code) loadTrend(code[1]);
+});
+$('#trendPtype').addEventListener('change', () => {
+  const code = $('#trendTitle').textContent.match(/（([A-Z_]+)）/);
+  if (code) loadTrend(code[1]);
+});
+$('#compQuarters').addEventListener('change', () => {
+  const code = $('#compTitle').textContent.match(/（([A-Z_]+)）/);
+  if (code) loadComposition(code[1]);
+});
+document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click', () => {
+  $('#' + b.dataset.close).classList.remove('show');
+}));
+document.querySelectorAll('.modal-mask').forEach(m => m.addEventListener('click', e => {
+  if (e.target === m) m.classList.remove('show');
+}));
+window.addEventListener('resize', () => { if (state.trendChart) state.trendChart.resize(); });
+
+// 支持 ?ticker=xxx 直接打开
+const initTicker = new URLSearchParams(location.search).get('ticker');
+if (initTicker) {
+  $('#tickerInput').value = initTicker;
+  loadDashboard();
+}
+</script>
+</body>
+</html>

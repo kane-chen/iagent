@@ -276,6 +276,21 @@
       ],
       "filingSuffixNames": [],
       "supportPeriodTypes": []
+    },
+    {
+      "ticker": "89988",
+      "market": "HK",
+      "stockId": "83833466740612",
+      "displayName": "BABA-WR",
+      "supportFileTypes": [],
+      "titleKeyWords": [
+        "季度报告",
+        "年度报告",
+        "业绩公告",
+        "财报公告"
+      ],
+      "filingSuffixNames": [],
+      "supportPeriodTypes": []
     }
   ],
   "marketProfiles": {

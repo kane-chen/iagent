@@ -1,5 +1,7 @@
 package io.invest.iagent.skill.valuation;
 
+import io.invest.iagent.utils.PythonCmd;
+
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.invest.AgentConfig4Test;
@@ -42,7 +44,7 @@ public class LboModelSkillTest {
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
         String workspace = projectRoot.resolve("workspace").toAbsolutePath().toString() ;
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 "--ticker", ticker,
                 "--workspace", workspace
         );

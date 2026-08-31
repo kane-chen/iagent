@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -71,16 +72,12 @@ public class FinancialQueryService {
      */
     public QueryResult query(String ticker, List<String> metricNames, List<String> periods, String periodType) {
         List<String> warnings = new ArrayList<>();
-        String bare = normalizeTicker(ticker);
         PeriodType ptype = parsePeriodType(periodType, warnings);
 
-        // 自动补采：库中期间不足时先采集
-        boolean backfilled = ingestService.backfillIfNeeded(bare);
-        CompanyDO company = repository.findCompany(bare);
-        if (company == null && !backfilled) {
-            ingestService.build(bare, null);
-            company = repository.findCompany(bare);
-        }
+        // 自动补采 + 全量取数（口径过滤在 load 内完成）
+        Loaded loaded = load(ticker, ptype);
+        String bare = loaded.ticker();
+        CompanyDO company = loaded.company();
 
         // 解析指标
         List<String> metricCodes = resolveMetrics(metricNames, warnings);
@@ -89,9 +86,8 @@ public class FinancialQueryService {
         // 解析期间
         List<String> periodLabels = resolvePeriods(periods, ptype, warnings);
 
-        List<MetricValueDO> rows = repository.queryMetrics(bare, metricCodes, periodLabels);
-        // 口径过滤
-        rows.removeIf(r -> !ptype.name().equals(r.getPeriodType()));
+        // 全量行保留在网格中（派生比率需要分母指标），渲染时按 explicitCodes 控制行可见性
+        List<MetricValueDO> rows = loaded.rows();
 
         if (rows.isEmpty()) {
             String msg = "未查询到 " + bare + " 的财务数据（口径 " + ptype + "）。"
@@ -156,6 +152,249 @@ public class FinancialQueryService {
             sb.append("\n");
         }
         return sb.toString();
+    }
+
+    // =========================================================
+    //  Web 页面结构化查询（仪表盘 / 趋势 / 构成）
+    // =========================================================
+
+    /** 仪表盘指标点（编码/中文名/值/同比）。 */
+    public record MetricPoint(String code, String name, BigDecimal value, BigDecimal yoy) {}
+
+    /** 核心指标卡片：主指标值 + 附属指标（资产负债表卡片含资产/负债/权益三项）。 */
+    public record MetricCard(String key, String title, String code,
+                             BigDecimal value, BigDecimal yoy, List<MetricPoint> items) {}
+
+    /** 仪表盘结果：最近一个季度核心指标数值与同比。 */
+    public record DashboardResult(String ticker, String companyName, String market, String currency,
+                                  String period, List<String> periods,
+                                  boolean hasData, String message, List<String> warnings,
+                                  List<MetricCard> cards) {}
+
+    /** 趋势序列点：期间 + 值 + 同比(%)。 */
+    public record TrendPoint(String period, BigDecimal value, BigDecimal yoy) {}
+
+    /** 趋势结果：某指标最近 N 期序列。 */
+    public record TrendResult(String ticker, String code, String name, String unit, String periodType,
+                              boolean hasData, String message, List<String> warnings,
+                              List<TrendPoint> points) {}
+
+    /** 构成表单元格：指标值 + 同比 + 占基准比例(%)。 */
+    public record CompCell(BigDecimal value, BigDecimal yoy, BigDecimal ratio) {}
+
+    /** 构成表行节点：分层指标 + 各期间单元格（与 periods 顺序对齐），target 为目标指标。 */
+    public record TreeNode(String code, String name, String unit, String valueType, boolean derived,
+                           boolean target, List<TreeNode> children, List<CompCell> cells) {}
+
+    /** 构成结果：目标指标所属报表的分层指标 × 最近 N 期表格（periods 逆序，最新在前）。 */
+    public record CompositionResult(String ticker, String code, String name, String statement,
+                                    String currency, String ratioBasis, List<String> periods,
+                                    boolean hasData, String message, List<String> warnings,
+                                    List<TreeNode> tree) {}
+
+    /** 仪表盘核心指标卡片定义：key/标题/主指标编码/附属指标编码。 */
+    private record CardSpec(String key, String title, String code, List<String> itemCodes) {}
+
+    /** 仪表盘四张核心卡片：净利润、经营利润、资本开支、资产负债表（资产/负债/权益）。 */
+    private static final List<CardSpec> CORE_CARDS = List.of(
+            new CardSpec("net_income", "净利润", "NET_INCOME", List.of()),
+            new CardSpec("operating_income", "经营利润", "OPERATING_INCOME", List.of()),
+            new CardSpec("capex", "资本开支", "CAPEX", List.of()),
+            new CardSpec("balance_sheet", "资产负债表", "TOTAL_ASSETS",
+                    List.of("TOTAL_ASSETS", "TOTAL_LIABILITIES", "TOTAL_EQUITY")));
+
+    /**
+     * Web 仪表盘：最近一个季度核心指标（净利润/经营利润/资本开支/资产负债表）的数值与同比。
+     */
+    public DashboardResult dashboard(String ticker) {
+        List<String> warnings = new ArrayList<>();
+        Loaded loaded = load(ticker, PeriodType.SINGLE_Q);
+        String bare = loaded.ticker();
+        CompanyDO company = loaded.company();
+        if (loaded.rows().isEmpty()) {
+            return new DashboardResult(bare, companyName(company), companyMarket(company), companyCurrency(company),
+                    null, List.of(), false,
+                    "未查询到 " + bare + " 的财务数据，请先调用 financial_data_build 采集。", warnings, List.of());
+        }
+
+        List<String> periods = sortedPeriods(loaded.rows());
+        String latest = periods.get(periods.size() - 1);
+        Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
+        // 最新一期派生比率（卡片若为比率指标时可用）
+        addDerivedRatios(bare, List.of(latest), PeriodType.SINGLE_Q, grid, warnings);
+        Map<String, MetricValueDO> cell = grid.getOrDefault(latest, Map.of());
+
+        List<MetricCard> cards = new ArrayList<>();
+        for (CardSpec spec : CORE_CARDS) {
+            List<MetricPoint> items = new ArrayList<>();
+            for (String itemCode : spec.itemCodes()) {
+                MetricDef d = metricCatalog.get(itemCode);
+                MetricValueDO v = cell.get(itemCode);
+                items.add(new MetricPoint(itemCode, d == null ? itemCode : d.getNameCn(),
+                        v == null ? null : v.getValue(), v == null ? null : v.getYoy()));
+            }
+            MetricValueDO mv = cell.get(spec.code());
+            cards.add(new MetricCard(spec.key(), spec.title(), spec.code(),
+                    mv == null ? null : mv.getValue(), mv == null ? null : mv.getYoy(), items));
+        }
+        return new DashboardResult(bare, companyName(company), companyMarket(company), companyCurrency(company),
+                latest, periods, true, null, warnings, cards);
+    }
+
+    /**
+     * Web 趋势：某指标最近 N 期（默认 16，可调整）的数值与同比序列。
+     * 库中未存同比时由去年同期值现场计算。
+     */
+    public TrendResult trend(String ticker, String metricName, Integer quarters, String periodType) {
+        List<String> warnings = new ArrayList<>();
+        PeriodType ptype = parsePeriodType(periodType, warnings);
+        String bare = normalizeTicker(ticker);
+        String code = metricCatalog.resolveCode(metricName == null ? "" : metricName);
+        if (code == null) {
+            return new TrendResult(bare, null, metricName, null, ptype.name(), false,
+                    "无法识别指标: " + metricName, warnings, List.of());
+        }
+        MetricDef def = metricCatalog.get(code);
+
+        Loaded loaded = load(bare, ptype);
+        if (loaded.rows().isEmpty()) {
+            return new TrendResult(bare, code, def.getNameCn(), def.getUnit(), ptype.name(), false,
+                    "未查询到 " + bare + " 的财务数据，请先采集。", warnings, List.of());
+        }
+
+        int n = quarters == null ? 16 : Math.max(1, Math.min(40, quarters));
+        List<String> periods = latestPeriods(loaded.rows(), n);
+        Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
+        // 派生比率指标（毛利率/ROE 等）需要现场计算
+        addDerivedRatios(bare, periods, ptype, grid, warnings);
+
+        List<TrendPoint> points = new ArrayList<>();
+        for (String p : periods) {
+            MetricValueDO v = grid.getOrDefault(p, Map.of()).get(code);
+            BigDecimal value = v == null ? null : v.getValue();
+            BigDecimal yoy = v == null ? null : v.getYoy();
+            if (yoy == null && value != null) {
+                yoy = computeYoy(grid, p, code, value);
+            }
+            points.add(new TrendPoint(p, value, yoy));
+        }
+        return new TrendResult(bare, code, def.getNameCn(), def.getUnit(), ptype.name(),
+                true, null, warnings, points);
+    }
+
+    /**
+     * Web 构成：目标指标所属报表（利润表/资产负债表/现金流量表）的分层指标表，
+     * 列为最近 N 个季度（默认 8，逆序即最新期间在最前）；每个单元格含指标值与占基准比例
+     *（利润表/现金流量表为占收入比，如毛利率、费用率；资产负债表为占总资产比），
+     * 目标指标所在行高亮，便于理解指标的因子构成。
+     */
+    public CompositionResult composition(String ticker, String metricName, Integer quarters) {
+        List<String> warnings = new ArrayList<>();
+        String bare = normalizeTicker(ticker);
+        String code = metricCatalog.resolveCode(metricName == null ? "" : metricName);
+        if (code == null) {
+            return new CompositionResult(bare, null, metricName, null, "", null, List.of(),
+                    false, "无法识别指标: " + metricName, warnings, List.of());
+        }
+        MetricDef def = metricCatalog.get(code);
+
+        Loaded loaded = load(bare, PeriodType.SINGLE_Q);
+        CompanyDO company = loaded.company();
+        if (loaded.rows().isEmpty()) {
+            return new CompositionResult(bare, code, def.getNameCn(), def.getStatement(),
+                    companyCurrency(company), null, List.of(), false,
+                    "未查询到 " + bare + " 的财务数据，请先采集。", warnings, List.of());
+        }
+
+        int n = quarters == null ? 8 : Math.max(1, Math.min(40, quarters));
+        List<String> asc = sortedPeriods(loaded.rows());
+        List<String> recentAsc = asc.size() <= n ? asc : asc.subList(asc.size() - n, asc.size());
+        // 逆序展示：最新期间在最前
+        List<String> periods = new ArrayList<>(recentAsc);
+        Collections.reverse(periods);
+
+        StatementType st = def.statementType();
+        boolean balance = st == StatementType.BALANCE;
+        String basisCode = balance ? "TOTAL_ASSETS" : "REVENUE";
+        String ratioBasis = balance ? "占总资产比" : "占收入比";
+
+        Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
+        List<TreeNode> tree = buildStatementTree(st, grid, periods, basisCode, code);
+        return new CompositionResult(bare, code, def.getNameCn(), def.getStatement(),
+                companyCurrency(company), ratioBasis, periods, true, null, warnings, tree);
+    }
+
+    /** 构建某张报表的分层指标表（目录顺序即行序），并挂载各期间值与占比。 */
+    private List<TreeNode> buildStatementTree(StatementType statement,
+                                              Map<String, Map<String, MetricValueDO>> grid,
+                                              List<String> periods, String basisCode, String targetCode) {
+        List<TreeNode> roots = new ArrayList<>();
+        for (MetricDef d : metricCatalog.byStatement(statement)) {
+            if (d.getParent() == null) {
+                roots.add(buildTreeNode(d, statement, grid, periods, basisCode, targetCode));
+            }
+        }
+        return roots;
+    }
+
+    private TreeNode buildTreeNode(MetricDef d, StatementType statement,
+                                   Map<String, Map<String, MetricValueDO>> grid,
+                                   List<String> periods, String basisCode, String targetCode) {
+        // 比率指标不再计算占比；其余 FLOW/STOCK 指标与同期间基准相除
+        boolean ratioable = !"percent".equals(d.getUnit()) && d.valueTypeEnum() != ValueType.RATIO;
+        List<CompCell> cells = new ArrayList<>();
+        for (String p : periods) {
+            Map<String, MetricValueDO> cell = grid.getOrDefault(p, Map.of());
+            MetricValueDO v = cell.get(d.getCode());
+            BigDecimal ratio = null;
+            if (ratioable && v != null && v.getValue() != null) {
+                MetricValueDO basis = cell.get(basisCode);
+                if (basis != null && basis.getValue() != null && basis.getValue().signum() != 0) {
+                    ratio = v.getValue().multiply(BigDecimal.valueOf(100))
+                            .divide(basis.getValue().abs(), 1, RoundingMode.HALF_UP);
+                }
+            }
+            cells.add(new CompCell(v == null ? null : v.getValue(),
+                    v == null ? null : v.getYoy(), ratio));
+        }
+
+        List<TreeNode> children = new ArrayList<>();
+        for (MetricDef child : metricCatalog.children(d.getCode())) {
+            if (child.statementType() == statement) {
+                children.add(buildTreeNode(child, statement, grid, periods, basisCode, targetCode));
+            }
+        }
+        return new TreeNode(d.getCode(), d.getNameCn(), d.getUnit(),
+                d.getValueType() == null ? "FLOW" : d.getValueType(), d.isDerived(),
+                d.getCode().equals(targetCode), children, cells);
+    }
+
+    /** 由去年同期值计算同比(%)；基期缺失或为 0 返回 null。 */
+    private BigDecimal computeYoy(Map<String, Map<String, MetricValueDO>> grid,
+                                  String period, String code, BigDecimal value) {
+        FiscalPeriod fp = FiscalPeriod.parse(period);
+        if (fp == null) {
+            return null;
+        }
+        MetricValueDO base = grid.getOrDefault(fp.yearAgo().canonical(), Map.of()).get(code);
+        if (base == null || base.getValue() == null || base.getValue().signum() == 0) {
+            return null;
+        }
+        return value.subtract(base.getValue())
+                .multiply(BigDecimal.valueOf(100))
+                .divide(base.getValue().abs(), 1, RoundingMode.HALF_UP);
+    }
+
+    private static String companyName(CompanyDO c) {
+        return c == null ? null : c.getName();
+    }
+
+    private static String companyMarket(CompanyDO c) {
+        return c == null ? null : c.getMarket();
+    }
+
+    private static String companyCurrency(CompanyDO c) {
+        return c == null || c.getCurrency() == null ? "" : c.getCurrency();
     }
 
     /**
@@ -370,13 +609,36 @@ public class FinancialQueryService {
 
     /** 该口径下最近 N 期（按时间升序返回）。 */
     private List<String> latestPeriods(List<MetricValueDO> rows, int n) {
-        List<String> sorted = rows.stream()
+        List<String> sorted = sortedPeriods(rows);
+        return sorted.size() <= n ? sorted : sorted.subList(sorted.size() - n, sorted.size());
+    }
+
+    /** 全部期间按时间升序（无法解析的标签忽略）。 */
+    private static List<String> sortedPeriods(List<MetricValueDO> rows) {
+        return rows.stream()
                 .map(MetricValueDO::getFiscalPeriod)
                 .distinct()
                 .filter(p -> FiscalPeriod.parse(p) != null)
                 .sorted(Comparator.comparingInt(p -> FiscalPeriod.parse(p).sortKey()))
                 .toList();
-        return sorted.size() <= n ? sorted : sorted.subList(sorted.size() - n, sorted.size());
+    }
+
+    /** 数据加载结果：规范化代码、公司信息、该口径下全部指标行。 */
+    private record Loaded(String ticker, CompanyDO company, List<MetricValueDO> rows) {}
+
+    /** 自动补采（库中期间不足时先采集）并加载某口径下的全部指标行。 */
+    private Loaded load(String ticker, PeriodType ptype) {
+        String bare = normalizeTicker(ticker);
+        boolean backfilled = ingestService.backfillIfNeeded(bare);
+        CompanyDO company = repository.findCompany(bare);
+        if (company == null && !backfilled) {
+            ingestService.build(bare, null);
+            company = repository.findCompany(bare);
+        }
+        List<MetricValueDO> rows = repository.queryMetrics(bare, null, null);
+        // 口径过滤
+        rows.removeIf(r -> !ptype.name().equals(r.getPeriodType()));
+        return new Loaded(bare, company, rows);
     }
 
     /**

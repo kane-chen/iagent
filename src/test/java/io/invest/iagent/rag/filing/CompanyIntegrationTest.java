@@ -5,6 +5,7 @@ import io.invest.iagent.rag.filing.model.FilingBuildReport;
 import io.invest.iagent.rag.filing.model.FilingChunk;
 import io.invest.iagent.rag.filing.retrieve.FilingTagKeys;
 import io.invest.iagent.utils.ProcessRunner;
+import io.invest.iagent.utils.PythonCmd;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,7 +72,7 @@ public class CompanyIntegrationTest {
         Assertions.assertTrue(Files.exists(script), "extract script missing at " + script);
 
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 ticker,
                 "--type", type,
                 "--num", limit+""
@@ -84,7 +85,8 @@ public class CompanyIntegrationTest {
 
     @Test
     public void test_filing_down() throws Exception {
-        int result = runDownloadSkill(ticker, "2020,2021,2022,2023,2024", 200);
+        String ticker = "83690" ;
+        int result = runDownloadSkill(ticker, "2021,2022,2023,2024,2025,2026", 200);
         Assertions.assertEquals(0,result);
     }
 
@@ -95,7 +97,7 @@ public class CompanyIntegrationTest {
         Assertions.assertTrue(script.toFile().isFile(), "download script missing at " + script);
         // command
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 "--ticker", ticker,
                 "--workspace", projectRoot.resolve("workspace").toString(),
                 "--fiscal-years", fiscalYears

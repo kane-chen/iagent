@@ -31,12 +31,14 @@ FUTUAPI_SCRIPTS_DIR = os.path.dirname(FUTUAPI_SCRIPT)
 # statement key -> futu statement_type
 STATEMENT_TYPES = {"income": 1, "balance": 2, "cashflow": 3}
 
-# 市场前缀 -> (financial_type, 是否年内累计口径)
+# 市场前缀 -> (主 financial_type, 是否年内累计口径, 补充 financial_type)
+# 港股/A股 主用 11=累计季报(Q1/Q6/Q9/年报)，补充 9=单季报组合(Q1/Q2/Q3/Q4)：
+# 累计报供 CUMULATIVE 口径查询与差分兜底；单季报直接作为 SINGLE_Q 入库，避免"累计-0"的错误差分。
 MARKET_PROFILES = {
-    "US": (10, False),   # 美股：单季报 + 年报
-    "HK": (11, True),    # 港股：累计季报 Q1/Q6/Q9 + 年报
-    "SH": (11, True),    # A股：累计季报
-    "SZ": (11, True),
+    "US": (10, False, None),  # 美股：单季报 + 年报（单季值直接可用）
+    "HK": (11, True, 9),      # 港股：累计季报 + 单季报组合
+    "SH": (11, True, 9),      # A股：累计季报 + 单季报组合
+    "SZ": (11, True, 9),
 }
 
 UNIT_DIVISOR = 1_000_000  # 原始单位为元，归一化为百万
@@ -118,6 +120,7 @@ def fetch_statement(code: str, statement_key: str, financial_type: int, num: int
             "period": rpt.get("period_text"),
             "periodEnd": rpt.get("date_time_str"),
             "fiscalYear": rpt.get("fiscal_year"),
+            "ftype": rpt.get("financial_type"),  # 1-4=单季报 5=Q6累计 6=Q9累计 7=年报
             "currency": rpt.get("currency_code"),
             "items": items,
         })
@@ -125,6 +128,24 @@ def fetch_statement(code: str, statement_key: str, financial_type: int, num: int
     return {
         "fields": [{"fieldId": fid, "name": name} for fid, name in sorted(structure.items())],
         "reports": flat_reports,
+    }
+
+
+def merge_statements(base, extra):
+    """合并两次取数结果：字段取并集，报告按 (截止日, ftype) 去重。"""
+    fields = {f["fieldId"]: f["name"] for f in base.get("fields", [])}
+    for f in extra.get("fields", []):
+        fields.setdefault(f["fieldId"], f["name"])
+    seen = {(r.get("periodEnd"), r.get("ftype")) for r in base.get("reports", [])}
+    reports = list(base.get("reports", []))
+    for r in extra.get("reports", []):
+        key = (r.get("periodEnd"), r.get("ftype"))
+        if key not in seen:
+            seen.add(key)
+            reports.append(r)
+    return {
+        "fields": [{"fieldId": fid, "name": name} for fid, name in sorted(fields.items())],
+        "reports": reports,
     }
 
 
@@ -149,7 +170,7 @@ def main():
     if market not in MARKET_PROFILES:
         print(json.dumps({"error": f"不支持的市场前缀: {market}（支持 US/HK/SH/SZ）"}, ensure_ascii=False))
         sys.exit(1)
-    financial_type, cumulative = MARKET_PROFILES[market]
+    financial_type, cumulative, extra_type = MARKET_PROFILES[market]
 
     if not os.path.exists(FUTUAPI_SCRIPT):
         print(json.dumps({"error": f"futuapi 脚本不存在: {FUTUAPI_SCRIPT}"}, ensure_ascii=False))
@@ -161,6 +182,13 @@ def main():
     for key in ("income", "balance", "cashflow"):
         try:
             stmt = fetch_statement(code, key, financial_type, args.num)
+            # 港股/A股：追加单季报组合（Q1/Q2/Q3/Q4 单季直取，无需累计差分）
+            if cumulative and extra_type:
+                try:
+                    extra = fetch_statement(code, key, extra_type, args.num)
+                    stmt = merge_statements(stmt, extra)
+                except Exception as e:
+                    errors[key + "_single"] = str(e)
             statements[key] = stmt
             if currency is None:
                 for r in stmt["reports"]:

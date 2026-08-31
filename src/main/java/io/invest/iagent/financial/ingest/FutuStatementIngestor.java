@@ -27,9 +27,11 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 三大表采集器：调用 futu-financial-report skill 的 fetch_statements_json.py 取数，
@@ -173,15 +175,13 @@ public class FutuStatementIngestor {
             if (canonical == null) {
                 continue;
             }
-            // 期间口径：美股单季；港股/A股利润表与现金流量表为累计，资产负债表为时点数按单季存
-            String periodType;
-            if (annual) {
-                periodType = PeriodType.FY.name();
-            } else if (cumulativeMarket && statementType != StatementType.BALANCE) {
-                periodType = PeriodType.CUMULATIVE.name();
-            } else {
-                periodType = PeriodType.SINGLE_Q.name();
-            }
+            Integer ftype = rpt.getInteger("ftype");
+            // 期间口径按 futu 财报类型判定：ftype 1-4=单季报（直取），5/6=Q6/Q9累计报，7=年报；
+            // 无 ftype 的旧数据回退市场口径（美股单季；港股/A股累计，资产负债表为时点数按单季存）
+            String periodType = resolvePeriodType(annual, ftype, statementType, cumulativeMarket);
+            // Q1 单季报（3 个月）即年内累计 Q1：累计市场下同时写一份 CUMULATIVE，供累计口径查询
+            boolean alsoCumulativeQ1 = cumulativeMarket && statementType != StatementType.BALANCE
+                    && ftype != null && ftype == 1 && PeriodType.SINGLE_Q.name().equals(periodType);
 
             // fieldId -> (value, yoy)
             Map<Integer, BigDecimal> fieldValues = new HashMap<>();
@@ -222,20 +222,55 @@ public class FutuStatementIngestor {
                         }
                     }
                 }
-                rows.add(MetricValueDO.builder()
-                        .ticker(ticker).fiscalPeriod(canonical).periodType(periodType)
-                        .metricCode(metricCode).value(sum).yoy(yoy).qoq(qoq)
-                        .currency(currency).unit("million")
-                        .source(MetricSource.FUTU_API.name())
-                        .build());
+                rows.add(buildRow(ticker, currency, canonical, periodType, metricCode, sum, yoy, qoq));
+                if (alsoCumulativeQ1) {
+                    rows.add(buildRow(ticker, currency, canonical, PeriodType.CUMULATIVE.name(),
+                            metricCode, sum, yoy, qoq));
+                }
             }
         }
         return rows;
     }
 
+    private MetricValueDO buildRow(String ticker, String currency, String canonical, String periodType,
+                                   String metricCode, BigDecimal value, BigDecimal yoy, BigDecimal qoq) {
+        return MetricValueDO.builder()
+                .ticker(ticker).fiscalPeriod(canonical).periodType(periodType)
+                .metricCode(metricCode).value(value).yoy(yoy).qoq(qoq)
+                .currency(currency).unit("million")
+                .source(MetricSource.FUTU_API.name())
+                .build();
+    }
+
     // =========================================================
     //  期间规范化
     // =========================================================
+
+    /**
+     * 按 futu 财报类型（ftype）判定期间口径：
+     * <ul>
+     *   <li>年报（ftype=7 或期间文本含 FY）→ FY</li>
+     *   <li>资产负债表为时点数（STOCK），非年报一律按单季标签存 SINGLE_Q</li>
+     *   <li>ftype=5(Q6)/6(Q9) 累计报 → CUMULATIVE；ftype=1-4 单季报 → SINGLE_Q（直取，不做差分）</li>
+     *   <li>无 ftype 的旧数据：美股单季；港股/A股利润表/现金流量表为累计</li>
+     * </ul>
+     */
+    private static String resolvePeriodType(boolean annual, Integer ftype, StatementType statementType,
+                                            boolean cumulativeMarket) {
+        if (annual || (ftype != null && ftype == 7)) {
+            return PeriodType.FY.name();
+        }
+        if (statementType == StatementType.BALANCE) {
+            return PeriodType.SINGLE_Q.name();
+        }
+        if (ftype != null && (ftype == 5 || ftype == 6)) {
+            return PeriodType.CUMULATIVE.name();
+        }
+        if (ftype != null && ftype >= 1 && ftype <= 4) {
+            return PeriodType.SINGLE_Q.name();
+        }
+        return cumulativeMarket ? PeriodType.CUMULATIVE.name() : PeriodType.SINGLE_Q.name();
+    }
 
     /** 从年报报告的截止日推断财年结束月份（默认 12）。 */
     private int detectFyeMonth(JSONObject root) {
@@ -296,30 +331,48 @@ public class FutuStatementIngestor {
     // =========================================================
 
     /**
-     * 累计值差分单季：Q1=累计Q1；Q2=累计Q2-累计Q1；Q3=累计Q3-累计Q2；Q4=FY-累计Q3。
-     * 仅对 FLOW 指标（利润表/现金流量表）生效；原 CUMULATIVE 行保留。
+     * 累计值差分单季（兜底）：Q1=累计Q1；Q2=累计Q2-累计Q1；Q3=累计Q3-累计Q2；Q4=FY-累计Q3。
+     * 仅对 FLOW 指标（利润表/现金流量表）生效；原 CUMULATIVE/FY 行保留。
+     * <p>安全约束（修复单季被错算成累计值的问题）：
+     * <ul>
+     *   <li>累计链必须连续：缺少 Q1 累计锚点时不得用 0 抵减（否则 Q2 单季 == H1 累计）；
+     *       链中断则其后季度一律跳过；</li>
+     *   <li>单季已由 ftype=1-4 单季报直取时，跳过失真（直取值优先）。</li>
+     * </ul>
      */
     private List<MetricValueDO> differCumulative(List<MetricValueDO> rows) {
         List<MetricValueDO> out = new ArrayList<>(rows);
-        // key: metricCode|year -> {q/FY -> value}，仅累计口径
-        Map<String, Map<String, BigDecimal>> cumByMetricYear = new LinkedHashMap<>();
+        // 已存在的直取单季行（指标|期间）
+        Set<String> existingSingle = new HashSet<>();
+        // key: metricCode|year -> {Q1/Q2/Q3/FY -> 年内累计值}
+        Map<String, Map<String, BigDecimal>> ytdByMetricYear = new LinkedHashMap<>();
         for (MetricValueDO r : rows) {
             if (r.getValue() == null) {
                 continue;
             }
-            if (PeriodType.CUMULATIVE.name().equals(r.getPeriodType())) {
-                cumByMetricYear
-                        .computeIfAbsent(r.getMetricCode() + "|" + yearOf(r.getFiscalPeriod()), k -> new HashMap<>())
-                        .put(quarterTag(r.getFiscalPeriod()), r.getValue());
+            String year = yearOf(r.getFiscalPeriod());
+            if (year == null) {
+                continue;
+            }
+            String key = r.getMetricCode() + "|" + year;
+            if (PeriodType.SINGLE_Q.name().equals(r.getPeriodType())) {
+                existingSingle.add(r.getMetricCode() + "|" + r.getFiscalPeriod());
+                // Q1 单季（3 个月）即年内累计 Q1，作为 Q2 差分锚点
+                if ("Q1".equals(quarterTag(r.getFiscalPeriod()))) {
+                    ytdByMetricYear.computeIfAbsent(key, k -> new HashMap<>()).putIfAbsent("Q1", r.getValue());
+                }
+            } else if (PeriodType.CUMULATIVE.name().equals(r.getPeriodType())) {
+                String tag = quarterTag(r.getFiscalPeriod());
+                if (tag != null) {
+                    ytdByMetricYear.computeIfAbsent(key, k -> new HashMap<>()).putIfAbsent(tag, r.getValue());
+                }
             } else if (PeriodType.FY.name().equals(r.getPeriodType())) {
-                cumByMetricYear
-                        .computeIfAbsent(r.getMetricCode() + "|" + yearOf(r.getFiscalPeriod()), k -> new HashMap<>())
-                        .put("FY", r.getValue());
+                ytdByMetricYear.computeIfAbsent(key, k -> new HashMap<>()).putIfAbsent("FY", r.getValue());
             }
         }
 
-        // 为每个 (指标, 财年) 生成单季值
-        for (Map.Entry<String, Map<String, BigDecimal>> e : cumByMetricYear.entrySet()) {
+        // 为每个 (指标, 财年) 补齐缺失的单季值
+        for (Map.Entry<String, Map<String, BigDecimal>> e : ytdByMetricYear.entrySet()) {
             String[] parts = e.getKey().split("\\|");
             String metricCode = parts[0];
             String year = parts[1];
@@ -327,24 +380,26 @@ public class FutuStatementIngestor {
             if (def == null || def.valueTypeEnum() != ValueType.FLOW) {
                 continue;
             }
-            Map<String, BigDecimal> seq = e.getValue();
+            Map<String, BigDecimal> ytd = e.getValue();
             BigDecimal prev = BigDecimal.ZERO;
             for (int q = 1; q <= 4; q++) {
-                BigDecimal current;
-                if (q < 4) {
-                    current = seq.get("Q" + q);
-                } else {
-                    current = seq.get("FY");
-                }
+                String tag = q < 4 ? "Q" + q : "FY";
+                BigDecimal current = ytd.get(tag);
                 if (current == null) {
+                    // 本期累计缺失 → 累计链断裂，后续季度无法继续差分
+                    break;
+                }
+                String periodLabel = year + "Q" + q;
+                if (existingSingle.contains(metricCode + "|" + periodLabel)) {
+                    // 单季报已直取，无需差分，仅推进锚点
+                    prev = current;
                     continue;
                 }
                 BigDecimal single = current.subtract(prev);
-                // 找到模板行（同指标同年累计/FY 行）继承币种等
                 MetricValueDO template = findTemplate(rows, metricCode, year, q);
                 if (template != null) {
                     out.add(MetricValueDO.builder()
-                            .ticker(template.getTicker()).fiscalPeriod(year + "Q" + q)
+                            .ticker(template.getTicker()).fiscalPeriod(periodLabel)
                             .periodType(PeriodType.SINGLE_Q.name())
                             .metricCode(metricCode).value(single)
                             .currency(template.getCurrency()).unit(template.getUnit())

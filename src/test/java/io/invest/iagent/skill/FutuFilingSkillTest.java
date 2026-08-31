@@ -1,5 +1,7 @@
 package io.invest.iagent.skill;
 
+import io.invest.iagent.utils.PythonCmd;
+
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.message.Msg;
 import io.agentscope.core.message.MsgRole;
@@ -135,7 +137,7 @@ public class FutuFilingSkillTest {
         Assertions.assertTrue(script.toFile().isFile(), "download script missing at " + script);
         // command
         List<String> cmd = List.of(
-                "python3", script.toString(),
+                PythonCmd.executable(), script.toString(),
                 "--ticker", ticker,
                 "--workspace", projectRoot.resolve("workspace").toString(),
                 "--fiscal-years", fiscalYears
