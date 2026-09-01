@@ -53,8 +53,9 @@ class FutuStatementIngestorTest {
 
     /** 构造港股累计口径合成数据（FY2025 四个报告期）。 */
     private JSONObject hkRoot() {
-        // 累计值：收入 100/300/600/1000；经营现金流 25/80/180/300；
-        // CapEx = 5071 + 5073：(10+5)/(20+10)/(40+20)/(80+40) = 15/30/60/120
+        // 累计值：收入 100/300/600/1000；经营现金流 25/80/180/300（现金流量表字段 5001，与利润表 5001=收入 同 id 不同报表）；
+        // 投资活动净额 5069 带符号：-20/-60/-120/-200；
+        // CapEx = 5071 + 5073，真实列报为负数（流出）：(-10-5)/(-20-10)/(-40-20)/(-80-40)，入库取绝对值 15/30/60/120
         // 资产（时点数）：1000/1200/1400/1600
         JSONObject root = new JSONObject();
         root.put("code", "HK.00700");
@@ -69,10 +70,10 @@ class FutuStatementIngestorTest {
                 report("2025Q9", "2025-09-30", 2025, item(5001, 600), item(5010, 240), item(5034, 120), item(5045, 90)),
                 report("FY2025", "2025-12-31", 2025, item(5001, 1000), item(5010, 400), item(5034, 200), item(5045, 150))));
         statements.put("cashflow", stmt(
-                report("2025Q1", "2025-03-31", 2025, item(5058, 25), item(5071, 10), item(5073, 5), item(5100, 500)),
-                report("2025Q6", "2025-06-30", 2025, item(5058, 80), item(5071, 20), item(5073, 10), item(5100, 600)),
-                report("2025Q9", "2025-09-30", 2025, item(5058, 180), item(5071, 40), item(5073, 20), item(5100, 700)),
-                report("FY2025", "2025-12-31", 2025, item(5058, 300), item(5071, 80), item(5073, 40), item(5100, 800))));
+                report("2025Q1", "2025-03-31", 2025, item(5001, 25), item(5069, -20), item(5071, -10), item(5073, -5), item(5100, 500)),
+                report("2025Q6", "2025-06-30", 2025, item(5001, 80), item(5069, -60), item(5071, -20), item(5073, -10), item(5100, 600)),
+                report("2025Q9", "2025-09-30", 2025, item(5001, 180), item(5069, -120), item(5071, -40), item(5073, -20), item(5100, 700)),
+                report("FY2025", "2025-12-31", 2025, item(5001, 300), item(5069, -200), item(5071, -80), item(5073, -40), item(5100, 800))));
         statements.put("balance", stmt(
                 report("2025Q1", "2025-03-31", 2025, item(5001, 1000), item(5110, 500)),
                 report("2025Q6", "2025-06-30", 2025, item(5001, 1200), item(5110, 600)),
@@ -107,9 +108,13 @@ class FutuStatementIngestorTest {
         assertValue(r, "REVENUE", "2025Q2", PeriodType.CUMULATIVE, "300");
         assertValue(r, "REVENUE", "FY2025", PeriodType.FY, "1000");
 
-        // 单季经营现金流差分：25 / 55 / 100 / 120
+        // 单季经营现金流差分（取现金流量表字段 5001）：25 / 55 / 100 / 120
+        assertValue(r, "OPERATING_CF", "2025Q1", PeriodType.SINGLE_Q, "25");
         assertValue(r, "OPERATING_CF", "2025Q2", PeriodType.SINGLE_Q, "55");
         assertValue(r, "OPERATING_CF", "2025Q4", PeriodType.SINGLE_Q, "120");
+
+        // 投资活动净额（5069，带符号）差分：Q3 单季 = -120 - (-60) = -60
+        assertValue(r, "INVESTING_CF", "2025Q3", PeriodType.SINGLE_Q, "-60");
 
         // CapEx 多字段求和后差分：Q1=15, Q2=30-15=15, Q3=60-30=30, Q4=120-60=60
         assertValue(r, "CAPEX", "2025Q1", PeriodType.SINGLE_Q, "15");
@@ -129,14 +134,14 @@ class FutuStatementIngestorTest {
     }
 
     @Test
-    void usSingleQuarter_keptAsIs() {
+    void usFiscalYearShift_labelledByCalendarYear() {
         JSONObject root = new JSONObject();
         root.put("code", "US.AAPL");
         root.put("ticker", "AAPL");
         root.put("currency", "USD");
         root.put("cumulative", false);
         JSONObject statements = new JSONObject();
-        // 美股单季：Q1 截止 12 月（财年偏移），FY 截止 9 月
+        // 美股单季：财年 Q1 截止 12 月（FYE=9），年报截止 9 月
         statements.put("income", stmt(
                 report("2025Q1", "2024-12-31", 2025, item(8002, 100), item(8037, 20)),
                 report("FY2025", "2025-09-30", 2025, item(8002, 400), item(8037, 80))));
@@ -151,10 +156,120 @@ class FutuStatementIngestorTest {
 
         assertEquals("US", r.company().getMarket());
         assertEquals(9, r.company().getFyEndMonth(), "年报截止 9 月应推断 fyEndMonth=9");
-        // 12 月季度在 FYE=9 下属于财年 Q1
-        assertValue(r, "REVENUE", "2025Q1", PeriodType.SINGLE_Q, "100");
+        // 期间标签统一自然年：截至 2024-12 的季度标 2024Q4（而非财年口径 2025Q1）
+        assertValue(r, "REVENUE", "2024Q4", PeriodType.SINGLE_Q, "100");
         assertValue(r, "REVENUE", "FY2025", PeriodType.FY, "400");
-        assertValue(r, "FREE_CASH_FLOW", "2025Q1", PeriodType.SINGLE_Q, "40");
+        assertValue(r, "FREE_CASH_FLOW", "2024Q4", PeriodType.SINGLE_Q, "40");
+        List<String> periods = r.values().stream().map(MetricValueDO::getFiscalPeriod).distinct().toList();
+        assertTrue(!periods.contains("2025Q1"), "不应再出现财年偏移标签 2025Q1，实际: " + periods);
+    }
+
+    /**
+     * BABA 场景（FYE=3）：财年与自然年不一致——截至 2026-06 的季度是财年 2027Q1，
+     * 统一按自然年标注为 2026Q2；年报截至 2026-03 标 FY2026。
+     */
+    @Test
+    void usBaba_fiscalYearMarch_labelledByCalendarYear() {
+        JSONObject root = new JSONObject();
+        root.put("code", "US.BABA");
+        root.put("ticker", "BABA");
+        root.put("currency", "CNY");
+        root.put("cumulative", false);
+        JSONObject statements = new JSONObject();
+        statements.put("income", stmt(
+                report("2027/Q1", "2026-06-29", 2027, 1, item(8002, 2600)),
+                report("2026/Q4", "2026-03-30", 2026, 4, item(8002, 2400)),
+                report("2026/Q3", "2025-12-30", 2026, 3, item(8002, 3000)),
+                report("2026/Q2", "2025-09-29", 2026, 2, item(8002, 2800)),
+                report("2026/Q1", "2025-06-29", 2026, 1, item(8002, 2500)),
+                report("2026/FY", "2026-03-30", 2026, 7, item(8002, 10000))));
+        root.put("statements", statements);
+        root.put("errors", new JSONObject());
+
+        FutuStatementIngestor.IngestResult r = ingestor.processRoot(root);
+
+        assertEquals(3, r.company().getFyEndMonth(), "年报截止 3 月应推断 fyEndMonth=3");
+        // 财年 2027Q1（截至 2026-06）→ 自然年 2026Q2，其余季度按结束日归位
+        assertValue(r, "REVENUE", "2026Q2", PeriodType.SINGLE_Q, "2600");
+        assertValue(r, "REVENUE", "2026Q1", PeriodType.SINGLE_Q, "2400");
+        assertValue(r, "REVENUE", "2025Q4", PeriodType.SINGLE_Q, "3000");
+        assertValue(r, "REVENUE", "2025Q3", PeriodType.SINGLE_Q, "2800");
+        assertValue(r, "REVENUE", "2025Q2", PeriodType.SINGLE_Q, "2500");
+        // 年报结束月落在 2026 自然年 → FY2026
+        assertValue(r, "REVENUE", "FY2026", PeriodType.FY, "10000");
+        List<String> periods = r.values().stream().map(MetricValueDO::getFiscalPeriod).distinct().toList();
+        assertTrue(!periods.contains("2027Q1"), "不应出现财年偏移标签 2027Q1，实际: " + periods);
+    }
+
+    /**
+     * 港股 3 月财年（如 09988 阿里港股，cumulative=true、FYE=3）：累计链跨自然年——
+     * 财年 Q1 结束于 6 月（2025Q2），年报结束于次年 3 月（FY2026 → slot 2026Q1）。
+     * 差分应沿自然季度时间序跨自然年连续：2025Q2 直取，2025Q3/2025Q4/2026Q1 依次差分。
+     */
+    @Test
+    void hkMarchFye_cumulativeDifferencedAcrossCalendarYears() {
+        JSONObject root = new JSONObject();
+        root.put("code", "HK.09988");
+        root.put("ticker", "09988");
+        root.put("currency", "CNY");
+        root.put("cumulative", true);
+        JSONObject statements = new JSONObject();
+        // 累计收入：财年 Q1(3个月)=100；H1=300；9M=600；FY=1000；下一财年 Q1=130
+        statements.put("income", stmt(
+                report("2026Q1", "2025-06-30", 2026, 1, item(5001, 100)),
+                report("2026Q6", "2025-09-30", 2026, 5, item(5001, 300)),
+                report("2026Q9", "2025-12-31", 2026, 6, item(5001, 600)),
+                report("FY2026", "2026-03-31", 2026, 7, item(5001, 1000)),
+                report("2027Q1", "2026-06-30", 2027, 1, item(5001, 130))));
+        root.put("statements", statements);
+        root.put("errors", new JSONObject());
+
+        FutuStatementIngestor.IngestResult r = ingestor.processRoot(root);
+
+        assertEquals(3, r.company().getFyEndMonth(), "年报截止 3 月应推断 fyEndMonth=3");
+
+        // 单季差分：财年 Q1=100（直取）；Q2=300-100=200；Q3=600-300=300；Q4=1000-600=400；新财年 Q1=130（直取）
+        assertValue(r, "REVENUE", "2025Q2", PeriodType.SINGLE_Q, "100");
+        assertValue(r, "REVENUE", "2025Q3", PeriodType.SINGLE_Q, "200");
+        assertValue(r, "REVENUE", "2025Q4", PeriodType.SINGLE_Q, "300");
+        assertValue(r, "REVENUE", "2026Q1", PeriodType.SINGLE_Q, "400");
+        assertValue(r, "REVENUE", "2026Q2", PeriodType.SINGLE_Q, "130");
+
+        // 累计/年报原行保留（自然年标签）
+        assertValue(r, "REVENUE", "2025Q3", PeriodType.CUMULATIVE, "300");
+        assertValue(r, "REVENUE", "FY2026", PeriodType.FY, "1000");
+    }
+
+    /**
+     * 回归：港股 Q1 单季报（ftype=1）为稀疏字段集——经营现金流净额在字段 5001
+     * （旧映射 5058 在该报告中缺失，会导致 OCF 取空），且不含 5071/5073 资本开支柱。
+     */
+    @Test
+    void hkSparseQ1Report_ocfExtractedFromField5001() {
+        JSONObject root = new JSONObject();
+        root.put("code", "HK.00700");
+        root.put("ticker", "00700");
+        root.put("currency", "CNY");
+        root.put("cumulative", true);
+        JSONObject statements = new JSONObject();
+        // 真实 futu Q1 单季报结构：仅 5001(OCF)/5069(投资净额)/5086(筹资净额)/5100(期末现金) 等头条字段
+        statements.put("cashflow", stmt(
+                report("2026Q1", "2026-03-31", 2026, 1,
+                        item(5001, 101351), item(5069, -10560), item(5086, -12117), item(5100, 217770))));
+        root.put("statements", statements);
+        root.put("errors", new JSONObject());
+
+        FutuStatementIngestor.IngestResult r = ingestor.processRoot(root);
+
+        // OCF 必须取到 5001 的值（修复前映射 5058 缺失 → 单季 OCF 为 null）
+        assertValue(r, "OPERATING_CF", "2026Q1", PeriodType.SINGLE_Q, "101351");
+        // 投资净额取 5069（旧映射 5076 在稀疏报中同样缺失），符号保留
+        assertValue(r, "INVESTING_CF", "2026Q1", PeriodType.SINGLE_Q, "-10560");
+        // 稀疏报无资本开支字段 → 单季 CAPEX/FCF 留空（由 RAG NON_GAAP_CAPEX 补充）
+        MetricValueDO capex = find(r, "CAPEX", "2026Q1", PeriodType.SINGLE_Q);
+        assertTrue(capex == null || capex.getValue() == null, "稀疏 Q1 报不应产生 CAPEX 值");
+        MetricValueDO fcf = find(r, "FREE_CASH_FLOW", "2026Q1", PeriodType.SINGLE_Q);
+        assertTrue(fcf == null || fcf.getValue() == null, "CAPEX 缺失时不应派生 FCF");
     }
 
     // =========================================================
@@ -170,10 +285,17 @@ class FutuStatementIngestorTest {
     }
 
     private static JSONObject report(String period, String end, int fy, JSONObject... items) {
+        return report(period, end, fy, null, items);
+    }
+
+    private static JSONObject report(String period, String end, int fy, Integer ftype, JSONObject... items) {
         JSONObject r = new JSONObject();
         r.put("period", period);
         r.put("periodEnd", end);
         r.put("fiscalYear", fy);
+        if (ftype != null) {
+            r.put("ftype", ftype);
+        }
         JSONArray arr = new JSONArray();
         arr.addAll(List.of(items));
         r.put("items", arr);

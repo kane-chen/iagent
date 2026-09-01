@@ -145,6 +145,19 @@ public class JdbcFinancialRepository implements FinancialRepository {
     }
 
     @Override
+    public void deleteMetricsByTicker(String ticker) {
+        int n = jdbcTemplate.update("DELETE FROM fin_metric_value WHERE ticker = ?", ticker);
+        log.info("deleteMetricsByTicker: ticker={}, deleted={}", ticker, n);
+    }
+
+    @Override
+    public void deleteSegmentsByTicker(String ticker) {
+        int v = jdbcTemplate.update("DELETE FROM fin_segment_value WHERE ticker = ?", ticker);
+        int s = jdbcTemplate.update("DELETE FROM fin_segment WHERE ticker = ?", ticker);
+        log.info("deleteSegmentsByTicker: ticker={}, values={}, segments={}", ticker, v, s);
+    }
+
+    @Override
     public void recordBatch(String ticker, String source, String status, String periods, String report) {
         try {
             jdbcTemplate.update(

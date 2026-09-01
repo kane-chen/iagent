@@ -96,10 +96,13 @@ markets:
       SHARE_CAPITAL: [5111]
       RETAINED_EARNINGS: [5113]
     cashflow:
-      OPERATING_CF: [5058]
+      # 注意：港股 field id 与利润表同 id 不同义——现金流量表 5001=经营活动现金流量净额（利润表 5001=营业收入）
+      # 5001/5069/5086 在各期报表（Q1/H1/Q9/FY）均有值，且与同公司美股 ADR 的 8015/8042/8056 逐期一致；
+      # 勿用 5058/5076（流入小计，且 Q1/Q9 单季报稀疏字段集中缺失，会导致单季取空/取错）
+      OPERATING_CF: [5001]
       CF_DA: [5059]
       CAPEX: [5071, 5073]
-      INVESTING_CF: [5076]
+      INVESTING_CF: [5069]
       FINANCING_CF: [5086]
       CASH_END: [5100]
 

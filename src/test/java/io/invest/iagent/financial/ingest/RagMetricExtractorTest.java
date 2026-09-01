@@ -32,7 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link RagMetricExtractor} 单元测试：期间列表逐期提取、跳过逻辑与置信度过滤。
+ * {@link RagMetricExtractor} 单元测试：逐期 × 逐指标提取（每期每指标一次提问）、跳过逻辑与置信度过滤。
  */
 class RagMetricExtractorTest {
 
@@ -44,6 +44,7 @@ class RagMetricExtractorTest {
     private RagMetricExtractor extractor;
 
     private final RagExtraMetric sbc = extraMetric("SBC", 60);
+    private final RagExtraMetric dividends = extraMetric("DIVIDENDS_PAID", 60);
 
     @BeforeEach
     void setUp() {
@@ -65,7 +66,7 @@ class RagMetricExtractorTest {
         ReflectionTestUtils.setField(extractor, "filingQaService", filingQaService);
     }
 
-    /** 逐期提问：期间列表中每个期间各发起一次 ask，入库行的期间口径与期间匹配。 */
+    /** 逐期提问：期间列表中每个期间各发起一次 ask（单指标配置），入库行的期间口径与期间匹配。 */
     @Test
     void extract_iteratesPeriods_oneAskPerPeriod() {
         when(filingQaService.ask(anyString(), eq(TICKER), anyString(), anyInt()))
@@ -74,7 +75,7 @@ class RagMetricExtractorTest {
         RagMetricExtractor.RagExtractResult result =
                 extractor.extract(TICKER, List.of("2025Q1", "2025Q2", "FY2025"));
 
-        // 一个周期一次 ask，防止知识库上下文过大
+        // 一个周期一个指标一次 ask（此处仅配置 1 个指标）
         verify(filingQaService, times(1)).ask(anyString(), eq(TICKER), eq("2025Q1"), eq(5));
         verify(filingQaService, times(1)).ask(anyString(), eq(TICKER), eq("2025Q2"), eq(5));
         verify(filingQaService, times(1)).ask(anyString(), eq(TICKER), eq("FY2025"), eq(5));
@@ -102,6 +103,51 @@ class RagMetricExtractorTest {
             assertThat(v.getChunkId()).isEqualTo("chunk-1");
             assertThat(v.getDocumentId()).isEqualTo("doc-1");
         });
+    }
+
+    /** 一个周期一个指标一次提问：同期间多个缺失指标各发起一次 ask，分别入库。 */
+    @Test
+    void extract_multipleMetrics_oneAskPerMetric() {
+        ReflectionTestUtils.setField(extractor, "extraMetrics", List.of(sbc, dividends));
+        when(filingQaService.ask(anyString(), eq(TICKER), anyString(), anyInt()))
+                .thenAnswer(inv -> answerWithMetric(
+                        ((String) inv.getArgument(0)).contains("DIVIDENDS_PAID") ? "DIVIDENDS_PAID" : "SBC",
+                        inv.getArgument(2), 90));
+
+        RagMetricExtractor.RagExtractResult result =
+                extractor.extract(TICKER, List.of("2025Q1", "FY2025"));
+
+        // 2 期间 × 2 指标 = 4 次 ask，每个期间每个指标各一次
+        verify(filingQaService, times(2)).ask(anyString(), eq(TICKER), eq("2025Q1"), eq(5));
+        verify(filingQaService, times(2)).ask(anyString(), eq(TICKER), eq("FY2025"), eq(5));
+        assertThat(result.extracted()).isEqualTo(4);
+
+        ArgumentCaptor<List<MetricValueDO>> captor = ArgumentCaptor.forClass(List.class);
+        verify(repository, times(2)).batchUpsertMetrics(captor.capture());
+        List<MetricValueDO> all = captor.getAllValues().stream().flatMap(List::stream).toList();
+        assertThat(all).hasSize(4);
+        assertThat(all).extracting(MetricValueDO::getMetricCode)
+                .containsOnly("SBC", "DIVIDENDS_PAID");
+    }
+
+    /** 同期间仅部分指标已有高优先级来源值时，只对缺失指标提问，且问题中不含已跳过指标。 */
+    @Test
+    void extract_partialExistingValue_onlyAsksMissingMetric() {
+        ReflectionTestUtils.setField(extractor, "extraMetrics", List.of(sbc, dividends));
+        when(repository.queryMetrics(anyString(), anyList(), anyList()))
+                .thenReturn(List.of(MetricValueDO.builder()
+                        .ticker(TICKER).fiscalPeriod("FY2025").metricCode("SBC")
+                        .value(BigDecimal.valueOf(100)).source(MetricSource.FUTU_API.name())
+                        .build()));
+        when(filingQaService.ask(anyString(), eq(TICKER), anyString(), anyInt()))
+                .thenAnswer(inv -> answerWithMetric("DIVIDENDS_PAID", inv.getArgument(2), 90));
+
+        RagMetricExtractor.RagExtractResult result = extractor.extract(TICKER, List.of("FY2025"));
+
+        assertThat(result.extracted()).isEqualTo(1);
+        ArgumentCaptor<String> questionCaptor = ArgumentCaptor.forClass(String.class);
+        verify(filingQaService, times(1)).ask(questionCaptor.capture(), eq(TICKER), eq("FY2025"), eq(5));
+        assertThat(questionCaptor.getValue()).contains("DIVIDENDS_PAID").doesNotContain("SBC");
     }
 
     /** H1 中报期间按累计口径入库。 */
@@ -222,14 +268,19 @@ class RagMetricExtractorTest {
 
     /** 构造一个检索到片段且模型返回 SBC 找到的答案。 */
     private static FilingAnswer answerWithSbc(String period, int confidence) {
+        return answerWithMetric("SBC", period, confidence);
+    }
+
+    /** 构造一个检索到片段且模型返回指定指标找到的答案。 */
+    private static FilingAnswer answerWithMetric(String code, String period, int confidence) {
         FilingAnswer answer = new FilingAnswer();
         answer.setChunks(List.of(FilingChunk.builder()
                 .chunkId("chunk-1")
                 .tags(Map.of(FilingTagKeys.DOCUMENT_ID, "doc-1"))
                 .build()));
-        answer.setChatResponse("{\"SBC\": {\"found\": true, \"value\": 1234.5, "
+        answer.setChatResponse("{\"" + code + "\": {\"found\": true, \"value\": 1234.5, "
                 + "\"unit\": \"million\", \"confidence\": " + confidence
-                + ", \"evidence\": \"" + period + " 股份酬金 1234.5 百万\"}}");
+                + ", \"evidence\": \"" + period + " " + code + " 1234.5 百万\"}}");
         return answer;
     }
 }

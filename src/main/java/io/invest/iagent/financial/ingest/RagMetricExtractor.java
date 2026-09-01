@@ -32,7 +32,8 @@ import java.util.TreeSet;
  * （混合检索 + 重排 + LLM 合成），要求模型返回结构化 JSON，按置信度阈值入库。
  *
  * <p>按调用方给定的期间列表逐期处理（季度/年度均可，如 [2025Q1, 2025Q2, 2025Q3, FY2025]）：
- * 每个期间单独发起一次检索提问，检索标签只带该期间，避免单次请求知识库上下文过大。
+ * 每个期间 × 每个缺失指标各发起一次检索提问——检索标签只带该期间，问题只含单个指标，
+ * 使检索更聚焦、模型只需判定一个指标，避免一次提问多指标相互干扰。
  * 知识库未构建时跳过并给出提示。
  */
 @Slf4j
@@ -66,7 +67,7 @@ public class RagMetricExtractor {
      *
      * @param ticker  股票代码
      * @param periods 待提取期间列表（如 [2025Q1, 2025Q2, 2025Q3, FY2025]），
-     *                逐期检索提取；null/空直接跳过
+     *                逐期 × 逐指标检索提取（每个缺失指标单独一次提问）；null/空直接跳过
      */
     public RagExtractResult extract(String ticker, List<String> periods) {
         List<String> warnings = new ArrayList<>();
@@ -91,52 +92,55 @@ public class RagMetricExtractor {
         List<String> metricCodes = extraMetrics.stream().map(RagExtraMetric::getCode).toList();
         int totalExtracted = 0;
         int attempted = 0;
-        int noChunkPeriods = 0;
+        int noChunkAsks = 0;
         for (String period : targetPeriods) {
-            try {
-                // 已有高优先级来源（FUTU_API/DERIVED）值的指标跳过；RAG 来源或缺失的重新提取
-                List<MetricValueDO> existing = repository.queryMetrics(
-                        ticker, metricCodes, List.of(period));
-                List<RagExtraMetric> missing = new ArrayList<>();
-                for (RagExtraMetric m : extraMetrics) {
+            // 已有高优先级来源（FUTU_API/DERIVED）值的指标跳过；RAG 来源或缺失的重新提取
+            List<MetricValueDO> existing = repository.queryMetrics(
+                    ticker, metricCodes, List.of(period));
+            List<MetricValueDO> periodRows = new ArrayList<>();
+            for (RagExtraMetric metric : extraMetrics) {
+                try {
                     boolean has = existing.stream().anyMatch(v ->
-                            m.getCode().equals(v.getMetricCode()) && v.getValue() != null
+                            metric.getCode().equals(v.getMetricCode()) && v.getValue() != null
                                     && !MetricSource.RAG.name().equals(v.getSource()));
-                    if (!has) {
-                        missing.add(m);
+                    if (has) {
+                        continue;
                     }
-                }
-                if (missing.isEmpty()) {
-                    continue;
-                }
 
-                // 一个周期一次提问：检索标签只带当前期间，避免知识库上下文过大
-                attempted++;
-                String question = buildQuestion(ticker, period, missing);
-                FilingAnswer answer = filingQaService.ask(question, ticker, period, properties.getRagTopK());
-                List<FilingChunk> chunks = answer.getChunks();
-                if (chunks == null || chunks.isEmpty()) {
-                    noChunkPeriods++;
-                    log.info("RAG extract: no chunks for {} {}，知识库可能未构建该期间", ticker, period);
-                    continue;
-                }
-                if (answer.getChatResponse() == null || answer.getChatResponse().isBlank()) {
-                    continue;
-                }
+                    // 一个周期一个指标一次提问：检索标签只带当前期间，问题只含当前指标
+                    attempted++;
+                    String question = buildQuestion(ticker, period, metric);
+                    FilingAnswer answer = filingQaService.ask(question, ticker, period, properties.getRagTopK());
+                    List<FilingChunk> chunks = answer.getChunks();
+                    if (chunks == null || chunks.isEmpty()) {
+                        noChunkAsks++;
+                        log.info("RAG extract: no chunks for {} {} {}，知识库可能未构建该期间",
+                                ticker, period, metric.getCode());
+                        continue;
+                    }
+                    if (answer.getChatResponse() == null || answer.getChatResponse().isBlank()) {
+                        continue;
+                    }
 
-                List<MetricValueDO> parsed = parseResponse(ticker, period, missing, answer);
-                if (!parsed.isEmpty()) {
-                    repository.batchUpsertMetrics(parsed);
-                    totalExtracted += parsed.size();
-                    log.info("RAG extract: {} {} 提取 {} 个指标", ticker, period, parsed.size());
+                    MetricValueDO row = parseResponse(ticker, period, metric, answer);
+                    if (row != null) {
+                        periodRows.add(row);
+                    }
+                } catch (Exception e) {
+                    // 单个指标失败不影响同期间其他指标
+                    log.warn("RAG extract failed for {} {} {}: {}",
+                            ticker, period, metric.getCode(), e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("RAG extract failed for {} {}: {}", ticker, period, e.getMessage());
+            }
+            if (!periodRows.isEmpty()) {
+                repository.batchUpsertMetrics(periodRows);
+                totalExtracted += periodRows.size();
+                log.info("RAG extract: {} {} 提取 {} 个指标", ticker, period, periodRows.size());
             }
         }
 
-        // 所有期间都检索不到片段，基本可判定知识库未构建
-        if (attempted > 0 && noChunkPeriods == attempted) {
+        // 所有提问都检索不到片段，基本可判定知识库未构建
+        if (attempted > 0 && noChunkAsks == attempted) {
             warnings.add("RAG 补充指标提取跳过：财报知识库未检索到片段。请先调用 filing_kb_build 构建 "
                     + ticker + " 的财报知识库后重试 financial_data_build。");
         }
@@ -162,24 +166,22 @@ public class RagMetricExtractor {
         return set.stream().map(FiscalPeriod::canonical).toList();
     }
 
-    /** 构造结构化提取问题（要求模型仅输出 JSON）。 */
-    private String buildQuestion(String ticker, String period, List<RagExtraMetric> metrics) {
+    /** 构造单个指标的结构化提取问题（要求模型仅输出 JSON）。 */
+    private String buildQuestion(String ticker, String period, RagExtraMetric m) {
+        MetricDef def = metricCatalog.get(m.getCode());
+        String name = def != null ? def.getNameCn() : m.getCode();
         StringBuilder sb = new StringBuilder();
         sb.append("请从检索到的财报片段中，提取公司 ").append(ticker).append(" 在 ").append(period)
                 .append(" ").append(periodScope(period)).append("的下列财务指标数值：\n");
-        for (RagExtraMetric m : metrics) {
-            MetricDef def = metricCatalog.get(m.getCode());
-            String name = def != null ? def.getNameCn() : m.getCode();
-            sb.append("- ").append(m.getCode()).append("（").append(name);
-            if (m.getAliases() != null && !m.getAliases().isEmpty()) {
-                sb.append("；同义词：").append(String.join("、", m.getAliases()));
-            }
-            sb.append("）");
-            if (m.getHint() != null && !m.getHint().isBlank()) {
-                sb.append("。提示：").append(m.getHint());
-            }
-            sb.append("\n");
+        sb.append("- ").append(m.getCode()).append("（").append(name);
+        if (m.getAliases() != null && !m.getAliases().isEmpty()) {
+            sb.append("；同义词：").append(String.join("、", m.getAliases()));
         }
+        sb.append("）");
+        if (m.getHint() != null && !m.getHint().isBlank()) {
+            sb.append("。提示：").append(m.getHint());
+        }
+        sb.append("\n");
         sb.append("""
                 严格要求：
                 1. 只能使用检索片段中明确披露的数据，不得推测或计算（片段没有就 found=false）；
@@ -221,28 +223,46 @@ public class RagMetricExtractor {
         return PeriodType.SINGLE_Q;
     }
 
-    /** 解析模型 JSON 回答，按置信度阈值产出 RAG 来源指标行。 */
-    private List<MetricValueDO> parseResponse(String ticker, String period,
-                                              List<RagExtraMetric> metrics, FilingAnswer answer) {
-        List<MetricValueDO> out = new ArrayList<>();
+    /** 解析模型 JSON 回答，按置信度阈值产出 RAG 来源指标行；未找到/置信度不足/解析失败返回 null。 */
+    private MetricValueDO parseResponse(String ticker, String period,
+                                        RagExtraMetric m, FilingAnswer answer) {
         String text = answer.getChatResponse();
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
         if (start < 0 || end <= start) {
-            return out;
+            return null;
         }
         JSONObject obj;
         try {
             obj = JSON.parseObject(text.substring(start, end + 1));
         } catch (Exception e) {
             log.debug("RAG extract JSON 解析失败: {}", e.getMessage());
-            return out;
+            return null;
+        }
+
+        JSONObject cell = obj.getJSONObject(m.getCode());
+        if (cell == null) {
+            // 兼容模型把 code 小写输出
+            cell = obj.getJSONObject(m.getCode().toLowerCase());
+        }
+        if (cell == null || !cell.getBooleanValue("found", false)) {
+            return null;
+        }
+        BigDecimal value = cell.getBigDecimal("value");
+        if (value == null) {
+            return null;
+        }
+        Integer confidence = cell.getInteger("confidence");
+        if (confidence != null && confidence < m.getMinConfidence()) {
+            log.debug("RAG extract 置信度不足: {} {} {} = {} ({})",
+                    ticker, period, m.getCode(), value, confidence);
+            return null;
         }
 
         // 溯源信息取首条片段
-        List<FilingChunk> chunks = answer.getChunks();
         String chunkId = null;
         String documentId = null;
+        List<FilingChunk> chunks = answer.getChunks();
         if (chunks != null && !chunks.isEmpty()) {
             FilingChunk first = chunks.get(0);
             chunkId = first.getChunkId();
@@ -252,41 +272,18 @@ public class RagMetricExtractor {
             }
         }
 
-        for (RagExtraMetric m : metrics) {
-            JSONObject cell = obj.getJSONObject(m.getCode());
-            if (cell == null) {
-                // 兼容模型把 code 小写输出
-                cell = obj.getJSONObject(m.getCode().toLowerCase());
-            }
-            if (cell == null || !cell.getBooleanValue("found", false)) {
-                continue;
-            }
-            BigDecimal value = cell.getBigDecimal("value");
-            if (value == null) {
-                continue;
-            }
-            Integer confidence = cell.getInteger("confidence");
-            int min = m.getMinConfidence();
-            if (confidence != null && confidence < min) {
-                log.debug("RAG extract 置信度不足: {} {} {} = {} ({})",
-                        ticker, period, m.getCode(), value, confidence);
-                continue;
-            }
-            value = normalizeUnit(value, cell.getString("unit"));
-            out.add(MetricValueDO.builder()
-                    .ticker(ticker)
-                    .fiscalPeriod(period)
-                    .periodType(periodTypeOf(period).name())
-                    .metricCode(m.getCode())
-                    .value(value)
-                    .unit("million")
-                    .source(MetricSource.RAG.name())
-                    .confidence(confidence)
-                    .chunkId(chunkId)
-                    .documentId(documentId)
-                    .build());
-        }
-        return out;
+        return MetricValueDO.builder()
+                .ticker(ticker)
+                .fiscalPeriod(period)
+                .periodType(periodTypeOf(period).name())
+                .metricCode(m.getCode())
+                .value(normalizeUnit(value, cell.getString("unit")))
+                .unit("million")
+                .source(MetricSource.RAG.name())
+                .confidence(confidence)
+                .chunkId(chunkId)
+                .documentId(documentId)
+                .build();
     }
 
     /** 模型声称的单位归一到百万。 */

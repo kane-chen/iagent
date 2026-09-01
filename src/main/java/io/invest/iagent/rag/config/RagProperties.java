@@ -65,6 +65,11 @@ public class RagProperties {
          * llm 配置中该字段无实际作用。
          */
         private String provider = "ollama";
+
+        /**
+         * 短路调用
+         */
+        private boolean shortCut ;
     }
 
     @Data

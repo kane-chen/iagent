@@ -22,6 +22,12 @@ public interface FinancialRepository {
 
     void batchUpsertSegmentValues(List<SegmentValueDO> values);
 
+    /** 全量重建前清空该公司全部指标值（含历史口径/旧期间标签数据） */
+    void deleteMetricsByTicker(String ticker);
+
+    /** 全量重建分部数据前清空该公司分部定义与分部指标值 */
+    void deleteSegmentsByTicker(String ticker);
+
     void recordBatch(String ticker, String source, String status, String periods, String report);
 
     // ---------- 查询 ----------

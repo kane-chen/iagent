@@ -80,6 +80,16 @@
   .empty { margin: 60px auto; text-align: center; color: var(--muted); max-width: 420px; line-height: 1.8; }
   .footnote { padding: 0 28px 30px; color: var(--muted); font-size: 12px; line-height: 1.8; }
 
+  /* 业务分部 */
+  .section-title { padding: 4px 28px 0; }
+  .section-title h3 { font-size: 15px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .section-title .section-sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .seg-cards { padding-top: 0; }
+  .seg-card .code { background: #eef2ff; color: #4338ca; }
+  .c-yoy { font-size: 11px; font-weight: 600; }
+  .c-yoy.up { color: var(--up); }
+  .c-yoy.down { color: var(--down); }
+
   /* 弹窗 */
   .modal-mask {
     display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 100;
@@ -147,13 +157,14 @@
 <div id="dashboard">
   <div class="empty">
     输入股票代码开始查询。<br>
-    核心指标展示最近一个季度的<b>净利润、经营利润、资本开支、资产负债表</b>数值与同比；<br>
-    点击卡片上的「趋势」查看最近 16 个季度（可调整）折线图，点击「构成」查看指标分层因子。
+    核心指标展示最近一个季度的<b>净利润、经营利润、自由现金流、资产负债表</b>数值与同比；<br>
+    业务分部展示各分部最近一个季度的<b>收入 / 毛利 / EBITA</b>；<br>
+    点击「趋势」查看折线图，点击「构成」查看分层因子或分部历年指标。
   </div>
 </div>
 
 <div class="footnote" id="footnote" style="display:none">
-  说明：金额单位为百万财报币种（页面不做换算）；同比标签遵循红涨绿跌；构成表单元格内小字为占比（利润表/现金流量表为占收入比，如毛利率、费用率；资产负债表为占总资产比）；数据来自 iAgent 财务数据库（futu API 采集，库中期间不足时自动补采，首次查询可能较慢）。
+  说明：金额单位为百万财报币种（页面不做换算）；同比标签遵循红涨绿跌；构成表单元格内小字为占比（利润表/现金流量表为占收入比，如毛利率、费用率；资产负债表为占总资产比）；分部数据由财报文件解析（SEGMENT_PARSE），与三大表 API 口径可能存在差异，分部趋势仅取单季度（剔除年报全年值）。数据来自 iAgent 财务数据库（库中期间不足时自动补采，首次查询可能较慢）。
 </div>
 
 <!-- 趋势弹窗 -->
@@ -198,7 +209,12 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const state = { ticker: null, dashboard: null, trendChart: null, compData: null, compCollapsed: new Set() };
+const state = {
+  ticker: null, dashboard: null, trendChart: null,
+  compData: null, compCollapsed: new Set(),
+  trendSeg: null, trendCode: null,   // 趋势弹窗上下文：trendSeg 非空=分部趋势
+  compSeg: null, compCode: null      // 构成弹窗上下文：compSeg 非空=分部构成
+};
 
 // ---------- 格式化 ----------
 /** 库中金额单位即百万财报币种，按百万千分位展示（不做单位换算） */
@@ -292,25 +308,77 @@ function renderCards(d) {
       </div>
     </div>`;
   }).join('');
-  $('#dashboard').innerHTML = `<div class="cards">${html}</div>`;
+  $('#dashboard').innerHTML = `<div class="cards">${html}</div>` + renderSegmentCards(d);
+}
+
+// ---------- 业务分部卡片 ----------
+function renderSegmentCards(d) {
+  if (!d.segmentCards || !d.segmentCards.length) return '';
+  const cards = d.segmentCards.map(card => {
+    const rows = card.points.map(p => `
+      <div class="item-row">
+        <span class="i-name">${esc(p.name)}</span>
+        <span class="i-val">${fmtMoney(p.value)}${p.value === null ? '' : '<span class="unit">百万</span>'}</span>
+        ${fmtYoy(p.yoy)}
+        <span class="i-actions">
+          <button class="link-btn" onclick="openSegmentTrend('${card.segmentCode}','${p.code}')">趋势</button>
+          <button class="link-btn" onclick="openSegmentComposition('${card.segmentCode}')">构成</button>
+        </span>
+      </div>`).join('');
+    return `<div class="card seg-card">
+      <div class="card-title"><span class="name">${esc(card.segmentName)}</span><span class="code">分部</span></div>
+      <div class="item-rows">${rows}</div>
+    </div>`;
+  }).join('');
+  return `<div class="section-title"><h3>业务分部<span class="section-sub">最近季度 ${esc(d.segmentCards[0].period)} · 收入 / 毛利 / 利润（点击趋势看折线，构成看历年）</span></h3></div>
+    <div class="cards seg-cards">${cards}</div>`;
 }
 
 // ---------- 趋势 ----------
-async function openTrend(code, name) {
-  $('#trendTitle').textContent = `${name}（${code}）· 趋势`;
+function showTrendModal() {
   $('#trendModal').classList.add('show');
   $('#trendChart').style.display = 'none';
   $('#trendMsg').classList.add('show');
   $('#trendMsg').textContent = '加载中…';
-  await loadTrend(code, name);
 }
 
-async function loadTrend(code, name) {
+async function openTrend(code, name) {
+  state.trendSeg = null;
+  state.trendCode = code;
+  $('#trendTitle').textContent = `${name}（${code}）· 趋势`;
+  $('#trendPtype').closest('.ctrl').style.display = '';
+  showTrendModal();
+  await loadTrend();
+}
+
+/** 分部趋势：segCode=分部编码，metricCode=分部指标编码（名称从仪表盘数据取）。 */
+async function openSegmentTrend(segCode, metricCode) {
+  const card = (state.dashboard.segmentCards || []).find(c => c.segmentCode === segCode);
+  const p = card && card.points.find(x => x.code === metricCode);
+  state.trendSeg = segCode;
+  state.trendCode = metricCode;
+  $('#trendTitle').textContent =
+    `${card ? card.segmentName : segCode} · ${p ? p.name : metricCode}（${metricCode}）· 趋势`;
+  // 分部趋势仅季度口径，隐藏口径切换
+  $('#trendPtype').closest('.ctrl').style.display = 'none';
+  showTrendModal();
+  await loadTrend();
+}
+
+async function loadTrend() {
   const quarters = $('#trendQuarters').value || 16;
-  const ptype = $('#trendPtype').value;
+  let url;
+  if (state.trendSeg) {
+    url = `/api/financial/segment-trend?ticker=${encodeURIComponent(state.ticker)}`
+      + `&segment=${encodeURIComponent(state.trendSeg)}`
+      + `&metric=${encodeURIComponent(state.trendCode)}&quarters=${quarters}`;
+  } else {
+    const ptype = $('#trendPtype').value;
+    url = `/api/financial/trend?ticker=${encodeURIComponent(state.ticker)}`
+      + `&metric=${encodeURIComponent(state.trendCode)}&quarters=${quarters}&periodType=${ptype}`;
+  }
   try {
-    const d = await api(`/api/financial/trend?ticker=${encodeURIComponent(state.ticker)}`
-      + `&metric=${encodeURIComponent(code)}&quarters=${quarters}&periodType=${ptype}`);
+    const d = await api(url);
     if (!d.hasData) {
       $('#trendChart').style.display = 'none';
       $('#trendMsg').classList.add('show');
@@ -337,9 +405,19 @@ function renderTrendChart(d) {
   state.trendChart.setOption({
     tooltip: {
       trigger: 'axis',
-      valueFormatter: v => v === null || v === undefined ? '—'
-        : (isPercent ? Number(v).toFixed(2) + '%'
-                     : Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' 百万')
+      // 按系列区分单位：同比系列一律 %，数值系列按指标类型（比率 % / 金额百万）
+      formatter: params => {
+        if (!params || !params.length) return '';
+        const fmtVal = p => {
+          const v = p.value;
+          if (v === null || v === undefined) return '—';
+          if (p.seriesName === '同比(%)') return Number(v).toFixed(1) + '%';
+          return isPercent ? Number(v).toFixed(2) + '%'
+                           : Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' 百万';
+        };
+        return `<div>${params[0].axisValue}</div>`
+          + params.map(p => `${p.marker}${p.seriesName}: <b>${fmtVal(p)}</b>`).join('<br/>');
+      }
     },
     legend: { data: [`数值(${valUnit})`, '同比(%)'], top: 0 },
     grid: { left: 60, right: 60, top: 40, bottom: 40 },
@@ -368,22 +446,47 @@ function renderTrendChart(d) {
 }
 
 // ---------- 构成（分层指标 × 最近 N 期表格） ----------
-async function openComposition(code, name) {
-  $('#compTitle').textContent = `${name}（${code}）· 指标构成`;
+function showCompModal() {
   $('#compModal').classList.add('show');
   $('#compTree').innerHTML = '';
   $('#compMsg').classList.add('show');
   $('#compMsg').textContent = '加载中…';
   state.compData = null;
   state.compCollapsed = new Set();
-  await loadComposition(code);
 }
 
-async function loadComposition(code) {
-  const quarters = $('#compQuarters').value || 8;
+async function openComposition(code, name) {
+  state.compSeg = null;
+  state.compCode = code;
+  $('#compTitle').textContent = `${name}（${code}）· 指标构成`;
+  $('#compQuarters').value = 8;
+  showCompModal();
+  await loadComposition();
+}
+
+/** 分部构成：某业务分部全部指标 × 历年期间表格。 */
+async function openSegmentComposition(segCode) {
+  const card = (state.dashboard.segmentCards || []).find(c => c.segmentCode === segCode);
+  state.compSeg = segCode;
+  state.compCode = null;
+  $('#compTitle').textContent = `${card ? card.segmentName : segCode} · 分部指标历年`;
+  $('#compQuarters').value = 16;
+  showCompModal();
+  await loadComposition();
+}
+
+async function loadComposition() {
+  const quarters = $('#compQuarters').value || (state.compSeg ? 16 : 8);
+  let url;
+  if (state.compSeg) {
+    url = `/api/financial/segment-composition?ticker=${encodeURIComponent(state.ticker)}`
+      + `&segment=${encodeURIComponent(state.compSeg)}&quarters=${quarters}`;
+  } else {
+    url = `/api/financial/composition?ticker=${encodeURIComponent(state.ticker)}`
+      + `&metric=${encodeURIComponent(state.compCode)}&quarters=${quarters}`;
+  }
   try {
-    const d = await api(`/api/financial/composition?ticker=${encodeURIComponent(state.ticker)}`
-      + `&metric=${encodeURIComponent(code)}&quarters=${quarters}`);
+    const d = await api(url);
     if (!d.hasData) {
       state.compData = null;
       $('#compTree').innerHTML = '';
@@ -392,14 +495,42 @@ async function loadComposition(code) {
       return;
     }
     $('#compMsg').classList.remove('show');
-    $('#compBasis').textContent =
-      `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为${d.ratioBasis || '占比'}`;
+    $('#compBasis').textContent = state.compSeg
+      ? `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为同比(YoY%)`
+      : `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为${d.ratioBasis || '占比'}`;
     state.compData = d;
-    renderCompTable();
+    if (state.compSeg) renderSegmentCompTable();
+    else renderCompTable();
   } catch (e) {
     $('#compMsg').classList.add('show');
     $('#compMsg').textContent = '查询失败：' + e.message;
   }
+}
+
+/** 渲染分部历年表格：行=指标，列=期间（最新在左），单元格=值+同比。 */
+function renderSegmentCompTable() {
+  const d = state.compData;
+  if (!d) return;
+  let html = '<table class="comp-table"><thead><tr>'
+    + '<th class="name-col">指标</th>'
+    + d.periods.map(p => `<th>${esc(p)}</th>`).join('')
+    + '</tr></thead><tbody>';
+  for (const row of d.rows) {
+    html += `<tr><td class="name-cell">${esc(row.name)}</td>`
+      + row.cells.map(c => {
+          const val = c.value === null || c.value === undefined ? '—'
+            : (row.unit === 'percent' ? Number(c.value).toFixed(1) + '%' : fmtMoney(c.value));
+          let yoy = '';
+          if (c.yoy !== null && c.yoy !== undefined) {
+            const n = Number(c.yoy);
+            yoy = `<div class="c-yoy ${n >= 0 ? 'up' : 'down'}">${n >= 0 ? '+' : ''}${n.toFixed(1)}%</div>`;
+          }
+          return `<td><div class="c-val">${val}</div>${yoy}</td>`;
+        }).join('')
+      + '</tr>';
+  }
+  html += '</tbody></table>';
+  $('#compTree').innerHTML = html;
 }
 
 /** 渲染分层表格：行=分层指标（可折叠），列=期间（最新在左），单元格=值+占比。 */
@@ -422,10 +553,15 @@ function renderCompTable() {
             : '<span class="toggle dot">·</span>')
         + esc(n.name) + (n.derived ? '<em>[派生]</em>' : '')
         + '</td>'
-        + n.cells.map(c => `<td><div class="c-val">${fmtMoney(c.value)}</div>`
-            + (c.ratio !== null && c.ratio !== undefined
-                ? `<div class="c-ratio">${Number(c.ratio).toFixed(1)}%</div>` : '')
-            + '</td>').join('')
+        + n.cells.map(c => {
+            // percent 行（如税率）值本身为百分比；其余为百万金额
+            const val = c.value === null || c.value === undefined ? '—'
+              : (n.unit === 'percent' ? Number(c.value).toFixed(1) + '%' : fmtMoney(c.value));
+            return `<td><div class="c-val">${val}</div>`
+              + (c.ratio !== null && c.ratio !== undefined
+                  ? `<div class="c-ratio">${Number(c.ratio).toFixed(1)}%</div>` : '')
+              + '</td>';
+          }).join('')
         + '</tr>';
       if (hasKids && !collapsed) {
         walk(n.children, level + 1);
@@ -450,18 +586,9 @@ function toggleComp(code) {
 // ---------- 事件绑定 ----------
 $('#searchBtn').addEventListener('click', loadDashboard);
 $('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });
-$('#trendQuarters').addEventListener('change', () => {
-  const code = $('#trendTitle').textContent.match(/（([A-Z_]+)）/);
-  if (code) loadTrend(code[1]);
-});
-$('#trendPtype').addEventListener('change', () => {
-  const code = $('#trendTitle').textContent.match(/（([A-Z_]+)）/);
-  if (code) loadTrend(code[1]);
-});
-$('#compQuarters').addEventListener('change', () => {
-  const code = $('#compTitle').textContent.match(/（([A-Z_]+)）/);
-  if (code) loadComposition(code[1]);
-});
+$('#trendQuarters').addEventListener('change', loadTrend);
+$('#trendPtype').addEventListener('change', () => { if (!state.trendSeg) loadTrend(); });
+$('#compQuarters').addEventListener('change', loadComposition);
 document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click', () => {
   $('#' + b.dataset.close).classList.remove('show');
 }));

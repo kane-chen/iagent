@@ -52,13 +52,18 @@ public class XinferenceReranker implements Reranker {
         }
 
         try {
+            // short
+            if(ragProperties.getRerank().isShortCut()){
+                return results ;
+            }
+            // rerank
             RerankResult response = this.doRerank(query, results);
             if (response == null || response.results == null || response.results.isEmpty()) {
                 log.warn("Rerank returned empty response, keeping original order");
                 return results;
             }
 
-            // index -> 相关性分数（Xinference reranker 返回 0-1）
+            // index -> 相关性分数（X-inference reranker 返回 0-1）
             Map<Integer, Double> scores = response.results.stream()
                     .collect(Collectors.toMap(RerankItem::index, RerankItem::score, (t1, t2) -> t1));
 
@@ -82,7 +87,7 @@ public class XinferenceReranker implements Reranker {
     }
 
     /**
-     * 调用 Xinference rerank 服务（OpenAI 兼容 /v1/rerank 接口），对文档按相关性打分。
+     * 调用 X inference rerank 服务（OpenAI 兼容 /v1/rerank 接口），对文档按相关性打分。
      *
      * <p>不显式设置 {@code top_n}，以获取全部文档的分数用于组合分计算；{@code return_documents=false}
      * 避免响应中回传原文，减小报文体积。</p>
@@ -108,7 +113,7 @@ public class XinferenceReranker implements Reranker {
                 .timeout(Duration.ofSeconds(ragProperties.getRerank().getTimeoutSeconds()))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.toJSONString(body)));
-        // apiKey
+        // api Key
         if (StringUtils.isNotBlank(ragProperties.getRerank().getApiKey())) {
             builder.header("Authorization", "Bearer " + ragProperties.getRerank().getApiKey());
         }

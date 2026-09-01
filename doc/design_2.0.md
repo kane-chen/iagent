@@ -69,7 +69,7 @@
 │  └─ 资本开支 CAPEX
 ├─ 筹资活动现金流净额 FINANCING_CF
 ├─ 期末现金余额 CASH_END
-└─ 自由现金流 FREE_CASH_FLOW (派生 = OCF − CAPEX)
+└─ 自由现金流 FREE_CASH_FLOW (派生 = OCF − 资本开支；资本开支优先取 RAG 提取的 Non-GAAP 经调整口径 NON_GAAP_CAPEX，缺失回退 GAAP CAPEX)
 
 派生比率（查询时计算或入库时计算）
 └─ 毛利率 / 营业利润率 / 净利率 / ROE / ROA / 各费用率 / YoY / QoQ

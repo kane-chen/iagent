@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import io.invest.iagent.financial.config.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuStatementIngestor;
 import io.invest.iagent.financial.ingest.RagMetricExtractor;
+import io.invest.iagent.financial.ingest.SegmentIngestor;
 import io.invest.iagent.financial.model.MetricValueDO;
 import io.invest.iagent.financial.repository.FinancialRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -15,8 +16,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 财务数据采集编排：三大表（futu API）→ 入库 → 记录批次。
- * 分部数据、RAG 补充指标由各自的 Ingestor 在后续步骤接入（见任务 5/6）。
+ * 财务数据采集编排：三大表（futu API）→ 入库 → 记录批次；
+ * 随后 best-effort 接入 RAG 补充指标（API 缺失指标）与业务分部数据（本地财报文件解析）。
  */
 @Slf4j
 @Service
@@ -35,11 +36,18 @@ public class FinancialIngestService {
     @Autowired(required = false)
     private RagMetricExtractor ragMetricExtractor;
 
+    @Autowired(required = false)
+    private SegmentIngestor segmentIngestor;
+
     /**
      * 采集结果摘要（供工具层展示）。
      */
     public record BuildResult(String ticker, boolean success, String message,
                               int periodCount, int metricCount, List<String> warnings) {}
+
+    public void buildResult(List<MetricValueDO> values){
+        repository.batchUpsertMetrics(values);
+    }
 
     /**
      * 采集指定公司的三大表数据并入库。
@@ -53,6 +61,9 @@ public class FinancialIngestService {
             FutuStatementIngestor.IngestResult r = futuIngestor.ingest(ticker, num);
             repository.upsertCompany(r.company());
 
+            // 全量刷新：先清空该公司旧指标值，避免期间口径调整（如财年标签改自然年）后新旧数据并存
+            repository.deleteMetricsByTicker(r.company().getTicker());
+
             List<MetricValueDO> values = r.values();
             repository.batchUpsertMetrics(values);
 
@@ -65,21 +76,43 @@ public class FinancialIngestService {
                     coveredPeriods, JSON.toJSONString(r.errors()));
 
             List<String> warnings = new java.util.ArrayList<>(r.errors());
+            String bareTicker = r.company().getTicker();
+
             // RAG 补充指标提取（API 缺失指标，best-effort，不影响主流程），按本次采集期间逐期提取
             if (ragMetricExtractor != null) {
                 try {
                     RagMetricExtractor.RagExtractResult rag =
-                            ragMetricExtractor.extract(r.company().getTicker(), coveredPeriodList);
+                            ragMetricExtractor.extract(bareTicker, coveredPeriodList);
                     warnings.addAll(rag.warnings());
                 } catch (Exception e) {
                     log.warn("RAG 补充指标提取异常（忽略）: {}", e.getMessage());
                 }
             }
 
+            // 业务分部数据提取（参照 segment-financial-report skill，解析本地财报文件，best-effort）：
+            // 需先用 futu-filing 下载财报且存在该公司分部配置，否则脚本提示跳过
+            int segmentCount = 0;
+            int segmentValueCount = 0;
+            if (segmentIngestor != null) {
+                try {
+                    SegmentIngestor.SegmentResult seg = segmentIngestor.ingest(bareTicker);
+                    warnings.addAll(seg.warnings());
+                    if (seg.extracted()) {
+                        segmentCount = seg.segments();
+                        segmentValueCount = seg.values();
+                    }
+                } catch (Exception e) {
+                    log.warn("业务分部数据提取异常（忽略）: {}", e.getMessage());
+                }
+            }
+
             String msg = String.format("已采集 %s(%s) 三大表数据：%d 个期间、%d 条指标值，币种 %s",
-                    r.company().getTicker(), r.company().getMarket(),
+                    bareTicker, r.company().getMarket(),
                     r.periodCount(), values.size(), r.company().getCurrency());
-            return new BuildResult(r.company().getTicker(), true, msg,
+            if (segmentValueCount > 0) {
+                msg += String.format("；业务分部 %d 个、%d 条分部指标", segmentCount, segmentValueCount);
+            }
+            return new BuildResult(bareTicker, true, msg,
                     r.periodCount(), values.size(), warnings);
         } catch (Exception e) {
             log.error("财务数据采集失败: ticker={}", ticker, e);

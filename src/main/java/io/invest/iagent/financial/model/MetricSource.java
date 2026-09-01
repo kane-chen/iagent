@@ -8,6 +8,8 @@ public enum MetricSource {
     FUTU_API,
     /** 从财报文件经 RAG + LLM 结构化提取 */
     RAG,
+    /** 人工补充 */
+    MANU,
     /** 由其他指标计算派生（如 FCF = OCF - CapEx） */
     DERIVED,
     /** 分部数据确定性表格解析（segment-financial-report skill） */

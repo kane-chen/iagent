@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.model.CompanyDO;
 import io.invest.iagent.financial.model.MetricSource;
 import io.invest.iagent.financial.model.SegmentDO;
 import io.invest.iagent.financial.model.SegmentValueDO;
@@ -98,6 +99,9 @@ public class SegmentIngestor {
 
         try {
             JSONArray records = JSON.parseArray(Files.readString(output, StandardCharsets.UTF_8));
+            // 引擎按公司财年结束月输出财年口径标签（如 BABA 截至 2026-06 的季度为 2027Q1），
+            // 取三大表采集时写入的财年结束月，统一转换为自然年标签（2026Q2）
+            int fyeMonth = resolveFyeMonth(ticker);
             // segmentCode -> 定义（保留首次出现顺序 = 引擎树序）
             Map<String, SegmentDO> segmentMap = new LinkedHashMap<>();
             List<SegmentValueDO> values = new ArrayList<>();
@@ -109,7 +113,7 @@ public class SegmentIngestor {
                 }
                 String segCode = rec.getString("segmentCode");
                 String segName = rec.getString("segmentName");
-                String period = canonicalPeriod(rec.getString("period"));
+                String period = canonicalPeriod(rec.getString("period"), fyeMonth);
                 String metricCode = METRIC_CODE_MAP.getOrDefault(rec.getString("metricCode"), rec.getString("metricCode"));
                 BigDecimal value = rec.getBigDecimal("value");
                 if (segCode == null || period == null || metricCode == null) {
@@ -143,6 +147,8 @@ public class SegmentIngestor {
             }
 
             fillYoY(values);
+            // 全量刷新分部数据：先清空旧数据，避免期间口径调整后新旧标签并存
+            repository.deleteSegmentsByTicker(ticker);
             repository.batchUpsertSegments(new ArrayList<>(segmentMap.values()));
             repository.batchUpsertSegmentValues(values);
             repository.recordBatch(ticker, "SEGMENT_PARSE", "SUCCESS",
@@ -160,8 +166,32 @@ public class SegmentIngestor {
         }
     }
 
-    /** "2025FY" → "FY2025"；"2025Q1"/"2025H1" 保持；无法识别返回 null。 */
+    /** 取公司财年结束月（三大表采集时写入 fin_company），查询失败默认 12（自然年）。 */
+    private int resolveFyeMonth(String ticker) {
+        try {
+            CompanyDO company = repository.findCompany(ticker);
+            if (company != null && company.getFyEndMonth() > 0) {
+                return company.getFyEndMonth();
+            }
+        } catch (Exception e) {
+            log.debug("查询公司财年结束月失败，按自然年处理: ticker={}, {}", ticker, e.getMessage());
+        }
+        return 12;
+    }
+
+    /** 兼容入口：按自然年（财年结束月 12）规范化引擎标签。 */
     public static String canonicalPeriod(String raw) {
+        return canonicalPeriod(raw, 12);
+    }
+
+    /**
+     * 引擎期间标签（财年口径）→ 规范期间（自然年口径）。
+     * <p>引擎按公司 fiscalYearEndMonth 输出财年标签（如 BABA 财年截至 3 月：截至 2026-06 的季度为 2027Q1），
+     * 这里按财年结束月反算该期结束的自然月，统一为自然年标签（2026Q2）；
+     * 年报 FY 标签的年份即结束自然年（BABA FY2026 截至 2026-03），保持不变。
+     * 无法识别返回 null。
+     */
+    public static String canonicalPeriod(String raw, int fyeMonth) {
         if (raw == null) {
             return null;
         }
@@ -169,9 +199,25 @@ public class SegmentIngestor {
         if (!m.find()) {
             return null;
         }
-        String year = m.group(1);
+        int fy = Integer.parseInt(m.group(1));
         String tag = m.group(2);
-        return "FY".equals(tag) ? "FY" + year : year + tag;
+        if ("FY".equals(tag)) {
+            return "FY" + fy;
+        }
+        int fye = (fyeMonth >= 1 && fyeMonth <= 12) ? fyeMonth : 12;
+        int span = tag.startsWith("Q") ? 3 * Integer.parseInt(tag.substring(1))   // 财年第 n 季：3n 个月
+                : 6 * Integer.parseInt(tag.substring(1));                        // 财年第 n 个半年：6n 个月
+        int endMonth = fye + span;
+        int endYear = fy;
+        if (endMonth > 12) {
+            endMonth -= 12;
+        } else {
+            endYear = fy - 1; // 结束月未跨年：该期落在财年起始的自然年
+        }
+        if (tag.startsWith("Q")) {
+            return endYear + "Q" + ((endMonth - 1) / 3 + 1);
+        }
+        return endYear + "H" + (endMonth <= 6 ? 1 : 2);
     }
 
     /**

@@ -85,7 +85,7 @@ public class CompanyIntegrationTest {
 
     @Test
     public void test_filing_down() throws Exception {
-        String ticker = "83690" ;
+        String ticker = "00700" ;
         int result = runDownloadSkill(ticker, "2021,2022,2023,2024,2025,2026", 200);
         Assertions.assertEquals(0,result);
     }
