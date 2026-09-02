@@ -143,6 +143,12 @@
   .c-val { font-weight: 600; }
   .c-ratio { font-size: 11px; color: var(--muted); font-weight: 400; }
   .basis-hint { font-size: 12px; color: var(--muted); font-weight: 400; }
+  /* 分部构成中的下级分部区块 */
+  .comp-table tbody tr.seg-group:hover td { background: #eef2ff; }
+  .comp-table tbody tr.seg-group td { background: #eef2ff; }
+  .comp-table .seg-group-name { font-weight: 600; color: #4338ca; cursor: pointer; }
+  .comp-table .seg-group-name:hover { text-decoration: underline; }
+  .comp-table .seg-group-cell { padding: 0; }
 </style>
 </head>
 <body>
@@ -216,6 +222,7 @@ const $ = s => document.querySelector(s);
 const state = {
   ticker: null, dashboard: null, trendChart: null,
   compData: null, compCollapsed: new Set(),
+  segCollapsed: new Set(),            // 分部构成：下级分部分组折叠状态（key=分部编码）
   trendSeg: null, trendCode: null,   // 趋势弹窗上下文：trendSeg 非空=分部趋势
   compSeg: null, compCode: null      // 构成弹窗上下文：compSeg 非空=分部构成
 };
@@ -362,14 +369,18 @@ async function openTrend(code, name) {
   await loadTrend();
 }
 
-/** 分部趋势：segCode=分部编码，metricCode=分部指标编码（名称从仪表盘数据取）。 */
-async function openSegmentTrend(segCode, metricCode) {
+/**
+ * 分部趋势：segCode=分部编码，metricCode=分部指标编码。
+ * segName/metricName 可选（下级分部不在仪表盘卡片中，由构成表 data-* 传入）；缺省回退卡片/编码。
+ */
+async function openSegmentTrend(segCode, metricCode, segName, metricName) {
   const card = (state.dashboard.segmentCards || []).find(c => c.segmentCode === segCode);
   const p = card && card.points.find(x => x.code === metricCode);
   state.trendSeg = segCode;
   state.trendCode = metricCode;
-  $('#trendTitle').textContent =
-    `${card ? card.segmentName : segCode} · ${p ? p.name : metricCode}（${metricCode}）· 趋势`;
+  const sName = segName || (card ? card.segmentName : segCode);
+  const mName = metricName || (p ? p.name : metricCode);
+  $('#trendTitle').textContent = `${sName} · ${mName}（${metricCode}）· 趋势`;
   // 分部趋势仅季度口径，隐藏口径切换
   $('#trendPtype').closest('.ctrl').style.display = 'none';
   showTrendModal();
@@ -464,6 +475,7 @@ function showCompModal() {
   $('#compMsg').textContent = '加载中…';
   state.compData = null;
   state.compCollapsed = new Set();
+  state.segCollapsed = new Set();
 }
 
 async function openComposition(code, name) {
@@ -475,12 +487,12 @@ async function openComposition(code, name) {
   await loadComposition();
 }
 
-/** 分部构成：某业务分部全部指标 × 历年期间表格。 */
-async function openSegmentComposition(segCode) {
+/** 分部构成：某业务分部全部指标 × 历年期间表格（segName 可选，下级分部由构成表 data-* 传入）。 */
+async function openSegmentComposition(segCode, segName) {
   const card = (state.dashboard.segmentCards || []).find(c => c.segmentCode === segCode);
   state.compSeg = segCode;
   state.compCode = null;
-  $('#compTitle').textContent = `${card ? card.segmentName : segCode} · 分部指标历年`;
+  $('#compTitle').textContent = `${segName || (card ? card.segmentName : segCode)} · 分部指标历年`;
   $('#compQuarters').value = 16;
   showCompModal();
   await loadComposition();
@@ -506,8 +518,11 @@ async function loadComposition() {
       return;
     }
     $('#compMsg').classList.remove('show');
+    if (state.compSeg && d.segmentName) {
+      $('#compTitle').textContent = `${d.segmentName} · 分部指标历年`;
+    }
     $('#compBasis').textContent = state.compSeg
-      ? `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为同比(YoY%)`
+      ? `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为同比(YoY%)；蓝色分组为下级分部（点 ▼/▶ 折叠展开，点指标在新弹窗看趋势）`
       : `金额单位百万${d.currency ? ' ' + esc(d.currency) : ''}；单元格小字为${d.ratioBasis || '占比'}`;
     state.compData = d;
     if (state.compSeg) renderSegmentCompTable();
@@ -518,7 +533,7 @@ async function loadComposition() {
   }
 }
 
-/** 渲染分部历年表格：行=指标，列=期间（最新在左），单元格=值+同比。 */
+/** 渲染分部历年表格：行=指标，下级分部为可折叠分组树（▼/▶），列=期间（最新在左），单元格=值+同比。 */
 function renderSegmentCompTable() {
   const d = state.compData;
   if (!d) return;
@@ -526,22 +541,67 @@ function renderSegmentCompTable() {
     + '<th class="name-col">指标</th>'
     + d.periods.map(p => `<th>${esc(p)}</th>`).join('')
     + '</tr></thead><tbody>';
+  // 当前分部自身指标行
   for (const row of d.rows) {
-    html += `<tr><td class="name-cell"><span class="metric-link" data-code="${esc(row.code)}" data-name="${esc(row.name)}" title="点击查看「${esc(row.name)}」趋势折线图">${esc(row.name)}</span></td>`
-      + row.cells.map(c => {
-          const val = c.value === null || c.value === undefined ? '—'
-            : (row.unit === 'percent' ? Number(c.value).toFixed(1) + '%' : fmtMoney(c.value));
-          let yoy = '';
-          if (c.yoy !== null && c.yoy !== undefined) {
-            const n = Number(c.yoy);
-            yoy = `<div class="c-yoy ${n >= 0 ? 'up' : 'down'}">${n >= 0 ? '+' : ''}${n.toFixed(1)}%</div>`;
-          }
-          return `<td><div class="c-val">${val}</div>${yoy}</td>`;
-        }).join('')
-      + '</tr>';
+    html += segMetricRowHtml(row, null, null, 12);
   }
+  // 下级业务分部：整棵子树内联折叠/展开（不覆盖页面）
+  html += segSectionsHtml(d.children || [], 1, d.periods.length);
   html += '</tbody></table>';
   $('#compTree').innerHTML = html;
+}
+
+/** 递归渲染下级分部分组：分组头（▼/▶ + 分部名，点击折叠/展开）+ 展开时的指标行与更深层级分组。 */
+function segSectionsHtml(sections, depth, colCount) {
+  let html = '';
+  for (const sec of sections) {
+    const collapsed = state.segCollapsed.has(sec.segmentCode);
+    const groupPad = 12 + (depth - 1) * 18;
+    const metricPad = groupPad + 18;
+    html += `<tr class="seg-group"><td class="name-cell" style="padding-left:${groupPad}px">`
+      + `<span class="toggle" data-toggle="${esc(sec.segmentCode)}">${collapsed ? '▶' : '▼'}</span>`
+      + `<span class="seg-group-name" data-toggle="${esc(sec.segmentCode)}" `
+      + `title="点击折叠/展开下级分部「${esc(sec.segmentName)}」">${esc(sec.segmentName)}</span></td>`
+      + `<td class="seg-group-cell" colspan="${colCount}"></td></tr>`;
+    if (!collapsed) {
+      for (const row of sec.rows) {
+        html += segMetricRowHtml(row, sec.segmentCode, sec.segmentName, metricPad);
+      }
+      html += segSectionsHtml(sec.children || [], depth + 1, colCount);
+    }
+  }
+  return html;
+}
+
+/** 折叠/展开某下级分部分组（重绘保持状态）。 */
+function toggleSeg(code) {
+  if (state.segCollapsed.has(code)) state.segCollapsed.delete(code);
+  else state.segCollapsed.add(code);
+  renderSegmentCompTable();
+}
+
+/**
+ * 分部构成表的一行指标：segCode 非空时为下级分部指标（data-seg/data-segname 指向该下级分部，
+ * 点击趋势按下级分部取数，折线图在独立趋势弹窗中打开）；indentPx 为左缩进。
+ */
+function segMetricRowHtml(row, segCode, segName, indentPx) {
+  const segAttrs = segCode
+    ? ` data-seg="${esc(segCode)}" data-segname="${esc(segName || '')}"` : '';
+  const pad = ` style="padding-left:${indentPx}px"`;
+  const cells = row.cells.map(c => {
+    const val = c.value === null || c.value === undefined ? '—'
+      : (row.unit === 'percent' ? Number(c.value).toFixed(1) + '%' : fmtMoney(c.value));
+    let yoy = '';
+    if (c.yoy !== null && c.yoy !== undefined) {
+      const n = Number(c.yoy);
+      yoy = `<div class="c-yoy ${n >= 0 ? 'up' : 'down'}">${n >= 0 ? '+' : ''}${n.toFixed(1)}%</div>`;
+    }
+    return `<td><div class="c-val">${val}</div>${yoy}</td>`;
+  }).join('');
+  return `<tr><td class="name-cell"${pad}>`
+    + `<span class="metric-link"${segAttrs} data-code="${esc(row.code)}" data-name="${esc(row.name)}" `
+    + `title="点击查看「${esc(row.name)}」趋势折线图（新弹窗）">${esc(row.name)}</span></td>`
+    + cells + '</tr>';
 }
 
 /** 渲染分层表格：行=分层指标（可折叠），列=期间（最新在左），单元格=值+占比。 */
@@ -601,13 +661,24 @@ $('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') load
 $('#trendQuarters').addEventListener('change', loadTrend);
 $('#trendPtype').addEventListener('change', () => { if (!state.trendSeg) loadTrend(); });
 $('#compQuarters').addEventListener('change', loadComposition);
-// 构成表指标名点击 → 趋势折线图（事件委托，表格重绘后仍生效）；
-// 分部构成走分部趋势，指标构成走指标趋势
+// 构成表点击（事件委托，表格重绘后仍生效）：
+// 下级分部分组（▼/▶ 或分组名）→ 原地折叠/展开，不覆盖页面；
+// 指标名 → 趋势折线图在独立趋势弹窗中叠加打开：分部构成走分部趋势（下级分部按 data-seg 取数），
+// 指标构成走指标趋势
 $('#compTree').addEventListener('click', e => {
+  const tog = e.target.closest('[data-toggle]');
+  if (tog && state.compSeg) {
+    toggleSeg(tog.dataset.toggle);
+    return;
+  }
   const el = e.target.closest('.metric-link');
   if (!el) return;
-  if (state.compSeg) openSegmentTrend(state.compSeg, el.dataset.code);
-  else openTrend(el.dataset.code, el.dataset.name);
+  if (state.compSeg) {
+    openSegmentTrend(el.dataset.seg || state.compSeg, el.dataset.code,
+      el.dataset.segname || null, el.dataset.name);
+  } else {
+    openTrend(el.dataset.code, el.dataset.name);
+  }
 });
 document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click', () => {
   $('#' + b.dataset.close).classList.remove('show');

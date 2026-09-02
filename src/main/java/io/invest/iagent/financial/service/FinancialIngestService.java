@@ -91,12 +91,13 @@ public class FinancialIngestService {
 
             // 业务分部数据提取（参照 segment-financial-report skill，解析本地财报文件，best-effort）：
             // 财报文件来自 FinancialReportService 下载到 workspace/financial_reports 的产物，
-            // 且 skill 存在该公司分部配置；未下载财报或无配置时提示跳过
+            // 且 skill 存在该公司分部配置；未下载财报或无配置时提示跳过。
+            // 传入本次三大表覆盖期间，仅解析对应财报文件（含上年同期对比表），避免全量扫描历史文件
             int segmentCount = 0;
             int segmentValueCount = 0;
             if (segmentIngestor != null) {
                 try {
-                    SegmentIngestor.SegmentResult seg = segmentIngestor.ingest(bareTicker);
+                    SegmentIngestor.SegmentResult seg = segmentIngestor.ingest(bareTicker, coveredPeriodList);
                     warnings.addAll(seg.warnings());
                     if (seg.extracted()) {
                         segmentCount = seg.segments();

@@ -26,9 +26,12 @@ _REPORT_FILE_PATTERN = re.compile(
 class FilingContext:
     """Filing period context derived from the parent directory name."""
 
-    def __init__(self, year: int = 0, period: str = ""):
+    def __init__(self, year: int = 0, period: str = "", report_type: str = ""):
         self.year = year
         self.period = (period or "").upper()
+        # 报告类型（ANNUAL/INTERIM/QUARTERLY/10-K/10-Q/6-K/20-F），用于单位兜底等推断；
+        # 旧目录布局拿不到类型时为空串
+        self.reportType = (report_type or "").upper()
 
     @staticmethod
     def empty() -> "FilingContext":
@@ -68,17 +71,17 @@ class FilingContext:
         rtype = m.group("type").upper()
         if rtype in ("ANNUAL", "10-K", "20-F"):
             # 年报多在次年 3-4 月发布，上半年发布归上一财年
-            return FilingContext(year - 1 if month <= 6 else year, "FY")
+            return FilingContext(year - 1 if month <= 6 else year, "FY", rtype)
         if rtype == "INTERIM":
-            return FilingContext(year, "Q2")
+            return FilingContext(year, "Q2", rtype)
         # 季报：按发布月反推最近结束的季度（与 futu-filing _infer_us_quarter 兜底一致）
         if month in (1, 2, 3):
-            return FilingContext(year - 1, "Q4")
+            return FilingContext(year - 1, "Q4", rtype)
         if month in (4, 5, 6):
-            return FilingContext(year, "Q1")
+            return FilingContext(year, "Q1", rtype)
         if month in (7, 8, 9):
-            return FilingContext(year, "Q2")
-        return FilingContext(year, "Q3")
+            return FilingContext(year, "Q2", rtype)
+        return FilingContext(year, "Q3", rtype)
 
     def currentQuarter(self) -> str:
         if self.year <= 0:

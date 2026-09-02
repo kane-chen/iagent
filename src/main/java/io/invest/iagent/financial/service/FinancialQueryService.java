@@ -206,11 +206,18 @@ public class FinancialQueryService {
     /** 分部构成表行：某指标在各期间的值（与 periods 顺序对齐）。 */
     public record SegmentMetricRow(String code, String name, String unit, List<SegmentCell> cells) {}
 
-    /** 分部构成结果：某业务分部全部指标 × 历年期间表格（periods 逆序，最新在前）。 */
+    /**
+     * 下级分部区块（可嵌套）：子分部编码/中文名/层级 + 该分部各指标行（期间与外层 periods 对齐）
+     * + 其直属下级分部区块（整棵子树，供前端折叠/展开，无需逐层请求）。
+     */
+    public record SegmentSection(String segmentCode, String segmentName, int level,
+                                 List<SegmentMetricRow> rows, List<SegmentSection> children) {}
+
+    /** 分部构成结果：某业务分部全部指标 × 历年期间表格（periods 逆序，最新在前），含直属下级分部区块。 */
     public record SegmentCompositionResult(String ticker, String segmentCode, String segmentName,
                                            String currency, List<String> periods,
                                            boolean hasData, String message, List<String> warnings,
-                                           List<SegmentMetricRow> rows) {}
+                                           List<SegmentMetricRow> rows, List<SegmentSection> children) {}
 
     /** 仪表盘核心指标卡片定义：key/标题/主指标编码/附属指标编码。 */
     private record CardSpec(String key, String title, String code, List<String> itemCodes) {}
@@ -524,6 +531,7 @@ public class FinancialQueryService {
     /**
      * Web 分部构成：某业务分部全部指标 × 最近 N 期（默认 16，含季报与 FY 年报）的历年表格，
      * 期间逆序（最新在前），单元格为指标值与同比；行按指标目录顺序排列，全无值的行剪枝。
+     * 同时附带直属下级业务分部区块（各自指标行共用同一期间窗），下级分部可继续下钻/查看趋势。
      */
     public SegmentCompositionResult segmentComposition(String ticker, String segmentCode, Integer quarters) {
         List<String> warnings = new ArrayList<>();
@@ -533,16 +541,24 @@ public class FinancialQueryService {
         String segName = seg == null ? segmentCode : segmentDisplayName(seg);
         CompanyDO company = repository.findCompany(bare);
 
-        List<SegmentValueDO> values = repository.querySegmentValues(bare, null).stream()
+        // 全部分部值一次性取出，当前分部与下级分部各自过滤
+        List<SegmentValueDO> allValues = repository.querySegmentValues(bare, null);
+        List<SegmentValueDO> values = allValues.stream()
                 .filter(v -> segmentCode.equals(v.getSegmentCode()))
                 .toList();
-        if (values.isEmpty()) {
+        // 期间窗以当前分部及其整棵下级子树的并集为准：最新季报可能只披露下级分部、缺集团合计行
+        //（如 BABA 最新期缺淘天/AIDC 合计行），仅按当前分部取期间会把下级已有的最新期整列丢掉
+        Set<String> subtreeCodes = collectSubtreeSegmentCodes(segments, segmentCode);
+        List<SegmentValueDO> windowValues = allValues.stream()
+                .filter(v -> subtreeCodes.contains(v.getSegmentCode()))
+                .toList();
+        if (windowValues.isEmpty()) {
             return new SegmentCompositionResult(bare, segmentCode, segName, companyCurrency(company), List.of(),
-                    false, "未查询到分部「" + segName + "」的数据。", warnings, List.of());
+                    false, "未查询到分部「" + segName + "」的数据。", warnings, List.of(), List.of());
         }
 
         int n = quarters == null ? 16 : Math.max(1, Math.min(40, quarters));
-        List<String> asc = values.stream()
+        List<String> asc = windowValues.stream()
                 .map(SegmentValueDO::getFiscalPeriod).distinct()
                 .filter(p -> FiscalPeriod.parse(p) != null)
                 .sorted(Comparator.comparingInt(p -> FiscalPeriod.parse(p).sortKey()))
@@ -552,19 +568,76 @@ public class FinancialQueryService {
         List<String> periods = new ArrayList<>(recentAsc);
         Collections.reverse(periods);
 
+        String currency = windowValues.stream().map(SegmentValueDO::getCurrency)
+                .filter(c -> c != null && !c.isBlank()).findFirst().orElse("");
+        if (currency.isBlank()) {
+            currency = companyCurrency(company);
+        }
+
+        List<SegmentMetricRow> rows = buildSegmentMetricRows(values, periods);
+
+        // 下级业务分部首整棵子树（parent 链接递归，按目录顺序）：共用同一期间窗，
+        // 前端据此折叠/展开多层分部，无需逐层请求覆盖页面
+        List<SegmentSection> children = buildSegmentSections(segments, allValues, periods, segmentCode);
+
+        return new SegmentCompositionResult(bare, segmentCode, segName, currency, periods,
+                true, null, warnings, rows, children);
+    }
+
+    /** 收集 rootCode 及其整棵下级子树的分部编码（沿 parentCode 链接递归）。 */
+    private Set<String> collectSubtreeSegmentCodes(List<SegmentDO> segments, String rootCode) {
+        Set<String> codes = new LinkedHashSet<>();
+        codes.add(rootCode);
+        boolean added = true;
+        while (added) {
+            added = false;
+            for (SegmentDO s : segments) {
+                if (s.getParentCode() != null && codes.contains(s.getParentCode())
+                        && codes.add(s.getSegmentCode())) {
+                    added = true;
+                }
+            }
+        }
+        return codes;
+    }
+
+    /**
+     * 递归构建下级分部区块树：取 parentCode = parentCode 的直属子分部（按目录顺序，剔除合计行），
+     * 各自挂载同一期间窗的指标行并递归其子分部；自身无指标行但有下级的纯分组节点也保留。
+     */
+    private List<SegmentSection> buildSegmentSections(List<SegmentDO> segments,
+                                                      List<SegmentValueDO> allValues,
+                                                      List<String> periods, String parentCode) {
+        List<SegmentSection> result = new ArrayList<>();
+        segments.stream()
+                .filter(s -> parentCode.equals(s.getParentCode()) && !isTotalSegment(s.getSegmentCode()))
+                .sorted(Comparator.comparingInt(SegmentDO::getSortOrder))
+                .forEach(child -> {
+                    List<SegmentValueDO> childValues = allValues.stream()
+                            .filter(v -> child.getSegmentCode().equals(v.getSegmentCode()))
+                            .toList();
+                    List<SegmentMetricRow> childRows = buildSegmentMetricRows(childValues, periods);
+                    List<SegmentSection> grandChildren =
+                            buildSegmentSections(segments, allValues, periods, child.getSegmentCode());
+                    if (!childRows.isEmpty() || !grandChildren.isEmpty()) {
+                        result.add(new SegmentSection(child.getSegmentCode(),
+                                segmentDisplayName(child), child.getLevel(), childRows, grandChildren));
+                    }
+                });
+        return result;
+    }
+
+    /**
+     * 构建某分部在指定期间窗内的指标行：行按指标目录顺序排列，全部期间无值的行剪枝。
+     * 期间列由调用方给定（当前分部与下级分部共用同一期间窗，保证列对齐）。
+     */
+    private List<SegmentMetricRow> buildSegmentMetricRows(List<SegmentValueDO> segValues, List<String> periods) {
         // period -> metricCode -> 值
         Map<String, Map<String, SegmentValueDO>> grid = new LinkedHashMap<>();
         Set<String> metricCodes = new LinkedHashSet<>();
-        String currency = "";
-        for (SegmentValueDO v : values) {
+        for (SegmentValueDO v : segValues) {
             grid.computeIfAbsent(v.getFiscalPeriod(), k -> new LinkedHashMap<>()).put(v.getMetricCode(), v);
             metricCodes.add(v.getMetricCode());
-            if (currency.isBlank() && v.getCurrency() != null) {
-                currency = v.getCurrency();
-            }
-        }
-        if (currency.isBlank()) {
-            currency = companyCurrency(company);
         }
         List<String> orderedMetrics = metricCodes.stream()
                 .sorted(Comparator.comparingInt(c -> {
@@ -590,8 +663,7 @@ public class FinancialQueryService {
                         d == null ? "million" : d.getUnit(), cells));
             }
         }
-        return new SegmentCompositionResult(bare, segmentCode, segName, currency, periods,
-                true, null, warnings, rows);
+        return rows;
     }
 
     /** 利润表构成中不展示的指标（EBITDA 类中间口径，干扰净利润/营业利润的构成阅读）。 */

@@ -9,6 +9,7 @@ import io.invest.iagent.financial.model.MetricSource;
 import io.invest.iagent.financial.model.SegmentDO;
 import io.invest.iagent.financial.model.SegmentValueDO;
 import io.invest.iagent.financial.repository.FinancialRepository;
+import io.invest.iagent.rag.filing.model.FiscalPeriod;
 import io.invest.iagent.utils.ProcessRunner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -51,6 +53,14 @@ public class SegmentIngestor {
     private static final String SCRIPT_REL = "skills/segment-financial-report/scripts/extract_segments.py";
     /** 引擎期间标签 2025FY / 2025Q1 / 2025H1 */
     private static final Pattern PERIOD_RE = Pattern.compile("(\\d{4})(FY|Q[1-4]|H[12])");
+    /**
+     * 下载产物文件名：{@code <ticker>_<yyyy-MM-dd|yyyyMMdd>_<ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|20-F>.<ext>}。
+     * 与 Python {@code FilingContext._REPORT_FILE_PATTERN} 保持一致。
+     */
+    private static final Pattern REPORT_FILE_RE = Pattern.compile(
+            "^[^_]+_(?<date>\\d{4}-\\d{2}-\\d{2}|\\d{8})_"
+                    + "(?<type>ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|20-F)\\.(pdf|html?)$",
+            Pattern.CASE_INSENSITIVE);
     /** 引擎指标编码 → 标准指标编码（其余编码与 catalog 一致） */
     private static final Map<String, String> METRIC_CODE_MAP = Map.of(
             "RD_EXPENSES", "RD_EXPENSE");
@@ -69,19 +79,37 @@ public class SegmentIngestor {
      */
     public record SegmentResult(boolean extracted, int segments, int values, List<String> warnings) {}
 
+    /** 兼容入口：不传覆盖期间，解析全部已下载财报文件。 */
+    public SegmentResult ingest(String ticker) {
+        return ingest(ticker, null);
+    }
+
     /**
      * 执行分部数据提取与入库。
      *
-     * @param ticker 裸 ticker（BABA / 00700，不带市场前缀）
+     * @param ticker            裸 ticker（BABA / 00700，不带市场前缀）
+     * @param coveredPeriodList 本次三大表采集覆盖的规范期间（自然年口径，如 2025Q1 / FY2025）；
+     *                          非空时仅解析期间落在该集合内的财报文件（含其上年同期对比表），
+     *                          null/空表示解析全部已下载财报文件
      */
-    public SegmentResult ingest(String ticker) {
+    public SegmentResult ingest(String ticker, List<String> coveredPeriodList) {
         List<String> warnings = new ArrayList<>();
+        // 财年结束月（三大表采集时写入 fin_company）：文件名期间标签 → 自然年口径，与引擎输出口径一致
+        int fyeMonth = resolveFyeMonth(ticker);
         // 财报文件来自 FinancialReportService 下载产物：workspace/financial_reports/<市场>/<ticker>/
         Path reportBaseDir = Path.of(properties.getReportBaseDir()).toAbsolutePath();
         List<Path> reportFiles = discoverReportFiles(reportBaseDir, ticker);
+        if (coveredPeriodList != null && !coveredPeriodList.isEmpty()) {
+            int before = reportFiles.size();
+            reportFiles = filterReportsByPeriods(reportFiles, new HashSet<>(coveredPeriodList), fyeMonth);
+            log.info("Segment report filter: ticker={}, coveredPeriods={}, report files {} -> {}",
+                    ticker, coveredPeriodList.size(), before, reportFiles.size());
+        }
         if (reportFiles.isEmpty()) {
             warnings.add("未找到已下载的财报文件（" + reportBaseDir + " 下无 " + ticker
-                    + " 的 PDF/HTML 财报），请先下载财报（FinancialReportService#download）。");
+                    + " 的 PDF/HTML 财报"
+                    + (coveredPeriodList != null && !coveredPeriodList.isEmpty() ? "落在指定期间内" : "")
+                    + "），请先下载财报（FinancialReportService#download）。");
             log.info("Segment ingest skipped for {}: no report files under {}", ticker, reportBaseDir);
             return new SegmentResult(false, 0, 0, warnings);
         }
@@ -119,8 +147,7 @@ public class SegmentIngestor {
         try {
             JSONArray records = JSON.parseArray(Files.readString(output, StandardCharsets.UTF_8));
             // 引擎按公司财年结束月输出财年口径标签（如 BABA 截至 2026-06 的季度为 2027Q1），
-            // 取三大表采集时写入的财年结束月，统一转换为自然年标签（2026Q2）
-            int fyeMonth = resolveFyeMonth(ticker);
+            // 用开头解析的财年结束月，统一转换为自然年标签（2026Q2）
             // segmentCode -> 分部定义（LinkedHashMap 保留首次出现顺序 = 引擎树序）。
             // 分部支持多层结构（如 BABA：TAOBAO_TMALL → CHINA_COMMERCE_RETAIL → CUSTOMER_MANAGEMENT），
             // 同一分部跨多条记录出现，这里归并定义：名称补缺、父编码优先取非空——
@@ -240,6 +267,64 @@ public class SegmentIngestor {
             log.warn("扫描财报目录失败: {}, {}", reportBaseDir, e.getMessage());
         }
         return files;
+    }
+
+    /**
+     * 按覆盖期间过滤财报文件：仅保留自然年期间落在 coveredCanonical 内的财报。
+     * 每份财报同时披露当期与上年同期对比表，故当期或去年同期任一命中即保留；
+     * 文件名无法解析期间时保守保留（避免误删）。
+     */
+    static List<Path> filterReportsByPeriods(List<Path> files, Set<String> coveredCanonical, int fyeMonth) {
+        List<Path> kept = new ArrayList<>();
+        for (Path f : files) {
+            String period = reportNaturalPeriod(f.getFileName().toString(), fyeMonth);
+            if (period == null) {
+                kept.add(f);
+                continue;
+            }
+            if (coveredCanonical.contains(period)) {
+                kept.add(f);
+                continue;
+            }
+            // 财报含上年同期对比表：去年同期命中覆盖期间时也需保留
+            FiscalPeriod fp = FiscalPeriod.parse(period);
+            if (fp != null && fp.yearAgo() != null
+                    && coveredCanonical.contains(fp.yearAgo().canonical())) {
+                kept.add(f);
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * 解析下载文件名对应的<strong>自然年</strong>规范期间（与三大表 futu 口径一致，如 2025Q3 / FY2025）。
+     * 报告通常在期末后 1–2 个月发布，按发布月反推其覆盖的自然季度；年报按财年结束月定自然年
+     *（财年结束月 ≥6 如 12 月：年报次年发布，自然年为发布年−1；≤5 如 3 月：同年发布，自然年为发布年）。
+     * 无法解析返回 null。
+     */
+    static String reportNaturalPeriod(String fileName, int fyeMonth) {
+        Matcher m = REPORT_FILE_RE.matcher(fileName == null ? "" : fileName.trim());
+        if (!m.find()) {
+            return null;
+        }
+        String date = m.group("date");
+        int year = Integer.parseInt(date.substring(0, 4));
+        int month = date.contains("-") ? Integer.parseInt(date.substring(5, 7))
+                : Integer.parseInt(date.substring(4, 6));
+        String type = m.group("type").toUpperCase(Locale.ROOT);
+        if (type.equals("ANNUAL") || type.equals("10-K") || type.equals("20-F")) {
+            int endYear = fyeMonth >= 6 ? year - 1 : year;
+            return "FY" + endYear;
+        }
+        // 中报/季报：按发布月反推最近结束的自然季度（中报 H1 期末 6 月，多在 8–9 月发布，落在 Q2 桶）
+        if (month <= 3) {
+            return (year - 1) + "Q4";
+        } else if (month <= 6) {
+            return year + "Q1";
+        } else if (month <= 9) {
+            return year + "Q2";
+        }
+        return year + "Q3";
     }
 
     /** 取公司财年结束月（三大表采集时写入 fin_company），查询失败默认 12（自然年）。 */

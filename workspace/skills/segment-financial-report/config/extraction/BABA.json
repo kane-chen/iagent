@@ -10,14 +10,14 @@
     {
       "segmentCode": "TAOBAO_TMALL",
       "segmentName": "Taobao and Tmall Group",
-      "aliases": ["淘宝天猫", "淘天集团", "Taobao & Tmall", "Taobao and Tmall","Alibaba China E-commerce Group","China commerce"],
+      "aliases": ["淘宝天猫", "淘天集团", "Taobao & Tmall", "Taobao and Tmall","Alibaba China E-commerce Group","China commerce","Alibaba E-commerce Group"],
       "level": 1,
       "parentCode": null
     },
     {
       "segmentCode": "CHINA_COMMERCE_RETAIL",
       "segmentName": "China commerce retail",
-      "aliases": ["中国商业零售","E-commerce","China commerce retail"],
+      "aliases": ["中国商业零售","E-commerce","China commerce retail","China E-commerce"],
       "level": 2,
       "parentCode": "TAOBAO_TMALL"
     },
@@ -52,14 +52,14 @@
     {
       "segmentCode": "INTERNATIONAL_E_COMMERCE",
       "segmentName": "International e-commerce",
-      "aliases": ["International E-commerce"],
+      "aliases": ["International E-commerce","国际商业零售","International commerce retail"],
       "level": 2,
       "parentCode": "TAOBAO_TMALL"
     },
     {
       "segmentCode": "GLOBAL_WHOLESALE",
       "segmentName": "Global wholesale",
-      "aliases": ["Global Wholesale"],
+      "aliases": ["Global Wholesale","国际商业批发","International commerce wholesale"],
       "level": 2,
       "parentCode": "TAOBAO_TMALL"
     },

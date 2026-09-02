@@ -132,6 +132,12 @@ class PdfFileSegmentParser:
         table_id = table_json.get("tableId", "unknown")
         currency = table_json.get("currency")
         unit = table_json.get("unit")
+        # 单位关键字读不到（港股 PDF 中文乱码）时按报告类型兜底：
+        # 年报/中报财务报表惯例为千元，季度业绩公告为百万元
+        if not unit:
+            unit = self._fallback_unit(context)
+            logger.debug("Unit undetectable in %s, fallback by reportType=%s → %s",
+                         table_id, getattr(context, "reportType", ""), unit)
         data_rows_node = table_json.get("dataRows") or []
         if not isinstance(data_rows_node, list) or len(data_rows_node) == 0:
             return 0
@@ -143,6 +149,18 @@ class PdfFileSegmentParser:
             logger.warning("No handler registered for layout: %s", mapping.layout)
             return 0
         return handler.apply(mapping, data_rows, table_id, currency, unit, context, bucket)
+
+    @staticmethod
+    def _fallback_unit(context) -> str:
+        """单位关键字读不到时按报告类型兜底（港股披露惯例）。
+
+        年报(ANNUAL)/中报(INTERIM)财务报表金额单位为千元（人民幣千元）；
+        季度业绩公告(QUARTERLY)为百万元。其余/未知回退 million（与历史默认一致）。
+        """
+        rt = (getattr(context, "reportType", "") or "").upper()
+        if rt in ("ANNUAL", "INTERIM"):
+            return "thousand"
+        return "million"
 
     @staticmethod
     def _filing_period_matches(mapping, context: FilingContext) -> bool:

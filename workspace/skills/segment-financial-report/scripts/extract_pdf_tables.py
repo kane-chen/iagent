@@ -216,7 +216,9 @@ def get_table_context(page_text):
     # 港股 PDF 常见形式：（人民幣百萬元） / （人民幣千元） / (in millions) / (in thousands)
     text = page_text or ""
     lower = text.lower()
-    unit = "million"
+    # 读不到单位关键字时（港股 PDF 中文字体常乱码，整页为 (cid:xxx)）返回 None，
+    # 由调用方（pdf_parser）按报告类型兜底，不能在这里武断默认 million
+    unit = None
     if "billion" in lower or "十亿" in text or "十億" in text:
         unit = "billion"
     elif "百萬" in text or "百万" in text or "million" in lower:
