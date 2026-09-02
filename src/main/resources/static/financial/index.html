@@ -96,6 +96,8 @@
     justify-content: center; align-items: flex-start; padding: 40px 16px; overflow-y: auto;
   }
   .modal-mask.show { display: flex; }
+  /* 趋势弹窗从构成弹窗内打开时叠加在其上（关闭后回到构成表） */
+  .modal-mask.above { z-index: 200; }
   .modal {
     background: #fff; border-radius: 14px; width: 100%; max-width: 1080px; padding: 22px 24px;
     box-shadow: 0 12px 40px rgba(0,0,0,.2);
@@ -135,6 +137,8 @@
   .comp-table tbody tr.target .name-cell { box-shadow: inset 3px 0 0 var(--accent), 2px 0 6px -4px rgba(0,0,0,.15); }
   .comp-table .toggle { display: inline-block; width: 16px; text-align: center; color: var(--muted); cursor: pointer; user-select: none; }
   .comp-table .toggle.dot { cursor: default; }
+  .comp-table .metric-link { cursor: pointer; color: var(--text); }
+  .comp-table .metric-link:hover { color: var(--accent); text-decoration: underline; }
   .comp-table .name-cell em { color: var(--muted); font-style: normal; font-size: 11px; margin-left: 4px; font-weight: 400; }
   .c-val { font-weight: 600; }
   .c-ratio { font-size: 11px; color: var(--muted); font-weight: 400; }
@@ -326,16 +330,23 @@ function renderSegmentCards(d) {
         </span>
       </div>`).join('');
     return `<div class="card seg-card">
-      <div class="card-title"><span class="name">${esc(card.segmentName)}</span><span class="code">分部</span></div>
+      <div class="card-title"><span class="name">${esc(card.segmentName)}</span><span class="code">分部${card.period ? ' · ' + esc(card.period) : ''}</span></div>
       <div class="item-rows">${rows}</div>
     </div>`;
   }).join('');
-  return `<div class="section-title"><h3>业务分部<span class="section-sub">最近季度 ${esc(d.segmentCards[0].period)} · 收入 / 毛利 / 利润（点击趋势看折线，构成看历年）</span></h3></div>
+  // 各分部取自身最新一期，期间可能不一致：全部一致则显示该季度，否则列出各期间
+  const segPeriods = [...new Set(d.segmentCards.map(c => c.period).filter(Boolean))].sort();
+  const periodText = segPeriods.length === 1
+    ? `最近季度 ${esc(segPeriods[0])}`
+    : `各分部最新一期（${segPeriods.map(esc).join(' / ')}，缺失分部为最新季报未披露）`;
+  return `<div class="section-title"><h3>业务分部<span class="section-sub">${periodText} · 收入 / 毛利 / 利润（点击趋势看折线，构成看历年）</span></h3></div>
     <div class="cards seg-cards">${cards}</div>`;
 }
 
 // ---------- 趋势 ----------
 function showTrendModal() {
+  // 构成弹窗已打开时，趋势弹窗叠加其上（关闭后回到构成表，折叠状态保留）
+  $('#trendModal').classList.toggle('above', $('#compModal').classList.contains('show'));
   $('#trendModal').classList.add('show');
   $('#trendChart').style.display = 'none';
   $('#trendMsg').classList.add('show');
@@ -516,7 +527,7 @@ function renderSegmentCompTable() {
     + d.periods.map(p => `<th>${esc(p)}</th>`).join('')
     + '</tr></thead><tbody>';
   for (const row of d.rows) {
-    html += `<tr><td class="name-cell">${esc(row.name)}</td>`
+    html += `<tr><td class="name-cell"><span class="metric-link" data-code="${esc(row.code)}" data-name="${esc(row.name)}" title="点击查看「${esc(row.name)}」趋势折线图">${esc(row.name)}</span></td>`
       + row.cells.map(c => {
           const val = c.value === null || c.value === undefined ? '—'
             : (row.unit === 'percent' ? Number(c.value).toFixed(1) + '%' : fmtMoney(c.value));
@@ -551,7 +562,8 @@ function renderCompTable() {
         + (hasKids
             ? `<span class="toggle" onclick="toggleComp('${n.code}')">${collapsed ? '▶' : '▼'}</span>`
             : '<span class="toggle dot">·</span>')
-        + esc(n.name) + (n.derived ? '<em>[派生]</em>' : '')
+        + `<span class="metric-link" data-code="${esc(n.code)}" data-name="${esc(n.name)}" title="点击查看「${esc(n.name)}」趋势折线图">${esc(n.name)}</span>`
+        + (n.derived ? '<em>[派生]</em>' : '')
         + '</td>'
         + n.cells.map(c => {
             // percent 行（如税率）值本身为百分比；其余为百万金额
@@ -589,11 +601,23 @@ $('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') load
 $('#trendQuarters').addEventListener('change', loadTrend);
 $('#trendPtype').addEventListener('change', () => { if (!state.trendSeg) loadTrend(); });
 $('#compQuarters').addEventListener('change', loadComposition);
+// 构成表指标名点击 → 趋势折线图（事件委托，表格重绘后仍生效）；
+// 分部构成走分部趋势，指标构成走指标趋势
+$('#compTree').addEventListener('click', e => {
+  const el = e.target.closest('.metric-link');
+  if (!el) return;
+  if (state.compSeg) openSegmentTrend(state.compSeg, el.dataset.code);
+  else openTrend(el.dataset.code, el.dataset.name);
+});
 document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click', () => {
   $('#' + b.dataset.close).classList.remove('show');
+  $('#' + b.dataset.close).classList.remove('above');
 }));
 document.querySelectorAll('.modal-mask').forEach(m => m.addEventListener('click', e => {
-  if (e.target === m) m.classList.remove('show');
+  if (e.target === m) {
+    m.classList.remove('show');
+    m.classList.remove('above');
+  }
 }));
 window.addEventListener('resize', () => { if (state.trendChart) state.trendChart.resize(); });
 

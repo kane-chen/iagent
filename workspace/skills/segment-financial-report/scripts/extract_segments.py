@@ -117,11 +117,15 @@ def run_python_engine(ticker: str,
                       output_json: Path,
                       flat: bool,
                       fiscal_year_start: str | None,
-                      fiscal_year_end: str | None) -> Path:
+                      fiscal_year_end: str | None,
+                      files: list[Path] | None = None) -> Path:
     """纯 Python 引擎：HTML + PDF。
 
-    使用 FinancialExtractionService.extractSegments() 批量提取，
-    内部按文件扩展名自动路由到 HtmlFileSegmentParser / PdfFileSegmentParser。
+    默认使用 FinancialExtractionService.extractSegments() 批量提取
+    （内部按文件扩展名自动路由到 HtmlFileSegmentParser / PdfFileSegmentParser）；
+    传入 files 时改为 extractFromFiles()：文件由调用方显式指定（如 Java 侧
+    FinancialReportService 下载到 workspace/financial_reports/ 的产物），
+    跳过 portfolio/<TICKER>/filings/ 文件过滤器。
     """
     _validate_ticker(ticker)
     if not workspace.exists():
@@ -135,7 +139,10 @@ def run_python_engine(ticker: str,
     from engine.extraction_service import FinancialExtractionService  # type: ignore
 
     svc = FinancialExtractionService(companyCode=ticker, workspace=workspace)
-    all_segments = svc.extractSegments(ticker, fiscal_year_start, fiscal_year_end)
+    if files:
+        all_segments = svc.extractFromFiles(files, ticker)
+    else:
+        all_segments = svc.extractSegments(ticker, fiscal_year_start, fiscal_year_end)
 
     if not all_segments:
         print(f"[extract] 未找到 {ticker} 的分部财务数据（workspace={workspace}）", file=sys.stderr)
@@ -290,6 +297,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fiscal-year-start", default=None, help="起始财年，例如 2022")
     parser.add_argument("--fiscal-year-end", default=None, help="结束财年，例如 2025")
     parser.add_argument(
+        "--files",
+        nargs="*",
+        default=None,
+        help="显式指定待提取财报文件路径（PDF/HTML，可多个），跳过 portfolio 文件过滤器；"
+             "用于直接解析 FinancialReportService 下载到 workspace/financial_reports/ 的产物",
+    )
+    parser.add_argument(
         "--excel",
         action="store_true",
         help="提取后直接生成 Excel（一步到位，无需再调用 generate_segment_excel.py）。"
@@ -344,6 +358,7 @@ def main() -> int:
             print(str(cached_path))
             return 0
 
+    explicit_files = [Path(f) for f in args.files] if args.files else None
     try:
         json_path = run_python_engine(
             ticker=args.ticker,
@@ -352,6 +367,7 @@ def main() -> int:
             flat=flat,
             fiscal_year_start=args.fiscal_year_start,
             fiscal_year_end=args.fiscal_year_end,
+            files=explicit_files,
         )
     except SystemExit:
         raise  # let explicit sys.exit pass through

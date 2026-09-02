@@ -46,6 +46,7 @@ src/main/resources/application.properties
 # workspace
 workspace/agents
 workspace/portfolio
+workspace/financial_reports
 workspace/excels
 workspace/models
 workspace/logs

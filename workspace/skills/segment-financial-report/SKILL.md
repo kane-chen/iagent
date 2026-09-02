@@ -142,6 +142,7 @@ python workspace/skills/segment-financial-report/scripts/extract_segments.py \
 | `--ticker` | 股票代码（BABA / 00700 / 83690 等）；对应 `config/extraction/<TICKER>.json` | 必填 |
 | `--workspace` | workspace 根目录（含 `portfolio/<TICKER>/filings/`） | 脚本位置自动推断 |
 | `--fiscal-year-start` / `--fiscal-year-end` | 财年闭区间，例如 `--fiscal-year-start 2022 --fiscal-year-end 2025` | 不限 |
+| `--files <path...>` | 显式指定待提取财报文件（PDF/HTML，可多个），跳过 portfolio 文件过滤器；供外部编排（Java FinancialReportService 下载到 workspace/financial_reports 的产物）使用 | 未指定时扫描 portfolio/&lt;TICKER&gt;/filings/ |
 | `--excel` | 提取后直接生成 Excel；stdout 输出 xlsx 路径 | 关闭 |
 | `--excel-output` | 自定义 xlsx 输出路径 | `workspace/excels/<TICKER>_segments_<ts>.xlsx` |
 | `--no-flat` | 输出树状 Segment（调试用，Excel 需要 flat 格式） | flat 模式 |

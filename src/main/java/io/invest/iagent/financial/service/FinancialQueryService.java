@@ -281,7 +281,8 @@ public class FinancialQueryService {
     private static final List<String> SEGMENT_PROFIT_METRICS = List.of("ADJUSTED_EBITA", "OPERATING_INCOME");
 
     /**
-     * 构建业务分部卡片：一级分部最近一个季度（剔除 FY 年报）的收入/毛利/利润指标。
+     * 构建业务分部卡片：一级分部各自最近一个季度（剔除 FY 年报）的收入/毛利/利润指标。
+     * 每个分部取它自身最新有值的期间（各分部最新期可能不一致，避免某分部落后一期即整卡丢失）；
      * 利润指标取 ADJUSTED_EBITA，若各分部均无则回退 OPERATING_INCOME；无任何利润数据则不展示该行。
      */
     private List<SegmentCard> buildSegmentCards(String bare, List<String> warnings) {
@@ -293,19 +294,6 @@ public class FinancialQueryService {
         if (values.isEmpty()) {
             return List.of();
         }
-        // 最近一个季度：仅取季度/半年期（ordinal<5），剔除 FY 全年值
-        List<String> quarterPeriods = values.stream()
-                .map(SegmentValueDO::getFiscalPeriod).distinct()
-                .filter(p -> {
-                    FiscalPeriod fp = FiscalPeriod.parse(p);
-                    return fp != null && fp.ordinal() < 5;
-                })
-                .sorted(Comparator.comparingInt(p -> FiscalPeriod.parse(p).sortKey()))
-                .toList();
-        if (quarterPeriods.isEmpty()) {
-            return List.of();
-        }
-        String latest = quarterPeriods.get(quarterPeriods.size() - 1);
 
         // 一级分部（parent 为空），按目录顺序；剔除 TOTAL/SKIP 合计行
         List<SegmentDO> topSegments = segments.stream()
@@ -314,19 +302,43 @@ public class FinancialQueryService {
                 .sorted(Comparator.comparingInt(SegmentDO::getSortOrder))
                 .toList();
 
-        // 最近一期 (分部|指标) -> 值
-        Map<String, SegmentValueDO> latestCell = new HashMap<>();
+        // 每个分部各自的最近季度（季度/半年期 ordinal<5，剔除 FY 全年值）。
+        // 各分部最新有值期间可能不一致：最新季报若未披露/未抽出某分部整行，该分部停留在上一期，
+        // 用全局单一最新期取数会把这类分部整卡丢弃（如 BABA 最新期缺淘天/AIDC 集团合计行），
+        // 因此按分部取各自最新有值期间。
+        Map<String, String> segLatest = new HashMap<>();
+        Map<String, Integer> segLatestKey = new HashMap<>();
         for (SegmentValueDO v : values) {
-            if (latest.equals(v.getFiscalPeriod())) {
-                latestCell.put(v.getSegmentCode() + "|" + v.getMetricCode(), v);
+            FiscalPeriod fp = FiscalPeriod.parse(v.getFiscalPeriod());
+            if (fp == null || fp.ordinal() >= 5) {
+                continue;
+            }
+            Integer cur = segLatestKey.get(v.getSegmentCode());
+            if (cur == null || fp.sortKey() > cur) {
+                segLatestKey.put(v.getSegmentCode(), fp.sortKey());
+                segLatest.put(v.getSegmentCode(), v.getFiscalPeriod());
+            }
+        }
+        if (segLatest.isEmpty()) {
+            return List.of();
+        }
+        // 各分部在其最新期 (指标 -> 值)
+        Map<String, Map<String, SegmentValueDO>> segCell = new HashMap<>();
+        for (SegmentValueDO v : values) {
+            String latest = segLatest.get(v.getSegmentCode());
+            if (latest != null && latest.equals(v.getFiscalPeriod())) {
+                segCell.computeIfAbsent(v.getSegmentCode(), k -> new HashMap<>())
+                        .put(v.getMetricCode(), v);
             }
         }
 
-        // 头条指标：收入、毛利固定；利润类按公司实际披露二选一
+        // 头条指标：收入、毛利固定；利润类按各分部最新期是否披露二选一
         List<String> headline = new ArrayList<>(List.of("REVENUE", "GROSS_PROFIT"));
         for (String profitCode : SEGMENT_PROFIT_METRICS) {
-            boolean has = topSegments.stream()
-                    .anyMatch(s -> latestCell.containsKey(s.getSegmentCode() + "|" + profitCode));
+            boolean has = topSegments.stream().anyMatch(s -> {
+                SegmentValueDO v = segCell.getOrDefault(s.getSegmentCode(), Map.of()).get(profitCode);
+                return v != null && v.getValue() != null;
+            });
             if (has) {
                 headline.add(profitCode);
                 break;
@@ -335,10 +347,12 @@ public class FinancialQueryService {
 
         List<SegmentCard> cards = new ArrayList<>();
         for (SegmentDO seg : topSegments) {
+            String segPeriod = segLatest.get(seg.getSegmentCode());
+            Map<String, SegmentValueDO> cell = segCell.getOrDefault(seg.getSegmentCode(), Map.of());
             List<SegmentPoint> points = new ArrayList<>();
             boolean hasValue = false;
             for (String mc : headline) {
-                SegmentValueDO v = latestCell.get(seg.getSegmentCode() + "|" + mc);
+                SegmentValueDO v = cell.get(mc);
                 MetricDef d = metricCatalog.get(mc);
                 if (v != null && v.getValue() != null) {
                     hasValue = true;
@@ -346,9 +360,9 @@ public class FinancialQueryService {
                 points.add(new SegmentPoint(mc, d == null ? mc : d.getNameCn(),
                         v == null ? null : v.getValue(), v == null ? null : v.getYoy()));
             }
-            if (hasValue) {
+            if (hasValue && segPeriod != null) {
                 cards.add(new SegmentCard(seg.getSegmentCode(), segmentDisplayName(seg), seg.getLevel(),
-                        latest, points));
+                        segPeriod, points));
             }
         }
         return cards;

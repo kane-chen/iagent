@@ -31,7 +31,7 @@
     {
       "segmentCode": "QUICK_COMMERCE",
       "segmentName": "Quick commerce",
-      "aliases": ["即时零售","Quick commerce"],
+      "aliases": ["即时零售","Quick commerce","Direct sales, logistics and others"],
       "level": 3,
       "parentCode": "CHINA_COMMERCE_RETAIL"
     },
@@ -46,6 +46,20 @@
       "segmentCode": "CHINA_COMMERCE_WHOLESALE",
       "segmentName": "China commerce wholesale",
       "aliases": ["中国商业批发","China commerce wholesale"],
+      "level": 2,
+      "parentCode": "TAOBAO_TMALL"
+    },
+    {
+      "segmentCode": "INTERNATIONAL_E_COMMERCE",
+      "segmentName": "International e-commerce",
+      "aliases": ["International E-commerce"],
+      "level": 2,
+      "parentCode": "TAOBAO_TMALL"
+    },
+    {
+      "segmentCode": "GLOBAL_WHOLESALE",
+      "segmentName": "Global wholesale",
+      "aliases": ["Global Wholesale"],
       "level": 2,
       "parentCode": "TAOBAO_TMALL"
     },
@@ -73,7 +87,14 @@
     {
       "segmentCode": "CLOUD_INTELLIGENCE",
       "segmentName": "Cloud Intelligence Group",
-      "aliases": ["云智能", "阿里云", "Alibaba Cloud", "Cloud"],
+      "aliases": ["云智能", "阿里云", "Alibaba Cloud", "Cloud","AI Cloud and Compute Services"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "AI_LAB",
+      "segmentName": "AI Labs and Applications",
+      "aliases": ["AI Labs and Applications"],
       "level": 1,
       "parentCode": null
     }

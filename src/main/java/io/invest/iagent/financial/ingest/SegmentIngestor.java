@@ -15,16 +15,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,8 +37,11 @@ import java.util.regex.Pattern;
  * 分部数据采集器：调用 segment-financial-report skill 的 extract_segments.py（本地财报文件解析，
  * 不联网），将扁平 JSON（segment × metric × period）入库 fin_segment / fin_segment_value。
  *
- * <p>前置条件：该公司财报已通过 futu-filing 下载到 workspace/portfolio/&lt;ticker&gt;/filings/，
- * 且 skill 的 config/extraction/&lt;TICKER&gt;.json 存在；否则脚本退出码 2，本采集器返回提示。
+ * <p>财报文件来源：{@code FinancialReportService#download} 下载到
+ * workspace/financial_reports/&lt;市场&gt;/&lt;ticker&gt;/ 的 PDF/HTML 产物（与下载器
+ * localPath 布局一致），由本采集器扫描后通过 {@code --files} 显式传给提取引擎；
+ * 引擎按公司配置（skill 的 config/extraction/&lt;TICKER&gt;.json）解析，
+ * 未下载财报或无公司配置时脚本退出码 2，本采集器返回提示。
  */
 @Slf4j
 @Component
@@ -69,13 +76,25 @@ public class SegmentIngestor {
      */
     public SegmentResult ingest(String ticker) {
         List<String> warnings = new ArrayList<>();
+        // 财报文件来自 FinancialReportService 下载产物：workspace/financial_reports/<市场>/<ticker>/
+        Path reportBaseDir = Path.of(properties.getReportBaseDir()).toAbsolutePath();
+        List<Path> reportFiles = discoverReportFiles(reportBaseDir, ticker);
+        if (reportFiles.isEmpty()) {
+            warnings.add("未找到已下载的财报文件（" + reportBaseDir + " 下无 " + ticker
+                    + " 的 PDF/HTML 财报），请先下载财报（FinancialReportService#download）。");
+            log.info("Segment ingest skipped for {}: no report files under {}", ticker, reportBaseDir);
+            return new SegmentResult(false, 0, 0, warnings);
+        }
+
         Path output = workspace.resolve("temp").resolve(ticker + "_segments.json");
         Path script = workspace.resolve(SCRIPT_REL);
-        List<String> cmd = List.of(
+        List<String> cmd = new ArrayList<>(List.of(
                 properties.getPythonExecutable(), script.toAbsolutePath().toString(),
                 "--ticker", ticker,
                 "--workspace", workspace.toAbsolutePath().toString(),
-                "--output", output.toAbsolutePath().toString());
+                "--output", output.toAbsolutePath().toString(),
+                "--files"));
+        reportFiles.forEach(f -> cmd.add(f.toAbsolutePath().toString()));
         ProcessRunner.Result result;
         try {
             result = ProcessRunner.run(cmd, null, properties.getSegmentTimeoutSeconds());
@@ -84,10 +103,10 @@ public class SegmentIngestor {
             return new SegmentResult(false, 0, 0, warnings);
         }
 
-        // 退出码 2：无可处理财报 / 无公司配置（脚本 stderr 已含中文提示）
+        // 退出码 2：文件未解析出数据 / 无公司配置（脚本 stderr 已含中文提示）
         if (result.getExitCode() == 2 || !Files.isRegularFile(output)) {
             String hint = lastLines(result.getStderr(), 400);
-            warnings.add("未生成分部数据（可能财报未下载或暂无该公司分部配置）。" + hint);
+            warnings.add("未生成分部数据（可能财报格式暂不支持或暂无该公司分部配置）。" + hint);
             log.info("Segment ingest skipped for {}: rc={}", ticker, result.getExitCode());
             return new SegmentResult(false, 0, 0, warnings);
         }
@@ -102,9 +121,15 @@ public class SegmentIngestor {
             // 引擎按公司财年结束月输出财年口径标签（如 BABA 截至 2026-06 的季度为 2027Q1），
             // 取三大表采集时写入的财年结束月，统一转换为自然年标签（2026Q2）
             int fyeMonth = resolveFyeMonth(ticker);
-            // segmentCode -> 定义（保留首次出现顺序 = 引擎树序）
+            // segmentCode -> 分部定义（LinkedHashMap 保留首次出现顺序 = 引擎树序）。
+            // 分部支持多层结构（如 BABA：TAOBAO_TMALL → CHINA_COMMERCE_RETAIL → CUSTOMER_MANAGEMENT），
+            // 同一分部跨多条记录出现，这里归并定义：名称补缺、父编码优先取非空——
+            // 引擎跨文件合并时，某文件未识别出父分部会先输出"无父"记录，不能让首条记录压平层级。
             Map<String, SegmentDO> segmentMap = new LinkedHashMap<>();
-            List<SegmentValueDO> values = new ArrayList<>();
+            Map<String, Integer> firstSeen = new HashMap<>();
+            // 指标值按 (期间|分部|指标) 去重：引擎层级合并的边界情况下可能输出重复记录
+            Map<String, SegmentValueDO> valueMap = new LinkedHashMap<>();
+            int seq = 0;
 
             for (int i = 0; i < records.size(); i++) {
                 JSONObject rec = records.getJSONObject(i);
@@ -112,58 +137,109 @@ public class SegmentIngestor {
                     continue;
                 }
                 String segCode = rec.getString("segmentCode");
-                String segName = rec.getString("segmentName");
                 String period = canonicalPeriod(rec.getString("period"), fyeMonth);
                 String metricCode = METRIC_CODE_MAP.getOrDefault(rec.getString("metricCode"), rec.getString("metricCode"));
-                BigDecimal value = rec.getBigDecimal("value");
                 if (segCode == null || period == null || metricCode == null) {
                     continue;
                 }
-                segmentMap.computeIfAbsent(segCode, k -> SegmentDO.builder()
-                        .ticker(ticker)
-                        .segmentCode(segCode)
-                        .segmentName(segName)
-                        .parentCode(rec.getString("parentSegmentCode"))
-                        .level(rec.getIntValue("level", 1))
-                        .sortOrder(segmentMap.size())
-                        .build());
+                String parentCode = blankToNull(rec.getString("parentSegmentCode"));
+                SegmentDO seg = segmentMap.get(segCode);
+                if (seg == null) {
+                    seg = SegmentDO.builder()
+                            .ticker(ticker)
+                            .segmentCode(segCode)
+                            .segmentName(blankToNull(rec.getString("segmentName")))
+                            .parentCode(parentCode)
+                            .level(rec.getIntValue("level", 1))
+                            .build();
+                    segmentMap.put(segCode, seg);
+                    firstSeen.put(segCode, seq++);
+                } else if (parentCode != null) {
+                    // 父编码以"有父"记录为准；名称缺失时补上
+                    if (seg.getSegmentName() == null) {
+                        seg.setSegmentName(blankToNull(rec.getString("segmentName")));
+                    }
+                    if (seg.getParentCode() == null) {
+                        seg.setParentCode(parentCode);
+                        seg.setLevel(rec.getIntValue("level", seg.getLevel()));
+                    }
+                }
 
-                values.add(SegmentValueDO.builder()
-                        .ticker(ticker)
-                        .fiscalPeriod(period)
-                        .segmentCode(segCode)
-                        .metricCode(metricCode)
-                        .value(value)
-                        .currency(rec.getString("currency"))
-                        .unit("million")
-                        .source(MetricSource.SEGMENT_PARSE.name())
-                        .confidence(rec.getInteger("confidenceScore"))
-                        .build());
+                valueMap.computeIfAbsent(period + "|" + segCode + "|" + metricCode,
+                        k -> SegmentValueDO.builder()
+                                .ticker(ticker)
+                                .fiscalPeriod(period)
+                                .segmentCode(segCode)
+                                .metricCode(metricCode)
+                                .value(rec.getBigDecimal("value"))
+                                .currency(rec.getString("currency"))
+                                .unit("million")
+                                .source(MetricSource.SEGMENT_PARSE.name())
+                                .confidence(rec.getInteger("confidenceScore"))
+                                .build());
             }
 
-            if (values.isEmpty()) {
+            if (valueMap.isEmpty()) {
                 warnings.add("分部脚本未解析出有效数据。");
                 return new SegmentResult(false, 0, 0, warnings);
             }
 
+            // 构建多层分部树：补全缺失的父分部、断裂循环引用，按树深归一 level、
+            // 按先根遍历赋值 sortOrder（保证渲染时父分部行紧邻其子树）
+            List<SegmentDO> segments = resolveHierarchy(segmentMap, firstSeen, warnings);
+            List<SegmentValueDO> values = new ArrayList<>(valueMap.values());
+
             fillYoY(values);
             // 全量刷新分部数据：先清空旧数据，避免期间口径调整后新旧标签并存
             repository.deleteSegmentsByTicker(ticker);
-            repository.batchUpsertSegments(new ArrayList<>(segmentMap.values()));
+            repository.batchUpsertSegments(segments);
             repository.batchUpsertSegmentValues(values);
             repository.recordBatch(ticker, "SEGMENT_PARSE", "SUCCESS",
                     values.stream().map(SegmentValueDO::getFiscalPeriod).distinct().sorted()
                             .reduce((a, b) -> a + "," + b).orElse(""),
-                    "segments=" + segmentMap.size() + ", values=" + values.size());
+                    "segments=" + segments.size() + ", values=" + values.size());
 
             log.info("Segment ingest done: ticker={}, segments={}, values={}",
-                    ticker, segmentMap.size(), values.size());
-            return new SegmentResult(true, segmentMap.size(), values.size(), warnings);
+                    ticker, segments.size(), values.size());
+            return new SegmentResult(true, segments.size(), values.size(), warnings);
         } catch (Exception e) {
             log.error("分部数据解析失败: ticker={}", ticker, e);
             warnings.add("分部数据解析失败: " + e.getMessage());
             return new SegmentResult(false, 0, 0, warnings);
         }
+    }
+
+    /**
+     * 发现 FinancialReportService 下载的财报文件：
+     * 布局 {@code <reportBaseDir>/<市场 US|HK|CN>/<ticker>/<ticker>_<日期>_<类型>.<ext>}
+     * （市场目录与下载器 localPath 前缀一致），取 pdf/htm/html 正文文件，按文件名排序（日期升序，
+     * 与引擎"先处理的记录优先"的去重约定一致）。
+     */
+    static List<Path> discoverReportFiles(Path reportBaseDir, String ticker) {
+        List<Path> files = new ArrayList<>();
+        if (!Files.isDirectory(reportBaseDir)) {
+            return files;
+        }
+        try (var marketDirs = Files.list(reportBaseDir)) {
+            for (Path marketDir : marketDirs.filter(Files::isDirectory).sorted().toList()) {
+                Path tickerDir = marketDir.resolve(ticker);
+                if (!Files.isDirectory(tickerDir)) {
+                    continue;
+                }
+                try (var entries = Files.list(tickerDir)) {
+                    entries.filter(Files::isRegularFile)
+                            .filter(p -> {
+                                String n = p.getFileName().toString().toLowerCase();
+                                return n.endsWith(".pdf") || n.endsWith(".htm") || n.endsWith(".html");
+                            })
+                            .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                            .forEach(files::add);
+                }
+            }
+        } catch (IOException e) {
+            log.warn("扫描财报目录失败: {}, {}", reportBaseDir, e.getMessage());
+        }
+        return files;
     }
 
     /** 取公司财年结束月（三大表采集时写入 fin_company），查询失败默认 12（自然年）。 */
@@ -218,6 +294,106 @@ public class SegmentIngestor {
             return endYear + "Q" + ((endMonth - 1) / 3 + 1);
         }
         return endYear + "H" + (endMonth <= 6 ? 1 : 2);
+    }
+
+    /**
+     * 归一化多层分部树：
+     * <ol>
+     *   <li>父分部在记录中缺失（父本身无指标值，纯分组标题行）时补占位节点，
+     *       名称暂用编码——后续采集到父分部真实行会经 upsert 自动更新名称；</li>
+     *   <li>断裂父链循环/自引用（异常数据兜底，避免死循环）；</li>
+     *   <li>level 按树深归一（根=1），sortOrder 按先根遍历赋值（同父下按首次出现顺序），
+     *       保证 fin_segment 按 sort_order 查询时父分部行紧邻其子树。</li>
+     * </ol>
+     *
+     * @param segmentMap 分部定义（会被就地补全/修正）
+     * @param firstSeen  各分部首次出现序号（兄弟排序用）
+     * @param warnings   收集层级修复提示
+     * @return 先根遍历有序的分部列表
+     */
+    static List<SegmentDO> resolveHierarchy(Map<String, SegmentDO> segmentMap,
+                                            Map<String, Integer> firstSeen,
+                                            List<String> warnings) {
+        // 1. 补全缺失的父分部（可能整条父链都缺失，循环至无新增）
+        boolean added = true;
+        while (added) {
+            added = false;
+            for (SegmentDO seg : new ArrayList<>(segmentMap.values())) {
+                String parent = seg.getParentCode();
+                if (parent != null && !segmentMap.containsKey(parent)) {
+                    segmentMap.put(parent, SegmentDO.builder()
+                            .ticker(seg.getTicker())
+                            .segmentCode(parent)
+                            .segmentName(parent)
+                            .level(Math.max(1, seg.getLevel() - 1))
+                            .build());
+                    firstSeen.put(parent, firstSeen.getOrDefault(seg.getSegmentCode(), 0));
+                    warnings.add("父分部 " + parent + " 无数据行，已补占位节点（后续采集到数据会自动补全名称）");
+                    added = true;
+                }
+            }
+        }
+
+        // 2. 断裂循环引用 / 自引用：沿父链检测，成环时断开成环节点的父边
+        for (SegmentDO seg : segmentMap.values()) {
+            Set<String> chain = new HashSet<>();
+            String code = seg.getSegmentCode();
+            while (code != null && chain.add(code)) {
+                SegmentDO node = segmentMap.get(code);
+                code = node == null ? null : node.getParentCode();
+            }
+            if (code != null) {
+                SegmentDO node = segmentMap.get(code);
+                if (node != null && node.getParentCode() != null) {
+                    warnings.add("分部父链存在循环引用（" + code + " → " + node.getParentCode()
+                            + "），已断开为一级分部");
+                    node.setParentCode(null);
+                }
+            }
+        }
+
+        // 3. 按父链接组织树；根节点与兄弟节点均按首次出现顺序排序
+        Map<String, List<String>> childrenOf = new HashMap<>();
+        List<String> roots = new ArrayList<>();
+        for (SegmentDO seg : segmentMap.values()) {
+            if (seg.getParentCode() == null) {
+                roots.add(seg.getSegmentCode());
+            } else {
+                childrenOf.computeIfAbsent(seg.getParentCode(), k -> new ArrayList<>())
+                        .add(seg.getSegmentCode());
+            }
+        }
+        Comparator<String> bySeen = Comparator.comparingInt(c -> firstSeen.getOrDefault(c, Integer.MAX_VALUE));
+        roots.sort(bySeen);
+        childrenOf.values().forEach(list -> list.sort(bySeen));
+
+        // 4. 先根遍历：level=树深，sortOrder 递增
+        List<SegmentDO> ordered = new ArrayList<>(segmentMap.size());
+        int[] counter = {0};
+        for (String root : roots) {
+            walkHierarchy(root, 1, segmentMap, childrenOf, ordered, counter);
+        }
+        return ordered;
+    }
+
+    /** 先根遍历赋值 level/sortOrder 并收集有序分部。 */
+    private static void walkHierarchy(String code, int depth, Map<String, SegmentDO> segmentMap,
+                                      Map<String, List<String>> childrenOf,
+                                      List<SegmentDO> ordered, int[] counter) {
+        SegmentDO seg = segmentMap.get(code);
+        if (seg == null) {
+            return;
+        }
+        seg.setLevel(depth);
+        seg.setSortOrder(counter[0]++);
+        ordered.add(seg);
+        for (String child : childrenOf.getOrDefault(code, List.of())) {
+            walkHierarchy(child, depth + 1, segmentMap, childrenOf, ordered, counter);
+        }
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 
     /**

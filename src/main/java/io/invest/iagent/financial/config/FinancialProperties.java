@@ -38,4 +38,12 @@ public class FinancialProperties {
 
     /** 查询时默认返回的最近期数（不指定 periods 时） */
     private int defaultQueryPeriods = 6;
+
+    private String reportBaseDir = "./workspace/financial_reports";
+    private int reportMaxRetry = 3;
+    private long reportSleepMs = 1500;
+    private String reportUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    // SEC EDGAR 要求带邮箱
+    private String reportSecUserAgent = "FinancialResearch yiying5@gmail.com";
 }

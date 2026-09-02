@@ -90,7 +90,8 @@ public class FinancialIngestService {
             }
 
             // 业务分部数据提取（参照 segment-financial-report skill，解析本地财报文件，best-effort）：
-            // 需先用 futu-filing 下载财报且存在该公司分部配置，否则脚本提示跳过
+            // 财报文件来自 FinancialReportService 下载到 workspace/financial_reports 的产物，
+            // 且 skill 存在该公司分部配置；未下载财报或无配置时提示跳过
             int segmentCount = 0;
             int segmentValueCount = 0;
             if (segmentIngestor != null) {

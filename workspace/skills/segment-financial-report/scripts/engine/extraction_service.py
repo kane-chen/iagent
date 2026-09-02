@@ -116,8 +116,35 @@ class FinancialExtractionService:
             msg = f"未找到 {ticker} 的可提取财报文件"
             hint = diag.summarize() if diag else None
             raise ExtractionError(msg, hint=hint or "请先用 futu-filing skill 下载财报，或检查 ticker 拼写")
+        all_segments = self._parse_files(files)
+        return self._finalize(ticker, all_segments, len(files))
+
+    def extractFromFiles(self, files: List[Path], ticker: Optional[str] = None) -> List[Segment]:
+        """从调用方显式指定的财报文件提取（跳过 portfolio 文件过滤器）。
+
+        用于直接解析 FinancialReportService 下载到 workspace/financial_reports/ 的产物：
+        文件发现由调用方（Java 侧）负责，引擎只负责解析。
+        """
+        self.last_errors = []
+        label = ticker or (self.companyConfig.companyCode if self.companyConfig is not None else "")
+        paths = [Path(f) for f in files]
+        existing = [p for p in paths if p.exists()]
+        for p in paths:
+            if not p.exists():
+                self.last_errors.append((p, "文件不存在"))
+        if not existing:
+            raise ExtractionError(
+                f"未找到 {label} 的可提取财报文件",
+                hint="请先通过财报下载（FinancialReportService#download）获取财报文件"
+                     "（workspace/financial_reports/<市场>/<ticker>/）",
+            )
+        all_segments = self._parse_files(existing)
+        return self._finalize(label, all_segments, len(existing))
+
+    def _parse_files(self, files: List[Path]) -> List[Segment]:
+        """逐文件解析并汇总 Segment（单文件失败不影响其他文件）。"""
         all_segments: List[Segment] = []
-        for f in files:
+        for f in sorted(files, key=lambda p: p.name):
             try:
                 segs = self.extractFromFile(f)
                 if segs:
@@ -135,13 +162,16 @@ class FinancialExtractionService:
                 err = f"{type(e).__name__}: {e}"
                 self.last_errors.append((f, err))
                 logger.error("extract failed: %s", f, exc_info=e)
+        return all_segments
 
+    def _finalize(self, ticker: str, all_segments: List[Segment], file_count: int) -> List[Segment]:
+        """合并跨文件同编码分部 → YTD 派生单季 → 期间类型过滤。"""
         if not all_segments:
             # 所有文件都失败或没有解析出 segment
             if self.last_errors:
                 sample = "; ".join(f"{f.name}: {e}" for f, e in self.last_errors[:3])
                 raise ExtractionError(
-                    f"解析 {ticker} 的 {len(files)} 个财报文件全部失败",
+                    f"解析 {ticker} 的 {file_count} 个财报文件全部失败",
                     hint=f"错误样例: {sample}" + (f"（共 {len(self.last_errors)} 个错误）"
                           if len(self.last_errors) > 3 else ""),
                 )
@@ -166,9 +196,9 @@ class FinancialExtractionService:
             result = self.dataExtractor.filterSegmentsByPeriodType(result)
         if self.last_errors:
             logger.warning("%d/%d files had errors, %d segments extracted from %d files",
-                           len(self.last_errors), len(files),
+                           len(self.last_errors), file_count,
                            sum(len(s.metrics) for s in result),
-                           len(files) - len(self.last_errors))
+                           file_count - len(self.last_errors))
         return result
 
     # --- backward-compat aliases ----------------------------------------------
