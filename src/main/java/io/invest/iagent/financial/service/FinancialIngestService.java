@@ -3,6 +3,7 @@ package io.invest.iagent.financial.service;
 import com.alibaba.fastjson2.JSON;
 import io.invest.iagent.financial.config.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuStatementIngestor;
+import io.invest.iagent.financial.ingest.KeywordMetricExtractor;
 import io.invest.iagent.financial.ingest.RagMetricExtractor;
 import io.invest.iagent.financial.ingest.SegmentIngestor;
 import io.invest.iagent.financial.model.MetricValueDO;
@@ -35,6 +36,9 @@ public class FinancialIngestService {
 
     @Autowired(required = false)
     private RagMetricExtractor ragMetricExtractor;
+
+    @Autowired(required = false)
+    private KeywordMetricExtractor keywordMetricExtractor;
 
     @Autowired(required = false)
     private SegmentIngestor segmentIngestor;
@@ -86,6 +90,18 @@ public class FinancialIngestService {
                     warnings.addAll(rag.warnings());
                 } catch (Exception e) {
                     log.warn("RAG 补充指标提取异常（忽略）: {}", e.getMessage());
+                }
+            }
+
+            // 关键字补充指标提取（本地财报文件关键字检索 + LLM，无需 RAG 知识库，best-effort）：
+            // 仅处理 keyword-metrics.yml 中为该公司配置的指标，同样按本次采集期间逐期提取
+            if (keywordMetricExtractor != null) {
+                try {
+                    KeywordMetricExtractor.KeywordExtractResult kw =
+                            keywordMetricExtractor.extract(bareTicker, coveredPeriodList);
+                    warnings.addAll(kw.warnings());
+                } catch (Exception e) {
+                    log.warn("关键字补充指标提取异常（忽略）: {}", e.getMessage());
                 }
             }
 

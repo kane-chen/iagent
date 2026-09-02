@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class JdbcFinancialRepository implements FinancialRepository {
 
     /** 同一指标多来源时的取值优先级（array_position 越小越优先） */
-    private static final String SOURCE_PRIORITY = "ARRAY['FUTU_API','DERIVED','RAG','SEGMENT_PARSE']::varchar[]";
+    private static final String SOURCE_PRIORITY = "ARRAY['FUTU_API','DERIVED','RAG','KEYWORD','SEGMENT_PARSE']::varchar[]";
 
     @Autowired
     private JdbcTemplate jdbcTemplate;

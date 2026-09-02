@@ -58,6 +58,25 @@ public class FinancialAutoConfig {
         return metrics;
     }
 
+    /** 关键字中英（简体/繁体/英文）对照字典 */
+    @Bean
+    public List<KeywordDictEntry> keywordDict() throws IOException {
+        Map<String, Object> root = loadYaml("financial/keyword-dict.yml");
+        List<KeywordDictEntry> entries = JSON.parseArray(
+                JSON.toJSONString(root.get("keywords")), KeywordDictEntry.class);
+        log.info("KeywordDict loaded: {} entries", entries == null ? 0 : entries.size());
+        return entries == null ? List.of() : entries;
+    }
+
+    /** 公司维度关键字提取配置（哪些公司 × 哪些指标用关键字方式提取） */
+    @Bean
+    public KeywordMetricConfig keywordMetricConfig() throws IOException {
+        KeywordMetricConfig config = loadYamlAs("financial/keyword-metrics.yml", KeywordMetricConfig.class);
+        log.info("KeywordMetricConfig loaded: {} companies",
+                config.getCompanies() == null ? 0 : config.getCompanies().size());
+        return config;
+    }
+
     private static Map<String, Object> loadYaml(String classpath) throws IOException {
         try (InputStream in = new ClassPathResource(classpath).getInputStream()) {
             return new Yaml().load(in);

@@ -1,0 +1,25 @@
+# 公司维度关键字提取配置：ticker（大写裸代码）→ 待提取指标列表。
+# 仅列出的公司 × 指标会触发关键字提取（财报文件关键字检索 + LLM 取值），
+# 三大表 futu API 已有高优先级来源的指标自动跳过。
+# - code: 标准指标编码（必须存在于 metric-catalog.yml）
+# - keywords: 检索关键字，逗号分隔，可混用简体/繁体/英文；
+#             字典(keyword-dict.yml)中同编码的简/繁/英同义词会自动并入，无需重复
+# - hint: 给提取 LLM 的提示（披露位置/口径）
+# - min_confidence: 低于该置信度不入库（0-100）
+
+companies:
+  BABA:
+    - code: NON_GAAP_CAPEX
+      keywords: "资本开支"
+      hint: 现金流口径的资本开支，通常在业绩公告的流动资金及财务中披露。
+    - code: DIVIDENDS_PAID
+      keywords: "dividends paid,派付股息"
+      hint: 在现金流量表筹资活动披露，取报告期实际支付的股利。
+
+  "00700":
+    - code: NON_GAAP_CAPEX
+      keywords: "资本开支"
+      hint: 现金流口径的资本开支，通常在业绩公告的流动资金及财务中披露。
+    - code: SHARE_BUYBACK
+      keywords: "回購股份"
+      hint: 在现金流量表筹资活动（購回股份支付的現金）披露，取报告期实际回购支出。

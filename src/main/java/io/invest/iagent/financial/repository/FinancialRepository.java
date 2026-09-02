@@ -33,7 +33,8 @@ public interface FinancialRepository {
     // ---------- 查询 ----------
 
     /**
-     * 查询指标值。同一 (期间, 指标) 存在多来源时按 FUTU_API > DERIVED > RAG 取最优来源。
+     * 查询指标值。同一 (期间, 指标) 存在多来源时按
+     * FUTU_API > DERIVED > RAG > KEYWORD > SEGMENT_PARSE 取最优来源。
      *
      * @param ticker      股票代码
      * @param metricCodes 标准指标编码（null/空 = 全部）

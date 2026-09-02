@@ -1,0 +1,28 @@
+# 关键字中英（简/繁）对照字典。
+# 按标准指标编码列出简体中文(cn)、繁体中文(tw)、英文(en)同义关键字，
+# 关键字提取时自动并入检索词，以兼容 A 股简体、港股繁体、美股英文财报。
+# 公司特有的额外关键字在 keyword-metrics.yml 中按公司配置。
+
+keywords:
+  - code: DIVIDENDS_PAID
+    cn: [分红, 派息, 支付股利, 分配股利, 派付股利, 分配股息, 支付的现金股利]
+    tw: [派息, 派付股息, 分派股息, 支付股息, 分配股利, 已付股息]
+    en: [dividends paid, dividend paid, dividend payment, dividends distributed,
+         cash dividends paid]
+
+  - code: SHARE_BUYBACK
+    cn: [股份回购, 回购股票, 回购股份, 股票回购, 回购普通股, 注销股份]
+    tw: [回購股份, 股份購回, 購回股份, 回購股票, 購回普通股, 回購自身股份]
+    en: [share repurchase, share buyback, repurchase of shares, repurchase of common stock,
+         repurchases of common stock, buyback of shares, treasury stock]
+
+  - code: NON_GAAP_CAPEX
+    cn: [资本开支, 资本支出]
+    tw: [資本開支, 資本支出]
+    en: [capital expenditure, capital expenditures, capex]
+
+  - code: SBC_EXPENSE
+    cn: [股权激励费用, 股份支付, 以股份为基础的薪酬, 股权激励]
+    tw: [股權激勵費用, 股份支付, 以股份為基礎的薪酬, 股權薪酬]
+    en: [share-based compensation, stock-based compensation, share based payment,
+         equity-settled share-based payment, sbc]

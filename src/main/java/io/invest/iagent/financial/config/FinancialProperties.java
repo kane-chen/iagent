@@ -24,6 +24,12 @@ public class FinancialProperties {
     /** RAG 提取时每个指标检索的片段数 */
     private int ragTopK = 5;
 
+    /** 是否启用关键字补充指标提取（本地财报文件关键字检索 + LLM，无需 RAG 知识库） */
+    private boolean keywordExtractEnabled = true;
+
+    /** 关键字提取时每个指标保留送 LLM 的最多段落数 */
+    private int keywordTopSnippets = 10;
+
     /** 调用 futu python 脚本的超时秒数 */
     private int pythonTimeoutSeconds = 300;
 
