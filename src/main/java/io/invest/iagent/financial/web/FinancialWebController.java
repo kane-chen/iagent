@@ -1,5 +1,6 @@
 package io.invest.iagent.financial.web;
 
+import io.invest.iagent.financial.option.OptionStrangleService;
 import io.invest.iagent.financial.service.FinancialQueryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,8 +22,9 @@ import java.util.Map;
  *   <li>{@code GET /api/financial/composition} — 指标构成：所属报表的分层指标树</li>
  *   <li>{@code GET /api/financial/segment-trend} — 业务分部某指标最近 N 个季度序列</li>
  *   <li>{@code GET /api/financial/segment-composition} — 业务分部全部指标 × 历年期间表格</li>
+ *   <li>{@code GET /api/financial/option-strangle} — 期权买入宽跨式组合收益分布与 Top5 推荐</li>
  * </ul>
- * 数据均来自 {@link FinancialQueryService}，随财务模块开关 app.financial.enabled 启用。
+ * 数据均来自 {@link FinancialQueryService} / {@link OptionStrangleService}，随财务模块开关 app.financial.enabled 启用。
  */
 @Slf4j
 @Controller
@@ -31,8 +33,12 @@ public class FinancialWebController {
 
     private final FinancialQueryService queryService;
 
-    public FinancialWebController(FinancialQueryService queryService) {
+    private final OptionStrangleService optionStrangleService;
+
+    public FinancialWebController(FinancialQueryService queryService,
+                                  OptionStrangleService optionStrangleService) {
         this.queryService = queryService;
+        this.optionStrangleService = optionStrangleService;
     }
 
     /** 页面入口：/financial 重定向到静态页面。 */
@@ -88,6 +94,19 @@ public class FinancialWebController {
             @RequestParam("segment") String segment,
             @RequestParam(value = "quarters", defaultValue = "16") Integer quarters) {
         return queryService.segmentComposition(ticker, segment, quarters);
+    }
+
+    /**
+     * 期权宽跨式（long strangle）推荐：枚举最近 N 个到期日的「买入同日 OTM put + OTM call」组合，
+     * 计算含手续费（期权开仓 + 行权后正股平仓）的到期收益分布、盈亏平衡/亏损窗口、对数正态胜率、
+     * 期望收益及亏损窗口内未平仓量，分别按期望收益最大化、胜率最大化给出 Top 5。
+     */
+    @GetMapping("/api/financial/option-strangle")
+    @ResponseBody
+    public OptionStrangleService.StrangleResult optionStrangle(
+            @RequestParam("ticker") String ticker,
+            @RequestParam(value = "expiries", required = false) Integer expiries) {
+        return optionStrangleService.recommend(ticker, expiries);
     }
 
     /** 兜底异常处理：返回 hasData=false 的 JSON，由页面提示。 */

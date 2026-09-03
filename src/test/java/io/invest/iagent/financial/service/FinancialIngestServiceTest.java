@@ -28,8 +28,8 @@ class FinancialIngestServiceTest {
 
     @Test
     public void test_build_00700(){
-        String ticker = "83690" ;
-        int periods = 3 ;
+        String ticker = "AAPL" ;
+        int periods = 30 ;
         FinancialIngestService.BuildResult result = financialIngestService.build(ticker,periods) ;
         Assertions.assertTrue(result.success());
     }

@@ -149,6 +149,23 @@
   .comp-table .seg-group-name { font-weight: 600; color: #4338ca; cursor: pointer; }
   .comp-table .seg-group-name:hover { text-decoration: underline; }
   .comp-table .seg-group-cell { padding: 0; }
+
+  /* 期权宽跨式推荐 */
+  .search .btn-opt {
+    padding: 9px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.5);
+    background: transparent; color: #fff; cursor: pointer; font-size: 14px; white-space: nowrap;
+  }
+  .search .btn-opt:hover { background: rgba(255,255,255,.15); }
+  .strangle-title { font-size: 14px; font-weight: 600; margin: 16px 0 8px; }
+  .strangle-title .sub { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+  .fee-note { font-size: 12px; color: var(--muted); line-height: 1.7; background: #f8fafc;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
+  .strangle-table { cursor: pointer; }
+  .strangle-table tbody tr:hover td { background: #f0f7ff; }
+  .strangle-table tbody tr.sel td { background: #eff6ff; font-weight: 600; }
+  .strangle-table td .pos { color: var(--up); font-weight: 600; }
+  .strangle-table td .neg { color: var(--down); font-weight: 600; }
+  #strangleChart { width: 100%; height: 300px; margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -158,6 +175,7 @@
   <div class="search">
     <input id="tickerInput" placeholder="输入股票代码，如 00700 / BABA / 600519" />
     <button id="searchBtn">查询</button>
+    <button class="btn-opt" id="strangleBtn" title="期权买入宽跨式(strangle)组合推荐">🎯 期权策略</button>
   </div>
 </header>
 
@@ -192,6 +210,12 @@
           <option value="FY">年报</option>
         </select>
       </span>
+      <span class="ctrl" id="trendViewCtrl">视图
+        <select id="trendView">
+          <option value="line">连续趋势</option>
+          <option value="quarter">分季度对比</option>
+        </select>
+      </span>
       <span class="spacer"></span>
       <button class="close-btn" data-close="trendModal">✕</button>
     </div>
@@ -217,14 +241,34 @@
   </div>
 </div>
 
+<!-- 期权宽跨式推荐弹窗 -->
+<div class="modal-mask" id="strangleModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="strangleTitle">期权宽跨式推荐</h2>
+      <span class="ctrl">到期日数
+        <input type="number" id="strangleExpiries" min="1" max="8" step="1" value="4" style="width:60px">
+      </span>
+      <span class="spacer"></span>
+      <button class="close-btn" data-close="strangleModal">✕</button>
+    </div>
+    <div id="strangleBody">
+      <div class="modal-msg show">加载中…</div>
+    </div>
+    <div id="strangleChart" style="display:none"></div>
+    <div class="modal-msg" id="strangleMsg"></div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const state = {
-  ticker: null, dashboard: null, trendChart: null,
+  ticker: null, dashboard: null, trendChart: null, trendData: null,
   compData: null, compCollapsed: new Set(),
   segCollapsed: new Set(),            // 分部构成：下级分部分组折叠状态（key=分部编码）
   trendSeg: null, trendCode: null,   // 趋势弹窗上下文：trendSeg 非空=分部趋势
-  compSeg: null, compCode: null      // 构成弹窗上下文：compSeg 非空=分部构成
+  compSeg: null, compCode: null,     // 构成弹窗上下文：compSeg 非空=分部构成
+  strangleData: null, strangleChart: null
 };
 
 // ---------- 格式化 ----------
@@ -402,11 +446,13 @@ async function loadTrend() {
   try {
     const d = await api(url);
     if (!d.hasData) {
+      state.trendData = null;
       $('#trendChart').style.display = 'none';
       $('#trendMsg').classList.add('show');
       $('#trendMsg').textContent = d.message || '暂无数据';
       return;
     }
+    state.trendData = d;
     $('#trendMsg').classList.remove('show');
     $('#trendChart').style.display = 'block';
     if (!state.trendChart) state.trendChart = echarts.init($('#trendChart'));
@@ -416,7 +462,23 @@ async function loadTrend() {
   }
 }
 
+/** 趋势图渲染入口：按视图切换分发（分季度对比仅单季度口径可用）。 */
 function renderTrendChart(d) {
+  const quarterAvail = d.periodType === 'SINGLE_Q'
+    && d.points.some(p => /^\d{4}Q[1-4]$/.test(p.period));
+  // 年内累计/年报口径不存在「同季度跨年」，隐藏视图切换并强制连续趋势
+  $('#trendViewCtrl').style.display = quarterAvail ? '' : 'none';
+  if (!quarterAvail) $('#trendView').value = 'line';
+  if ($('#trendView').value === 'quarter' && quarterAvail) {
+    renderQuarterChart(d);
+  } else {
+    renderLineChart(d);
+  }
+  state.trendChart.resize();
+}
+
+/** 连续趋势视图：逐季折线 + 同比虚线（原有图表）。 */
+function renderLineChart(d) {
   const periods = d.points.map(p => p.period);
   const isPercent = d.unit === 'percent';
   // 金额单位即百万财报币种，不做换算；比率指标保持原值
@@ -464,7 +526,69 @@ function renderTrendChart(d) {
       }
     ]
   }, true);
-  state.trendChart.resize();
+}
+
+/**
+ * 分季度对比视图：x 轴为年份，Q1~Q4 各一条折线（同季度跨年比较）。
+ * 用于电商等季节性波动大的行业：连续折线中 Q4 旺季冲高/Q1 回落的锯齿会掩盖趋势，
+ * 拆成四条线后，同一季度的同比动能与季度间的季节性强弱都清晰可读。
+ */
+function renderQuarterChart(d) {
+  const isPercent = d.unit === 'percent';
+  const valUnit = isPercent ? '%' : '百万';
+  const Q_COLORS = { 1: '#2563eb', 2: '#18a058', 3: '#f59e0b', 4: '#e04536' };
+
+  // 解析期间（2025Q3 -> 年份/季度），跳过非季度期间
+  const rows = [];
+  for (const p of d.points) {
+    const m = /^(\d{4})Q([1-4])$/.exec(p.period);
+    if (!m) continue;
+    rows.push({ year: m[1], q: Number(m[2]),
+      v: p.value === null || p.value === undefined ? null : Number(p.value),
+      yoy: p.yoy === null || p.yoy === undefined ? null : Number(p.yoy) });
+  }
+  const years = [...new Set(rows.map(r => r.year))].sort();
+  const lookup = {};   // "年份|季度" -> 数据行
+  rows.forEach(r => { lookup[r.year + '|' + r.q] = r; });
+
+  const series = [1, 2, 3, 4].map(q => ({
+    name: 'Q' + q, type: 'line', connectNulls: true, symbolSize: 7,
+    lineStyle: { width: 2.5, color: Q_COLORS[q] },
+    itemStyle: { color: Q_COLORS[q] },
+    data: years.map(y => { const r = lookup[y + '|' + q]; return r ? r.v : null; })
+  }));
+
+  state.trendChart.setOption({
+    title: { text: '同季度跨年对比（Q4 通常为电商旺季；tooltip 内含同比）',
+      textStyle: { fontSize: 12, fontWeight: 'normal', color: '#8a94a6' },
+      left: 'center', top: 24 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: params => {
+        if (!params || !params.length) return '';
+        const year = params[0].axisValue;
+        let html = `<div>${year} 年</div>`;
+        for (const p of params) {
+          const q = Number(p.seriesName.slice(1));
+          const r = lookup[year + '|' + q];
+          let val = '—';
+          if (p.value !== null && p.value !== undefined) {
+            val = isPercent ? Number(p.value).toFixed(2) + '%'
+              : Number(p.value).toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' 百万';
+          }
+          const yoyTxt = (r && r.yoy !== null)
+            ? ` <span style="color:${r.yoy >= 0 ? '#e04536' : '#18a058'}">（同比 ${r.yoy >= 0 ? '+' : ''}${r.yoy.toFixed(1)}%）</span>` : '';
+          html += `${p.marker}${p.seriesName}: <b>${val}</b>${yoyTxt}<br/>`;
+        }
+        return html;
+      }
+    },
+    legend: { data: ['Q1', 'Q2', 'Q3', 'Q4'], top: 0 },
+    grid: { left: 60, right: 30, top: 60, bottom: 40 },
+    xAxis: { type: 'category', data: years, name: '年份', boundaryGap: true },
+    yAxis: { type: 'value', name: valUnit, scale: true },
+    series
+  }, true);
 }
 
 // ---------- 构成（分层指标 × 最近 N 期表格） ----------
@@ -655,11 +779,134 @@ function toggleComp(code) {
   renderCompTable();
 }
 
+// ---------- 期权宽跨式（long strangle）推荐 ----------
+async function openStrangle() {
+  const ticker = $('#tickerInput').value.trim();
+  if (!ensureTicker(ticker)) return;
+  $('#strangleModal').classList.add('show');
+  $('#strangleChart').style.display = 'none';
+  $('#strangleChart').innerHTML = '';
+  $('#strangleBody').innerHTML = '<div class="modal-msg show">加载中…（需拉取期权链快照，首次可能较慢，请稍候）</div>';
+  await loadStrangle();
+}
+
+function ensureTicker(ticker) {
+  if (!ticker) {
+    $('#dashboard').innerHTML = '<div class="empty">请先在搜索框输入股票代码（仅支持港美正股/ETF）。</div>';
+    return false;
+  }
+  return true;
+}
+
+async function loadStrangle() {
+  const ticker = $('#tickerInput').value.trim();
+  const expiries = $('#strangleExpiries').value || 4;
+  const url = `/api/financial/option-strangle?ticker=${encodeURIComponent(ticker)}&expiries=${expiries}`;
+  try {
+    const d = await api(url);
+    showWarnings(d.warnings);
+    if (!d.hasData) {
+      $('#strangleChart').style.display = 'none';
+      $('#strangleBody').innerHTML = `<div class="modal-msg show">${esc(d.message || '暂无数据')}</div>`;
+      return;
+    }
+    $('#strangleTitle').textContent = `${d.ticker} · 买入宽跨式（strangle）推荐 · 现价 ${fmtMoney(d.spot)} ${d.currency || ''}`;
+    state.strangleData = d;
+    renderStrangle(d);
+  } catch (e) {
+    $('#strangleBody').innerHTML = `<div class="modal-msg show">查询失败：${esc(e.message)}</div>`;
+  }
+}
+
+/** 渲染两个 Top5 榜单 + 手续费说明；点击行绘制该组合的到期收益分布。 */
+function renderStrangle(d) {
+  const cur = d.currency || '';
+  const table = (title, sub, list, rank) => {
+    let rows = list.map((c, i) => {
+      const expCls = Number(c.expectedProfit) >= 0 ? 'pos' : 'neg';
+      const roiCls = Number(c.expectedRoi) >= 0 ? 'pos' : 'neg';
+      return `<tr data-rank="${rank}" data-idx="${i}">
+        <td class="name-cell">${i + 1}</td>
+        <td>${esc(c.expiry)}<div class="c-ratio">${c.daysToExpiry}天</div></td>
+        <td>${fmtMoney(c.putStrike)}</td>
+        <td>${fmtMoney(c.callStrike)}</td>
+        <td>${fmtMoney(c.premiumTotal)}</td>
+        <td>${fmtMoney(c.maxLoss)}</td>
+        <td>${fmtMoney(c.breakevenDown)} ~ ${fmtMoney(c.breakevenUp)}<div class="c-ratio">窗口宽 ${fmtMoney(c.lossWindow)}</div></td>
+        <td><b>${Number(c.winProb).toFixed(1)}%</b></td>
+        <td class="${expCls}">${fmtMoney(c.expectedProfit)}</td>
+        <td class="${roiCls}">${Number(c.expectedRoi).toFixed(1)}%</td>
+        <td>${c.windowOpenInterest}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="strangle-title">${title}<span class="sub">${sub}</span></div>
+      <div class="comp-wrap"><table class="comp-table strangle-table"><thead><tr>
+        <th class="name-col">#</th><th>到期日</th><th>Put行权价</th><th>Call行权价</th>
+        <th>权利金+手续费</th><th>最大亏损</th><th>盈亏平衡区间</th><th>胜率</th>
+        <th>期望收益(${cur})</th><th>期望收益率</th><th>窗口未平仓</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  };
+  $('#strangleBody').innerHTML =
+    table('🏆 收益最大化 Top 5', '按到期期望收益排序（对数正态定价，σ 取两腿隐含波动率均值）', d.profitTop5, 'profit')
+    + table('🎯 胜率最大化 Top 5', '按到期盈利概率排序（亏损窗口越小胜率越高）', d.winRateTop5, 'win')
+    + `<div class="fee-note">${esc(d.fees ? d.fees.note : '')}<br>
+        金额单位：${cur}（按 1 张 put + 1 张 call、持有至到期）；点击表格行查看该组合的到期收益分布曲线；
+        「窗口未平仓」为同一到期日、行权价落在盈亏平衡区间内的期权未平仓量（OI）合计。</div>`;
+  // 默认绘制收益榜第一名
+  if (d.profitTop5 && d.profitTop5.length) drawStrangleChart(d.profitTop5[0], 'profit', 0);
+}
+
+/** 绘制某组合的到期收益分布：净利润 vs 到期价，标注盈亏平衡点与现价。 */
+function drawStrangleChart(c, rank, idx) {
+  document.querySelectorAll('.strangle-table tr.sel').forEach(tr => tr.classList.remove('sel'));
+  const tr = document.querySelector(`.strangle-table tr[data-rank="${rank}"][data-idx="${idx}"]`);
+  if (tr) tr.classList.add('sel');
+  const d = state.strangleData;
+  $('#strangleChart').style.display = 'block';
+  if (!state.strangleChart) state.strangleChart = echarts.init($('#strangleChart'));
+  const prices = c.distribution.map(p => Number(p.price));
+  const profits = c.distribution.map(p => Number(p.profit));
+  // 类目轴标注需落到最近采样点下标
+  const nearIdx = v => {
+    let best = 0, bd = Infinity;
+    prices.forEach((p, i) => { const dd = Math.abs(p - v); if (dd < bd) { bd = dd; best = i; } });
+    return best;
+  };
+  state.strangleChart.setOption({
+    title: { text: `到期收益分布：Put ${fmtMoney(c.putStrike)} / Call ${fmtMoney(c.callStrike)}（${c.expiry}，${c.daysToExpiry}天）`,
+      textStyle: { fontSize: 14 } },
+    tooltip: { trigger: 'axis', formatter: params => {
+      const p = params[0];
+      return `到期价 <b>${Number(p.axisValue).toFixed(2)}</b><br/>到期净利润：<b>${Number(p.value).toFixed(2)} ${d.currency || ''}</b>`;
+    } },
+    grid: { left: 70, right: 30, top: 50, bottom: 40 },
+    xAxis: { type: 'category', data: prices, name: '到期价',
+      axisLabel: { formatter: v => Number(v).toFixed(0), interval: Math.floor(prices.length / 8) } },
+    yAxis: { type: 'value', name: `净利润(${d.currency || ''})`, scale: true },
+    series: [{
+      type: 'line', smooth: true, symbol: 'none', data: profits,
+      lineStyle: { width: 2.5, color: '#2563eb' },
+      areaStyle: { color: 'rgba(37,99,235,.08)' },
+      markLine: { silent: true, symbol: 'none', data: [
+        { yAxis: 0, lineStyle: { color: '#94a3b8', type: 'dashed' }, label: { formatter: '盈亏平衡' } },
+        { xAxis: nearIdx(Number(c.breakevenDown)), lineStyle: { color: '#f59e0b' }, label: { formatter: '下平衡 ' + Number(c.breakevenDown).toFixed(1) } },
+        { xAxis: nearIdx(Number(c.breakevenUp)), lineStyle: { color: '#f59e0b' }, label: { formatter: '上平衡 ' + Number(c.breakevenUp).toFixed(1) } },
+        { xAxis: nearIdx(Number(d.spot)), lineStyle: { color: '#18a058' }, label: { formatter: '现价 ' + Number(d.spot).toFixed(1) } }
+      ] }
+    }]
+  }, true);
+  state.strangleChart.resize();
+}
+
 // ---------- 事件绑定 ----------
 $('#searchBtn').addEventListener('click', loadDashboard);
+$('#strangleBtn').addEventListener('click', openStrangle);
+$('#strangleExpiries').addEventListener('change', loadStrangle);
 $('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });
 $('#trendQuarters').addEventListener('change', loadTrend);
 $('#trendPtype').addEventListener('change', () => { if (!state.trendSeg) loadTrend(); });
+// 视图切换（连续趋势/分季度对比）：数据已缓存，直接本地重绘
+$('#trendView').addEventListener('change', () => { if (state.trendData) renderTrendChart(state.trendData); });
 $('#compQuarters').addEventListener('change', loadComposition);
 // 构成表点击（事件委托，表格重绘后仍生效）：
 // 下级分部分组（▼/▶ 或分组名）→ 原地折叠/展开，不覆盖页面；
@@ -684,13 +931,23 @@ document.querySelectorAll('.close-btn').forEach(b => b.addEventListener('click',
   $('#' + b.dataset.close).classList.remove('show');
   $('#' + b.dataset.close).classList.remove('above');
 }));
+// 宽跨式榜单点击：绘制该组合到期收益分布
+$('#strangleBody').addEventListener('click', e => {
+  const tr = e.target.closest('.strangle-table tbody tr');
+  if (!tr || !state.strangleData) return;
+  const list = tr.dataset.rank === 'profit' ? state.strangleData.profitTop5 : state.strangleData.winRateTop5;
+  drawStrangleChart(list[Number(tr.dataset.idx)], tr.dataset.rank, Number(tr.dataset.idx));
+});
 document.querySelectorAll('.modal-mask').forEach(m => m.addEventListener('click', e => {
   if (e.target === m) {
     m.classList.remove('show');
     m.classList.remove('above');
   }
 }));
-window.addEventListener('resize', () => { if (state.trendChart) state.trendChart.resize(); });
+window.addEventListener('resize', () => {
+  if (state.trendChart) state.trendChart.resize();
+  if (state.strangleChart) state.strangleChart.resize();
+});
 
 // 支持 ?ticker=xxx 直接打开
 const initTicker = new URLSearchParams(location.search).get('ticker');

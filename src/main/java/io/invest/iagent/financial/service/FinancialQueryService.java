@@ -666,50 +666,98 @@ public class FinancialQueryService {
         return rows;
     }
 
-    /** 利润表构成中不展示的指标（EBITDA 类中间口径，干扰净利润/营业利润的构成阅读）。 */
-    private static final Set<String> COMPOSITION_HIDDEN_CODES = Set.of("EBITDA", "ADJUSTED_EBITDA");
+    /**
+     * 构成表中不按目录位置展示的指标：
+     * EBITDA/ADJUSTED_EBITDA 为利润表中间口径，干扰净利润/营业利润的构成阅读；
+     * NON_GAAP_CAPEX 为非 GAAP 补充口径，不作为投资活动子项展示，提升为自由现金流因子行「资本开支」。
+     */
+    private static final Set<String> COMPOSITION_HIDDEN_CODES =
+            Set.of("EBITDA", "ADJUSTED_EBITDA", "NON_GAAP_CAPEX");
 
     /** 合成行编码：税率（所得税/税前利润），非入库指标，仅构成表展示。 */
     private static final String TAX_RATE_CODE = "EFFECTIVE_TAX_RATE";
 
     /**
      * 构建某张报表的分层指标表（目录顺序即行序），并挂载各期间值与占比。
-     * 全部期间无值且无有效子节点的空行剪枝；利润表额外隐藏 EBITDA 类指标，并在所得税行后插入税率行。
+     * 全部期间无值且无有效子节点的空行剪枝。构成表专属调整：
+     * <ul>
+     *   <li>利润表：隐藏 EBITDA 类中间口径；营业费用（含销售/管理/研发等子项）从营业总成本下移出，
+     *       作为根级行排在毛利与营业利润之间（形成 毛利 − 营业费用 = 营业利润 的因子链）；
+     *       毛利后插毛利率、营业利润后插营业利润率、所得税后插税率（均为查询时派生的合成行）；</li>
+     *   <li>现金流量表：NON_GAAP_CAPEX 提升为自由现金流因子行「资本开支」，排在自由现金流之前
+     *       （值取 NON_GAAP_CAPEX，缺失回退 GAAP CAPEX，与 FCF 派生口径一致）。</li>
+     * </ul>
      */
     private List<TreeNode> buildStatementTree(StatementType statement,
                                               Map<String, Map<String, MetricValueDO>> grid,
                                               List<String> periods, String basisCode, String targetCode) {
+        // 利润表中营业费用脱离营业总成本改挂根级（因子链展示需要），构建子节点时跳过该编码
+        Set<String> detachedCodes = statement == StatementType.INCOME
+                ? Set.of("OPERATING_EXPENSES") : Set.of();
+
         List<TreeNode> roots = new ArrayList<>();
         for (MetricDef d : metricCatalog.byStatement(statement)) {
             if (d.getParent() != null || COMPOSITION_HIDDEN_CODES.contains(d.getCode())) {
                 continue;
             }
-            TreeNode node = buildTreeNode(d, statement, grid, periods, basisCode, targetCode);
+            TreeNode node = buildTreeNode(d, statement, grid, periods, basisCode, targetCode, detachedCodes);
             if (node != null) {
                 roots.add(node);
             }
         }
-        // 利润表：所得税行后插入税率（所得税/税前利润）
+
         if (statement == StatementType.INCOME) {
-            TreeNode taxRate = buildTaxRateNode(grid, periods);
-            if (taxRate != null) {
-                int taxIdx = -1;
-                for (int i = 0; i < roots.size(); i++) {
-                    if ("INCOME_TAX".equals(roots.get(i).code())) {
-                        taxIdx = i;
-                        break;
-                    }
-                }
-                roots.add(taxIdx >= 0 ? taxIdx + 1 : roots.size(), taxRate);
+            // 营业费用（连同销售/管理/研发等子项）先插到毛利之后；毛利率随后插到毛利之后，
+            // 最终顺序为 毛利 → 毛利率 → 营业费用 → 营业利润
+            MetricDef opexDef = metricCatalog.get("OPERATING_EXPENSES");
+            if (opexDef != null) {
+                insertAfter(roots, "GROSS_PROFIT",
+                        buildTreeNode(opexDef, statement, grid, periods, basisCode, targetCode, detachedCodes));
             }
+            insertAfter(roots, "GROSS_PROFIT", buildRatioNode("GROSS_MARGIN", grid, periods, targetCode));
+            insertAfter(roots, "OPERATING_INCOME", buildRatioNode("OPERATING_MARGIN", grid, periods, targetCode));
+            // 税率（所得税/税前利润）紧跟所得税行
+            insertAfter(roots, "INCOME_TAX", buildTaxRateNode(grid, periods));
+        } else if (statement == StatementType.CASHFLOW) {
+            // 资本开支（自由现金流因子）插到自由现金流之前
+            insertBefore(roots, "FREE_CASH_FLOW", buildCapexFactorNode(grid, periods, basisCode, targetCode));
         }
         return roots;
+    }
+
+    /** 在根级行中 anchorCode 之后插入 node；node 为 null 忽略，anchor 缺失时追加到末尾。 */
+    private static void insertAfter(List<TreeNode> roots, String anchorCode, TreeNode node) {
+        if (node == null) {
+            return;
+        }
+        for (int i = 0; i < roots.size(); i++) {
+            if (anchorCode.equals(roots.get(i).code())) {
+                roots.add(i + 1, node);
+                return;
+            }
+        }
+        roots.add(node);
+    }
+
+    /** 在根级行中 anchorCode 之前插入 node；node 为 null 忽略，anchor 缺失时追加到末尾。 */
+    private static void insertBefore(List<TreeNode> roots, String anchorCode, TreeNode node) {
+        if (node == null) {
+            return;
+        }
+        for (int i = 0; i < roots.size(); i++) {
+            if (anchorCode.equals(roots.get(i).code())) {
+                roots.add(i, node);
+                return;
+            }
+        }
+        roots.add(node);
     }
 
     /** 构建分层节点；全部期间无值且子节点也全部被剪枝时返回 null（空行删除）。 */
     private TreeNode buildTreeNode(MetricDef d, StatementType statement,
                                    Map<String, Map<String, MetricValueDO>> grid,
-                                   List<String> periods, String basisCode, String targetCode) {
+                                   List<String> periods, String basisCode, String targetCode,
+                                   Set<String> detachedCodes) {
         if (COMPOSITION_HIDDEN_CODES.contains(d.getCode())) {
             return null;
         }
@@ -737,8 +785,8 @@ public class FinancialQueryService {
 
         List<TreeNode> children = new ArrayList<>();
         for (MetricDef child : metricCatalog.children(d.getCode())) {
-            if (child.statementType() == statement) {
-                TreeNode childNode = buildTreeNode(child, statement, grid, periods, basisCode, targetCode);
+            if (child.statementType() == statement && !detachedCodes.contains(child.getCode())) {
+                TreeNode childNode = buildTreeNode(child, statement, grid, periods, basisCode, targetCode, detachedCodes);
                 if (childNode != null) {
                     children.add(childNode);
                 }
@@ -752,6 +800,61 @@ public class FinancialQueryService {
         return new TreeNode(d.getCode(), d.getNameCn(), d.getUnit(),
                 d.getValueType() == null ? "FLOW" : d.getValueType(), d.isDerived(),
                 d.getCode().equals(targetCode), children, cells);
+    }
+
+    /**
+     * 合成比率行（毛利率/营业利润率）：取 grid 中查询时派生的比率值展示，非入库行；
+     * 比率行不再计算占比、无同比。所有期间都无法计算（缺分子/分母）时返回 null（按空行剪枝）。
+     */
+    private TreeNode buildRatioNode(String code, Map<String, Map<String, MetricValueDO>> grid,
+                                    List<String> periods, String targetCode) {
+        MetricDef d = metricCatalog.get(code);
+        if (d == null) {
+            return null;
+        }
+        List<CompCell> cells = new ArrayList<>();
+        boolean hasValue = false;
+        for (String p : periods) {
+            MetricValueDO v = grid.getOrDefault(p, Map.of()).get(code);
+            BigDecimal value = v == null ? null : v.getValue();
+            if (value != null) {
+                hasValue = true;
+            }
+            cells.add(new CompCell(value, null, null));
+        }
+        return hasValue ? new TreeNode(code, d.getNameCn(), "percent", ValueType.RATIO.name(),
+                true, code.equals(targetCode), List.of(), cells) : null;
+    }
+
+    /**
+     * 自由现金流因子行「资本开支」：排在自由现金流行之前，值取 NON_GAAP_CAPEX（业绩公告经调整口径，
+     * 与 FCF 派生口径一致），缺失时回退 GAAP CAPEX，保证 经营现金流 − 资本开支 = 自由现金流 可对账；
+     * 占收入比与其他流量行一致。所有期间均无值时返回 null（按空行剪枝）。
+     */
+    private TreeNode buildCapexFactorNode(Map<String, Map<String, MetricValueDO>> grid,
+                                          List<String> periods, String basisCode, String targetCode) {
+        List<CompCell> cells = new ArrayList<>();
+        boolean hasValue = false;
+        for (String p : periods) {
+            Map<String, MetricValueDO> cell = grid.getOrDefault(p, Map.of());
+            MetricValueDO capex = cell.get("NON_GAAP_CAPEX");
+            if (capex == null || capex.getValue() == null) {
+                capex = cell.get("CAPEX");
+            }
+            BigDecimal value = capex == null ? null : capex.getValue();
+            BigDecimal ratio = null;
+            if (value != null) {
+                hasValue = true;
+                MetricValueDO basis = cell.get(basisCode);
+                if (basis != null && basis.getValue() != null && basis.getValue().signum() != 0) {
+                    ratio = value.multiply(BigDecimal.valueOf(100))
+                            .divide(basis.getValue().abs(), 1, RoundingMode.HALF_UP);
+                }
+            }
+            cells.add(new CompCell(value, capex == null ? null : capex.getYoy(), ratio));
+        }
+        return hasValue ? new TreeNode("NON_GAAP_CAPEX", "资本开支", "million", ValueType.FLOW.name(),
+                false, "NON_GAAP_CAPEX".equals(targetCode), List.of(), cells) : null;
     }
 
     /**
