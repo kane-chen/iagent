@@ -9,9 +9,37 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from .model import FinancialTable, TableRow
+
+
+# 月份名（1 月起）与 0 基下标
+MONTH_LIST = ["january", "february", "march", "april", "may", "june",
+              "july", "august", "september", "october", "november", "december"]
+_MONTH_INDEX = {name: i for i, name in enumerate(MONTH_LIST)}
+# 财历溢出阈值：结束日落在次月 1~7 号视为上一自然月所属财季（见 effective_period_month）
+_SPILL_DAY = 7
+
+
+def effective_period_month(lower_text: Optional[str], month: Optional[str]) -> Optional[str]:
+    """4-4-5/13 周财历（如 Apple）财季结束日可能落在次月初 1~7 号
+    （如 FY2023 Q2 结束于 "April 1, 2023"、Q3 结束于 "July 1, 2023"）。
+    这类结束日经济上属于上一自然月对应的财季；若不归一，April 会被映射成财年 Q3、
+    July 成 Q4，导致该季整体错位一季。月末（≥25 号）等正常结束日不受影响。
+
+    :param lower_text: 含 "<Month> <day>" 的期间文本（已转小写）
+    :param month:      文本中识别出的月份名
+    :return:           归一后用于定财季的月份名
+    """
+    if not month or not lower_text:
+        return month
+    rx = re.compile(r"\b" + re.escape(month) + r"\s+(\d{1,2})\b")
+    m = rx.search(lower_text)
+    if m and int(m.group(1)) <= _SPILL_DAY:
+        return MONTH_LIST[(_MONTH_INDEX[month] - 1) % 12]
+    return month
 
 
 # 日历年（Dec FY-end）月份→财季映射
@@ -88,9 +116,9 @@ def _from_period_phrase(lower_text: str, m2q: dict) -> str:
     if "six months ended" in lower_text or "half year" in lower_text:
         return "QTD6"
     if "quarter ended" in lower_text or "three months ended" in lower_text:
-        for month, q in m2q.items():
-            if month in lower_text:
-                return q
+        mon = effective_period_month(lower_text, _month_from_text(lower_text))
+        if mon:
+            return m2q.get(mon, "Q1")
         return "Q1"
     return ""
 
@@ -156,16 +184,17 @@ def _find_latest_year_month(rows) -> Optional[tuple]:
     """Scan all cells for (year, month_name) pairs and return the latest chronologically.
 
     Looks for phrases like ``september 30, 2025`` or ``june 2025`` in cell text.
-    Returns (year_int, month_name_lower) or None if no date found.
+    Returns (year_int, month_name_lower) or None if no date found. 返回的月份名已经过
+    财历溢出归一（结束日落在次月 1~7 号时归到上一月），比较仍按真实日期先后。
     """
     import re
-    # Match <Month> <day?>, <year>
+    # Match <Month> <day>, <year>（day 必填：无日的纯年月无法判断溢出，回退原月）
     _DATE_RE = re.compile(
         r"(january|february|march|april|may|june|july|august|september|"
-        r"october|november|december)\s+\d{1,2}\s*,?\s*(20\d{2})",
+        r"october|november|december)\s+(\d{1,2})\s*,?\s*(20\d{2})",
         re.IGNORECASE,
     )
-    _YEAR_RE = re.compile(r"\b(20\d{2})\b")
+    # best: (year, real_month_index, effective_month)
     best: Optional[tuple] = None
     for row in rows or []:
         # Check label
@@ -177,11 +206,15 @@ def _find_latest_year_month(rows) -> Optional[tuple]:
             low = text_src.lower().replace("\xa0", " ")
             for m in _DATE_RE.finditer(low):
                 mon = m.group(1).lower()
-                yr = int(m.group(2))
-                cand = (yr, mon)
-                if best is None or _date_tuple_gt(cand, best):
+                day = int(m.group(2))
+                yr = int(m.group(3))
+                eff = MONTH_LIST[(_MONTH_INDEX[mon] - 1) % 12] if day <= _SPILL_DAY else mon
+                cand = (yr, _MONTH_INDEX[mon], eff)
+                if best is None or (cand[0], cand[1]) > (best[0], best[1]):
                     best = cand
-    return best
+    if best is None:
+        return None
+    return (best[0], best[2])
 
 
 def _date_tuple_gt(a: tuple, b: tuple) -> bool:
@@ -218,7 +251,7 @@ def _from_title(lower_title: str, m2q: dict) -> str:
     if any(x in lower_title for x in ("six months", "six-month", "half year")):
         return "QTD6"
     if "three months" in lower_title or "three-month" in lower_title or "quarter" in lower_title:
-        mon = _month_from_text(lower_title)
+        mon = effective_period_month(lower_title, _month_from_text(lower_title))
         if mon:
             return m2q.get(mon, "Q1")
         return "Q1"
@@ -237,7 +270,7 @@ def _from_header(header: Optional[str], m2q: dict) -> Optional[str]:
         return "QTD6"
     if any(x in h for x in ("three months ended", "three month ended",
                             "three-month", "3 months ended", "quarter ended")):
-        mon = _month_from_text(h)
+        mon = effective_period_month(h, _month_from_text(h))
         if mon:
             return m2q.get(mon, "Q1")
         return "Q1"

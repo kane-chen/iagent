@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from .filing_context import FilingContext
 from .html_orchestrator import HtmlReportOrchestrator
 from .html_parser import HtmlReportParser
 from .model import CompanyConfig, Segment
@@ -29,6 +30,11 @@ class HtmlFileSegmentParser:
 
     def parse(self, file: Path, cfg: Optional[CompanyConfig]) -> List[Segment]:
         tables = self._html_parser.parse(file)
+        # 按文件名盖标来源财报类型：年报(10-K/ANNUAL/20-F)中无季度信号的裸年份表需按 FY 处理
+        report_type = FilingContext.parse(file).reportType
+        if report_type:
+            for t in tables:
+                t.reportType = report_type
         logger.info("Parsed HTML file %s into %d financial tables", file.name, len(tables))
         orch = self._orchestrator
         if orch is None:

@@ -53,6 +53,31 @@ public class FinancialIntegrationTest {
     }
 
     @Test
+    public void test_GOOG_init() {
+        String ticker = "GOOG";
+        int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
+
+
+    @Test
+    public void test_META_init() {
+        String ticker = "META";
+        int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
+
+    @Test
+    public void test_83690_init() {
+        String ticker = "83690";
+        int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
+
+    @Test
     public void test_600900_init() {
         String ticker = "600900";
         int startYear = 2020;
@@ -61,8 +86,8 @@ public class FinancialIntegrationTest {
     }
 
     @Test
-    public void test_600188_init() {
-        String ticker = "600188";
+    public void test_601088_init() {
+        String ticker = "601088";
         int startYear = 2020;
         int endYear = 2026;
         this.filling(ticker, startYear, endYear);

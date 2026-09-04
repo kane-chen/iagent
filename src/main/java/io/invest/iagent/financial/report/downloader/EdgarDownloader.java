@@ -100,6 +100,11 @@ public class EdgarDownloader extends ReportDownloader {
                 // 本土公司：年报 10-K，季报/中报 10-Q（精确匹配，排除 10-K/A 等修订）
                 list.addAll(fromSubmissions(recent, type == ReportType.ANNUAL ? "10-K" : "10-Q",
                         cik, t, company,startYear,endYear));
+                // 财年末季（如 Apple 7-9 月的财年 Q4）不再出 10-Q，其单季产品分部数据只在
+                // 当季业绩新闻稿（8-K Item 2.02 的 Exhibit 99.1）中，随季报批次一并抓取补齐。
+                if (type != ReportType.ANNUAL) {
+                    list.addAll(fetch8kEarnings(recent, cik, t, company, startYear, endYear));
+                }
             }
         } catch (Exception e) {
             list.clear();
@@ -197,6 +202,78 @@ public class EdgarDownloader extends ReportDownloader {
         }
         list.sort(Comparator.comparing(m -> m.publishDate));
         return list;
+    }
+
+    /**
+     * 本土公司季度业绩新闻稿：从 submissions 中筛 8-K（items 含 2.02 = Results of Operations），
+     * 取 Exhibit 99.1 附件并校验标题为业绩公告。财年末季（如 Apple 财年 Q4 / 7-9 月）不单出 10-Q，
+     * 该季分部/产品收入只在业绩稿的 "Three Months Ended" 表中，故 10-Q 之外需补抓此件。
+     */
+    private List<ReportMeta> fetch8kEarnings(JSONObject recent, long cik, String ticker,
+                                             String company, int startYear, int endYear) {
+        List<ReportMeta> list = new ArrayList<>();
+        JSONArray accessions = recent.getJSONArray("accessionNumber");
+        JSONArray forms = recent.getJSONArray("form");
+        JSONArray filingDates = recent.getJSONArray("filingDate");
+        JSONArray itemsArr = recent.getJSONArray("items");
+        for (int i = 0; i < accessions.size(); i++) {
+            if (!"8-K".equals(forms.getString(i))) {
+                continue;
+            }
+            String items = itemsArr.getString(i);
+            if (items == null || !items.contains("2.02")) {
+                continue;
+            }
+            String filingDate = filingDates.getString(i);
+            int year = Integer.parseInt(filingDate.substring(0, 4));
+            if (year < startYear || year > endYear) {
+                continue;
+            }
+            String accDir = accessions.getString(i).replace("-", "");
+            throttle();
+            try {
+                String exDoc = findExhibit991(cik, accDir);
+                if (exDoc == null) {
+                    continue;
+                }
+                String docUrl = String.format(DOC_URL, cik, accDir, exDoc);
+                String text = fetchHeadText(docUrl);
+                if (!EARNINGS_TITLE.matcher(
+                        text.substring(0, Math.min(TITLE_SCAN_CHARS, text.length()))).find()) {
+                    continue;   // 非业绩公告（其它 2.02 材料）
+                }
+                ReportMeta m = new ReportMeta();
+                m.title = company + " 8-K 业绩公告 (filed " + filingDate + ")";
+                m.publishDate = filingDate;
+                m.pdfUrl = docUrl;
+                m.localPath = String.format("US/%s/%s_%s_8-K.htm",
+                        ticker, ticker, filingDate.replace("-", ""));
+                list.add(m);
+            } catch (Exception ex) {
+                // 单份附件抓取/校验失败不影响整体
+            }
+        }
+        list.sort(Comparator.comparing(m -> m.publishDate));
+        return list;
+    }
+
+    /** 拉取某次申报的 index.json，返回 Exhibit 99.1 的 htm/html 文件名（无则 null）。 */
+    private String findExhibit991(long cik, String accDir) throws Exception {
+        String idxUrl = String.format(
+                "https://www.sec.gov/Archives/edgar/data/%d/%s/index.json", cik, accDir);
+        JSONObject idx = JSON.parseObject(getText(idxUrl, this.downloadUserAgent()));
+        JSONObject directory = idx == null ? null : idx.getJSONObject("directory");
+        JSONArray items = directory == null ? null : directory.getJSONArray("item");
+        if (items == null) {
+            return null;
+        }
+        for (int i = 0; i < items.size(); i++) {
+            String name = items.getJSONObject(i).getString("name");
+            if (name != null && EX99_1.matcher(name).find()) {
+                return name;
+            }
+        }
+        return null;
     }
 
     /** 抓取文档开头内容（Range 只取前 16KB）并转成纯文本，用于标题判断 */

@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 YEAR_RE = re.compile(r"\b(20\d{2})\b")
 PERIOD_TYPE_RE = re.compile(r"(FY|Q[1-4]|H[12])$", re.IGNORECASE)
 
+# 年报财报类型：这类报告中的分部表只披露全年数，无任何季度信号的裸年份表应按 FY 处理
+_ANNUAL_REPORT_TYPES = ("10-K", "ANNUAL", "20-F")
+
 
 class DataExtractor:
     def __init__(self, segmentRecognizer: SegmentRecognizer, metricMapper: MetricMapper):
@@ -86,7 +89,11 @@ class DataExtractor:
 
         quarter = period_type_util.determinePeriodType(table, fyem)
         if not quarter:
-            quarter = "Q3"
+            # 年报（10-K/ANNUAL/20-F）中无任何季度/月份信号的裸年份表（如 Apple 10-K 产品
+            # 净销售表，表头仅 2024/2023/2022）披露的是全年数，按 FY 处理；
+            # 其余报告（10-Q/8-K 等）缺信号时维持原兜底 Q3。
+            rtype = (table.getReportType() or "").upper()
+            quarter = "FY" if rtype in _ANNUAL_REPORT_TYPES else "Q3"
 
         seq = period_sequence.build(table, quarter, fyem)
         if not seq:

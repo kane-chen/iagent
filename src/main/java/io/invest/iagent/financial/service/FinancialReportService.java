@@ -59,7 +59,10 @@ public class FinancialReportService {
             return types ;
         }
         if(Market.US.equals(market)){
-            return List.of(ReportType.QUARTERLY) ;
+            // 本土公司：10-K 年报 + 10-Q 季报。财年最后一季（如 Apple 7-9 月的财年 Q4）
+            // 不再出 10-Q，其全年/期末数据只在 10-K 中，必须下载年报，否则该季缺失；
+            // 中概股(FPI)：ANNUAL→20-F 年报，QUARTERLY→6-K 季度/全年业绩公告。
+            return List.of(ReportType.ANNUAL, ReportType.QUARTERLY) ;
         }
         return List.of(ReportType.ANNUAL,ReportType.INTERIM,ReportType.INTERIM) ;
     }

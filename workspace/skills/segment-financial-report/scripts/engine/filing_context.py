@@ -15,10 +15,11 @@ _FILING_DIR_PATTERN = re.compile(r"fil_hk_[^_]+_(\d{4})_([A-Z0-9]+)", re.IGNOREC
 
 # 新布局（FinancialReportService 下载产物）文件名：
 #   港股/A 股 PDF：<ticker>_<yyyy-MM-dd>_<ANNUAL|INTERIM|QUARTERLY>.pdf
-#   美股 HTM：    <ticker>_<YYYYMMDD>_<10-K|10-Q|6-K|20-F>.htm
+#   美股 HTM：    <ticker>_<YYYYMMDD>_<10-K|10-Q|6-K|8-K|20-F>.htm
+# 8-K 为美股本土公司季度业绩新闻稿（Exhibit 99.1），财年末季单季分部数据的唯一来源，按季报处理。
 _REPORT_FILE_PATTERN = re.compile(
     r"^[^_]+_(?P<date>\d{4}-\d{2}-\d{2}|\d{8})_"
-    r"(?P<type>ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|20-F)\.(pdf|html?)$",
+    r"(?P<type>ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|8-K|20-F)\.(pdf|html?)$",
     re.IGNORECASE,
 )
 

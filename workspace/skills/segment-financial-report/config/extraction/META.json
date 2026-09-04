@@ -1,0 +1,45 @@
+{
+  "companyCode": "AAPL",
+  "companyName": "APPLE",
+  "market": "NASDAQ",
+  "defaultCurrency": "USD",
+  "defaultUnit": "million",
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4","FY"],
+  "segments": [
+    {
+      "segmentCode": "FAMILY_APPS",
+      "segmentName": "FAMILY_APPS",
+      "aliases": ["Family of Apps"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "Advertising",
+      "segmentName": "Advertising",
+      "aliases": ["Advertising"],
+      "level": 2,
+      "parentCode": "FAMILY_APPS"
+    },
+    {
+      "segmentCode": "REALITY_LABS",
+      "segmentName": "REALITY_LABS",
+      "aliases": ["Reality Labs"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenues", "Revenue", "收入", "Net sales"]
+    },
+    {
+      "standardMetricCode": "OPERATING_EXPENSES",
+      "rawMetricNames": ["Operating expenses"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating Income", "Operating income (loss):", "经营利润", "营业利润"]
+    }
+  ]
+}

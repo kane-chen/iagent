@@ -54,12 +54,13 @@ public class SegmentIngestor {
     /** 引擎期间标签 2025FY / 2025Q1 / 2025H1 */
     private static final Pattern PERIOD_RE = Pattern.compile("(\\d{4})(FY|Q[1-4]|H[12])");
     /**
-     * 下载产物文件名：{@code <ticker>_<yyyy-MM-dd|yyyyMMdd>_<ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|20-F>.<ext>}。
+     * 下载产物文件名：{@code <ticker>_<yyyy-MM-dd|yyyyMMdd>_<ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|8-K|20-F>.<ext>}。
      * 与 Python {@code FilingContext._REPORT_FILE_PATTERN} 保持一致。
+     * 8-K 为美股本土公司季度业绩新闻稿（财年末季单季分部数据的唯一来源），按季报处理。
      */
     private static final Pattern REPORT_FILE_RE = Pattern.compile(
             "^[^_]+_(?<date>\\d{4}-\\d{2}-\\d{2}|\\d{8})_"
-                    + "(?<type>ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|20-F)\\.(pdf|html?)$",
+                    + "(?<type>ANNUAL|INTERIM|QUARTERLY|10-K|10-Q|6-K|8-K|20-F)\\.(pdf|html?)$",
             Pattern.CASE_INSENSITIVE);
     /** 引擎指标编码 → 标准指标编码（其余编码与 catalog 一致） */
     private static final Map<String, String> METRIC_CODE_MAP = Map.of(

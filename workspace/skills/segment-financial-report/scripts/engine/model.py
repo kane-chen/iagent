@@ -102,9 +102,16 @@ class FinancialTable:
         self.currency: Optional[str] = None
         self.unit: Optional[str] = None
         self.period: Optional[str] = None
+        # 来源财报类型（10-K/10-Q/8-K/6-K/20-F/ANNUAL/INTERIM/QUARTERLY），由文件级解析器
+        # 按文件名 FilingContext 盖标；年报（10-K/ANNUAL/20-F）中无任何季度信号的裸年份表
+        # 应按全年(FY)而非某一季处理。
+        self.reportType: Optional[str] = None
 
     def getTitle(self):
         return self.title
+
+    def getReportType(self):
+        return self.reportType
 
     def getHeaders(self):
         return self.headers

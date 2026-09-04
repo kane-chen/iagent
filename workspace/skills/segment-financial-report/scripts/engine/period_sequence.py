@@ -11,9 +11,13 @@ import re
 from typing import List, Optional, Tuple
 
 from .model import FinancialTable
-from .period_type_util import _build_month_to_quarter_map
+from .period_type_util import _build_month_to_quarter_map, effective_period_month
 
 YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
+# 列头单元格自带的显式期间标记（与年份同格），如 8-K 季度趋势附表的 "Q4 2023" / "Q1 2025"、
+# "FY 2024" / "H1 2025"。这类列已显式给出季/年，不能当裸年份列按默认季度兜底，
+# 否则多个季度列会被错标成同一季（如把 Q1 值打成 Q3）。
+EXPLICIT_PERIOD_RE = re.compile(r"\b(q[1-4]|h[12]|fy)\b", re.IGNORECASE)
 MONTH_NAMES = ("january", "february", "march", "april", "may", "june",
                "july", "august", "september", "october", "november", "december")
 MONTH_NUM = {name: i + 1 for i, name in enumerate(MONTH_NAMES)}
@@ -95,7 +99,7 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
     # year columns.
     if not col_month_map and getattr(table, "period", None):
         hint_lower = table.period.lower().replace("\xa0", " ")
-        mon = _find_month(hint_lower)
+        mon = effective_period_month(hint_lower, _find_month(hint_lower))
         if mon is not None:
             # Determine suffix from the hint wording: FY vs quarter
             hint_suffix = _classify_hint_suffix(hint_lower, defaultQuarter, m2q, mon)
@@ -132,7 +136,7 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
             continue
         if row.getLabel():
             lbl_lower = row.getLabel().lower()
-            mon = _find_month(lbl_lower)
+            mon = effective_period_month(lbl_lower, _find_month(lbl_lower))
             if mon is not None:
                 if "three month" in lbl_lower:
                     label_default_month = mon
@@ -167,13 +171,17 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
                 # A group header cell: "Three Months Ended December 31,",
                 # "Six Months Ended December 31,", "Year Ended June 30,".
                 # If it also contains a year (self-contained), we'll handle below.
-                group_headers.append(_GroupHeader(c_idx, group_suffix, mon_in_cell))
+                # 月份做财历溢出归一（次月初结束日归上月），与自包含日期分支保持一致。
+                group_headers.append(_GroupHeader(c_idx, group_suffix,
+                                                  effective_period_month(lower, mon_in_cell)))
 
             if has_year and mon_in_cell is not None and group_suffix is None:
                 # Self-contained standalone date like "September 30, 2025" with no
                 # group qualifier -- treat as the quarter for that month.
-                q = m2q[mon_in_cell]
-                fy = _fiscal_year(year, MONTH_NUM[mon_in_cell], fiscal_year_end_month)
+                # 财历溢出归一：结束日落在次月初（如 Apple "April 1, 2023"）按上月定财季。
+                eff_mon = effective_period_month(lower, mon_in_cell)
+                q = m2q[eff_mon]
+                fy = _fiscal_year(year, MONTH_NUM[eff_mon], fiscal_year_end_month)
                 self_contained.append(_Column(c_idx, f"{fy}{q}", _detect_currency(lower)))
                 continue
 
@@ -185,11 +193,21 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
                 # period when a table mixes multiple quarters).
                 final_suffix = group_suffix
                 if mon_in_cell is not None:
-                    year = _fiscal_year(year, MONTH_NUM[mon_in_cell], fiscal_year_end_month)
+                    eff_mon = effective_period_month(lower, mon_in_cell)
+                    year = _fiscal_year(year, MONTH_NUM[eff_mon], fiscal_year_end_month)
                     if final_suffix in ("Q1", "Q2", "Q3", "Q4"):
-                        final_suffix = m2q[mon_in_cell]
+                        final_suffix = m2q[eff_mon]
                 self_contained.append(_Column(c_idx, f"{year}{final_suffix}", _detect_currency(lower)))
                 continue
+
+            if has_year:
+                # 列头自带显式期间标记（"Q4 2023" / "FY 2024" / "H1 2025" 等）：
+                # 以公司报告口径直接作为该列期间（年份即财年标签），无需再按分组/默认季度推断。
+                mtok = EXPLICIT_PERIOD_RE.search(lower)
+                if mtok and group_suffix is None and mon_in_cell is None:
+                    self_contained.append(
+                        _Column(c_idx, f"{year}{mtok.group(1).upper()}", _detect_currency(lower)))
+                    continue
 
             if has_year:
                 # Bare year cell -- assign later based on groups
@@ -324,7 +342,7 @@ def _build_column_month_map(table: FinancialTable, m2q: dict) -> dict:
                 if text is None:
                     continue
                 lower = text.lower()
-                mon = _find_month(lower)
+                mon = effective_period_month(lower, _find_month(lower))
                 if mon is not None:
                     suffix = _classify_group_suffix(lower, None)
                     if suffix is None:
@@ -333,7 +351,7 @@ def _build_column_month_map(table: FinancialTable, m2q: dict) -> dict:
         # Row label -- e.g. "Three Months Ended September 30," in Microsoft 10-Q
         if row.getLabel():
             lbl_lower = row.getLabel().lower()
-            mon = _find_month(lbl_lower)
+            mon = effective_period_month(lbl_lower, _find_month(lbl_lower))
             if mon is not None:
                 if "three month" in lbl_lower or "quarter" in lbl_lower:
                     month_cells.append((1, m2q[mon], mon))
@@ -402,7 +420,7 @@ def _scan_headers_for_period(table: FinancialTable, m2q: dict,
     headers = table.getHeaders() or []
     combined = " ".join(h for h in headers if h).lower().replace("\xa0", " ")
     combined = re.sub(r"[,\s]+", " ", combined)
-    mon = _find_month(combined)
+    mon = effective_period_month(combined, _find_month(combined))
     if mon is None:
         return None, None
     # Require an explicit period-starter keyword to avoid false matches

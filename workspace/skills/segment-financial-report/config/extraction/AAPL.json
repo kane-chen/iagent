@@ -1,0 +1,60 @@
+{
+  "companyCode": "AAPL",
+  "companyName": "APPLE",
+  "market": "NASDAQ",
+  "defaultCurrency": "USD",
+  "defaultUnit": "million",
+  "fiscalYearEndMonth": 9,
+  "includePeriodTypes": ["Q1","Q2","Q3","Q4","FY"],
+  "segments": [
+    {
+      "segmentCode": "iPhone",
+      "segmentName": "iPhone",
+      "aliases": ["iPhone"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "Mac",
+      "segmentName": "Mac",
+      "aliases": ["Mac"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "iPad",
+      "segmentName": "iPad",
+      "aliases": ["iPad"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "Wearables",
+      "segmentName": "Wearables",
+      "aliases": ["Wearables, Home and Accessories"],
+      "level": 1,
+      "parentCode": null
+    },
+    {
+      "segmentCode": "Services",
+      "segmentName": "Services",
+      "aliases": ["Services"],
+      "level": 1,
+      "parentCode": null
+    }
+  ],
+  "metricMappingRules": [
+    {
+      "standardMetricCode": "REVENUE",
+      "rawMetricNames": ["Revenues", "Revenue", "收入", "Net sales"]
+    },
+    {
+      "standardMetricCode": "OPERATING_EXPENSES",
+      "rawMetricNames": ["Operating expenses"]
+    },
+    {
+      "standardMetricCode": "OPERATING_INCOME",
+      "rawMetricNames": ["Operating income", "Operating Income", "Operating income (loss):", "经营利润", "营业利润"]
+    }
+  ]
+}

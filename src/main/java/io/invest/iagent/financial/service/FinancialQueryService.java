@@ -482,6 +482,73 @@ public class FinancialQueryService {
     }
 
     /**
+     * 分部派生利润率指标：比率 code -> 分子指标 code（分母均为分部收入 REVENUE）。
+     * 这类比率不入库，分部趋势/构成查询时按 分子/收入×100 现场计算。
+     */
+    private static final Map<String, String> SEGMENT_RATIO_NUMERATOR = Map.of(
+            "GROSS_MARGIN", "GROSS_PROFIT",
+            "EBITA_MARGIN", "ADJUSTED_EBITA",
+            "OPERATING_MARGIN", "OPERATING_INCOME");
+
+    /**
+     * 分部派生利润率趋势：取该分部全部分部值，逐季度按 分子/收入×100 计算比率
+     *（分子或收入缺失的期间留空并跳过），同比为相对去年同季比率的变动百分比。
+     * 仅取季度/半年期（剔除 FY 全年值）。
+     */
+    private TrendResult segmentRatioTrend(String bare, String segmentCode, String segName,
+                                          String code, MetricDef def, String numCode,
+                                          Integer quarters, List<String> warnings) {
+        // period -> metricCode -> 值（含该分部全部指标，供取分子与收入）
+        Map<String, Map<String, SegmentValueDO>> grid = new HashMap<>();
+        for (SegmentValueDO v : repository.querySegmentValues(bare, null)) {
+            if (segmentCode.equals(v.getSegmentCode())) {
+                grid.computeIfAbsent(v.getFiscalPeriod(), k -> new HashMap<>()).put(v.getMetricCode(), v);
+            }
+        }
+        // 逐季度计算比率
+        Map<String, BigDecimal> ratioByPeriod = new HashMap<>();
+        for (Map.Entry<String, Map<String, SegmentValueDO>> e : grid.entrySet()) {
+            Map<String, SegmentValueDO> cell = e.getValue();
+            SegmentValueDO num = cell.get(numCode);
+            SegmentValueDO rev = cell.get("REVENUE");
+            if (num != null && rev != null && num.getValue() != null && rev.getValue() != null
+                    && rev.getValue().signum() != 0) {
+                ratioByPeriod.put(e.getKey(), num.getValue().multiply(BigDecimal.valueOf(100))
+                        .divide(rev.getValue().abs(), 2, RoundingMode.HALF_UP));
+            }
+        }
+        // 季度口径（ordinal<5），剔除 FY 年报，按时间升序
+        List<String> qPeriods = ratioByPeriod.keySet().stream()
+                .filter(p -> {
+                    FiscalPeriod fp = FiscalPeriod.parse(p);
+                    return fp != null && fp.ordinal() < 5;
+                })
+                .sorted(Comparator.comparingInt(p -> FiscalPeriod.parse(p).sortKey()))
+                .toList();
+        int n = quarters == null ? 16 : Math.max(1, Math.min(40, quarters));
+        List<String> recent = qPeriods.size() <= n ? qPeriods : qPeriods.subList(qPeriods.size() - n, qPeriods.size());
+
+        List<TrendPoint> points = new ArrayList<>();
+        for (String p : recent) {
+            BigDecimal value = ratioByPeriod.get(p);
+            BigDecimal yoy = null;
+            if (value != null) {
+                FiscalPeriod fp = FiscalPeriod.parse(p);
+                BigDecimal prior = fp == null ? null : ratioByPeriod.get(fp.yearAgo().canonical());
+                if (prior != null && prior.signum() != 0) {
+                    yoy = value.subtract(prior).multiply(BigDecimal.valueOf(100))
+                            .divide(prior.abs(), 1, RoundingMode.HALF_UP);
+                }
+            }
+            points.add(new TrendPoint(p, value, yoy));
+        }
+        boolean hasData = points.stream().anyMatch(p -> p.value() != null);
+        return new TrendResult(bare, code, def.getNameCn(), def.getUnit(), "SINGLE_Q",
+                hasData, hasData ? null : "未查询到分部「" + segName + "」的 " + def.getNameCn() + " 季度数据。",
+                warnings, points);
+    }
+
+    /**
      * Web 分部趋势：某业务分部某指标最近 N 个季度（默认 16）的数值与同比序列。
      * 仅取季度/半年期（剔除 FY 全年值，避免与单季不可比），同比取采集时已算好的值。
      */
@@ -497,6 +564,12 @@ public class FinancialQueryService {
         List<SegmentDO> segments = loadSegments(bare, warnings);
         SegmentDO seg = segments.stream().filter(s -> s.getSegmentCode().equals(segmentCode)).findFirst().orElse(null);
         String segName = seg == null ? segmentCode : segmentDisplayName(seg);
+
+        // 分部派生利润率（毛利率/EBITA利润率/营业利润率）不入库，查询时按 分子/收入 现场计算
+        String ratioNumCode = SEGMENT_RATIO_NUMERATOR.get(code);
+        if (ratioNumCode != null) {
+            return segmentRatioTrend(bare, segmentCode, segName, code, def, ratioNumCode, quarters, warnings);
+        }
 
         List<SegmentValueDO> values = repository.querySegmentValues(bare, null).stream()
                 .filter(v -> segmentCode.equals(v.getSegmentCode()) && code.equals(v.getMetricCode()))
@@ -663,7 +736,55 @@ public class FinancialQueryService {
                         d == null ? "million" : d.getUnit(), cells));
             }
         }
+
+        // 合成利润率行（查询时派生，非入库行）：同期收入与对应利润都有值时，紧跟利润行插入。
+        // 毛利后插毛利率，调整后EBITA后插EBITA利润率；任一期可算即保留，否则剪枝。
+        insertSegmentRowAfter(rows, "GROSS_PROFIT",
+                buildSegmentRatioRow("GROSS_MARGIN", "GROSS_PROFIT", grid, periods));
+        insertSegmentRowAfter(rows, "ADJUSTED_EBITA",
+                buildSegmentRatioRow("EBITA_MARGIN", "ADJUSTED_EBITA", grid, periods));
         return rows;
+    }
+
+    /**
+     * 分部合成利润率行：ratioCode 的比率 = numCode / REVENUE × 100（各期间独立计算，缺分子/分母留空）。
+     * 所有期间都无法计算时返回 null（按空行剪枝）。比率行无同比。
+     */
+    private SegmentMetricRow buildSegmentRatioRow(String ratioCode, String numCode,
+                                                  Map<String, Map<String, SegmentValueDO>> grid,
+                                                  List<String> periods) {
+        MetricDef d = metricCatalog.get(ratioCode);
+        List<SegmentCell> cells = new ArrayList<>();
+        boolean hasValue = false;
+        for (String p : periods) {
+            Map<String, SegmentValueDO> cell = grid.getOrDefault(p, Map.of());
+            SegmentValueDO num = cell.get(numCode);
+            SegmentValueDO rev = cell.get("REVENUE");
+            BigDecimal ratio = null;
+            if (num != null && rev != null && num.getValue() != null && rev.getValue() != null
+                    && rev.getValue().signum() != 0) {
+                ratio = num.getValue().multiply(BigDecimal.valueOf(100))
+                        .divide(rev.getValue().abs(), 2, RoundingMode.HALF_UP);
+                hasValue = true;
+            }
+            cells.add(new SegmentCell(ratio, null));
+        }
+        return hasValue ? new SegmentMetricRow(ratioCode, d == null ? ratioCode : d.getNameCn(),
+                "percent", cells) : null;
+    }
+
+    /** 在分部指标行中 anchorCode 之后插入 row；row 为 null 忽略，anchor 缺失时追加到末尾。 */
+    private static void insertSegmentRowAfter(List<SegmentMetricRow> rows, String anchorCode, SegmentMetricRow row) {
+        if (row == null) {
+            return;
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            if (anchorCode.equals(rows.get(i).code())) {
+                rows.add(i + 1, row);
+                return;
+            }
+        }
+        rows.add(row);
     }
 
     /**
@@ -683,7 +804,8 @@ public class FinancialQueryService {
      * <ul>
      *   <li>利润表：隐藏 EBITDA 类中间口径；营业费用（含销售/管理/研发等子项）从营业总成本下移出，
      *       作为根级行排在毛利与营业利润之间（形成 毛利 − 营业费用 = 营业利润 的因子链）；
-     *       毛利后插毛利率、营业利润后插营业利润率、所得税后插税率（均为查询时派生的合成行）；</li>
+     *       毛利后插毛利率、营业费用后插营业费用率、营业利润后插营业利润率、所得税后插税率
+     *       （均为查询时派生的合成行）；</li>
      *   <li>现金流量表：NON_GAAP_CAPEX 提升为自由现金流因子行「资本开支」，排在自由现金流之前
      *       （值取 NON_GAAP_CAPEX，缺失回退 GAAP CAPEX，与 FCF 派生口径一致）。</li>
      * </ul>
@@ -708,13 +830,16 @@ public class FinancialQueryService {
 
         if (statement == StatementType.INCOME) {
             // 营业费用（连同销售/管理/研发等子项）先插到毛利之后；毛利率随后插到毛利之后，
-            // 最终顺序为 毛利 → 毛利率 → 营业费用 → 营业利润
+            // 营业费用率插到营业费用之后，最终顺序为
+            // 毛利 → 毛利率 → 营业费用 → 营业费用率 → 营业利润 → 营业利润率
             MetricDef opexDef = metricCatalog.get("OPERATING_EXPENSES");
             if (opexDef != null) {
                 insertAfter(roots, "GROSS_PROFIT",
                         buildTreeNode(opexDef, statement, grid, periods, basisCode, targetCode, detachedCodes));
             }
             insertAfter(roots, "GROSS_PROFIT", buildRatioNode("GROSS_MARGIN", grid, periods, targetCode));
+            insertAfter(roots, "OPERATING_EXPENSES",
+                    buildRatioNode("OPERATING_EXPENSE_RATIO", grid, periods, targetCode));
             insertAfter(roots, "OPERATING_INCOME", buildRatioNode("OPERATING_MARGIN", grid, periods, targetCode));
             // 税率（所得税/税前利润）紧跟所得税行
             insertAfter(roots, "INCOME_TAX", buildTaxRateNode(grid, periods));
@@ -1162,6 +1287,7 @@ public class FinancialQueryService {
 
             deriveFreeCashFlow(cell, ticker, period, currency);
             ratioIfAbsent(cell, ticker, period, currency, "GROSS_MARGIN", "GROSS_PROFIT", "REVENUE");
+            ratioIfAbsent(cell, ticker, period, currency, "OPERATING_EXPENSE_RATIO", "OPERATING_EXPENSES", "REVENUE");
             ratioIfAbsent(cell, ticker, period, currency, "OPERATING_MARGIN", "OPERATING_INCOME", "REVENUE");
             ratioIfAbsent(cell, ticker, period, currency, "NET_MARGIN", "NET_INCOME", "REVENUE");
             ratioIfAbsent(cell, ticker, period, currency, "SELLING_EXPENSE_RATIO", "SELLING_EXPENSE", "REVENUE");

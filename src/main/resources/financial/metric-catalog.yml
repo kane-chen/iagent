@@ -80,7 +80,9 @@ metrics:
 
   # ===================== 派生比率（查询时计算） =====================
   - { code: GROSS_MARGIN,       name_cn: 毛利率,       name_en: Gross margin,       statement: derived, parent: null, sort_order: 500, value_type: RATIO, unit: percent, derived: true, aliases: [毛利率, gross margin] }
+  - { code: OPERATING_EXPENSE_RATIO, name_cn: 营业费用率, name_en: Operating expense ratio, statement: derived, parent: null, sort_order: 505, value_type: RATIO, unit: percent, derived: true, aliases: [营业费用率, 运营费用率, operating expense ratio, opex ratio] }
   - { code: OPERATING_MARGIN,   name_cn: 营业利润率,   name_en: Operating margin,   statement: derived, parent: null, sort_order: 510, value_type: RATIO, unit: percent, derived: true, aliases: [营业利润率, 经营利润率, operating margin] }
+  - { code: EBITA_MARGIN,       name_cn: EBITA利润率,  name_en: Adjusted EBITA margin, statement: derived, parent: null, sort_order: 515, value_type: RATIO, unit: percent, derived: true, aliases: [ebita利润率, 调整后ebita利润率, ebita margin, adjusted ebita margin] }
   - { code: NET_MARGIN,         name_cn: 净利率,       name_en: Net margin,         statement: derived, parent: null, sort_order: 520, value_type: RATIO, unit: percent, derived: true, aliases: [净利率, 净利润率, net margin] }
   - { code: SELLING_EXPENSE_RATIO,   name_cn: 销售费用率, name_en: Selling expense ratio,   statement: derived, parent: null, sort_order: 530, value_type: RATIO, unit: percent, derived: true, aliases: [销售费用率] }
   - { code: GA_EXPENSE_RATIO,        name_cn: 管理费用率, name_en: G&A expense ratio,        statement: derived, parent: null, sort_order: 540, value_type: RATIO, unit: percent, derived: true, aliases: [管理费用率] }
