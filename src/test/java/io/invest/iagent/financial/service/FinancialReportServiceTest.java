@@ -1,12 +1,15 @@
 package io.invest.iagent.financial.service;
 
 import io.invest.AgentConfig4Test;
+import io.invest.iagent.financial.ingest.SegmentIngestor;
 import io.invest.iagent.financial.report.enums.ReportType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
+import java.util.List;
+
 
 
 @SpringBootTest(classes = AgentConfig4Test.class)
@@ -15,6 +18,16 @@ class FinancialReportServiceTest {
 
     @Autowired
     private FinancialReportService reportService ;
+
+    @Autowired
+    private SegmentIngestor segmentIngestor ;
+
+    @Test
+    public void test_down_83690_q2(){
+        String ticker = "83690" ;
+        segmentIngestor.ingest(ticker,List.of("2026Q2")) ;
+    }
+
 
     @Test
     public void test_down_83690(){

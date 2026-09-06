@@ -38,22 +38,36 @@ public class HkexDownloader extends ReportDownloader {
 
     // 财务报表类公告(t1code=40000)下的子类：40100 年报 / 40200 中期报告 / 40300 季报
     private static final String T1_FINANCIAL = "40000";
-    // 公告及通告类(t1code=10000)下「业绩」分组(t2Gcode=3)：13600 季度业绩
+    private static final String T2_ANNUAL_REPORT = "40100";    // 年报（完整报告，约 4 月）
+    private static final String T2_INTERIM_REPORT = "40200";   // 中期/半年度报告（完整报告，约 9 月）
+    private static final String T2_QUARTERLY_REPORT = "40300"; // 正式季报（GEM 等）
+    // 公告及通告类(t1code=10000)下「业绩」分组(t2Gcode=3)：业绩公告早于完整报告 1~2 个月发布，
+    // 已含分部数据——13300 年度业绩(约 3 月) / 13400 中期业绩(约 8 月) / 13600 季度业绩(Q1/Q3)
     private static final String T1_ANNOUNCE = "10000";
     private static final String T2G_RESULTS = "3";
-    private static final String T2_QUARTERLY_RESULTS = "13600";
+    private static final String T2_ANNUAL_RESULTS = "13300";     // 年度业绩公告
+    private static final String T2_INTERIM_RESULTS = "13400";    // 中期(半年度)业绩公告
+    private static final String T2_QUARTERLY_RESULTS = "13600";  // 季度业绩公告（主板 Q1/Q3）
 
     /** 披露易公告分类参数：t1code / t2Gcode / t2code */
     private record Category(String t1, String t2G, String t2) {}
 
-    /** 各报告类型对应的披露易分类（季报需同时查业绩公告和正式季报两个分类） */
+    /**
+     * 各报告类型对应的披露易分类。年报/中报同时查「业绩公告」（早 1~2 个月，含分部数据）
+     * 与「完整报告」两类；季报同时查季度业绩公告和正式季报两个分类。
+     * 同一公告可能被多个分类命中，由 {@link #fetchMetaList} 按 FILE_LINK 去重。
+     */
     private static List<Category> categoriesOf(ReportType type) {
         return switch (type) {
-            case ANNUAL   -> List.of(new Category(T1_FINANCIAL, T1_FINANCIAL, "40100"));  // 年报
-            case INTERIM  -> List.of(new Category(T1_FINANCIAL, T1_FINANCIAL, "40200"));  // 中期/半年度报告
+            case ANNUAL   -> List.of(
+                    new Category(T1_ANNOUNCE, T2G_RESULTS, T2_ANNUAL_RESULTS),     // 年度业绩公告（3 月）
+                    new Category(T1_FINANCIAL, T1_FINANCIAL, T2_ANNUAL_REPORT));   // 年报（4 月）
+            case INTERIM  -> List.of(
+                    new Category(T1_ANNOUNCE, T2G_RESULTS, T2_INTERIM_RESULTS),    // 中期业绩公告（8 月，Q2 数据最早来源）
+                    new Category(T1_FINANCIAL, T1_FINANCIAL, T2_INTERIM_REPORT));  // 中期报告（9 月）
             case QUARTERLY -> List.of(
                     new Category(T1_ANNOUNCE, T2G_RESULTS, T2_QUARTERLY_RESULTS),  // 季度业绩公告（主板）
-                    new Category(T1_FINANCIAL, T1_FINANCIAL, "40300"));            // 正式季报（GEM 等）
+                    new Category(T1_FINANCIAL, T1_FINANCIAL, T2_QUARTERLY_REPORT));// 正式季报（GEM 等）
         };
     }
 

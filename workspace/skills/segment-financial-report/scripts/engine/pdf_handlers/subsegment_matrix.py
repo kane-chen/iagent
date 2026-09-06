@@ -2,11 +2,18 @@
 """SubsegmentMatrixHandler：列=L1 segments、行=混合（L2 收入 / L1 成本/OP_INCOME），美团布局。"""
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from ..model import CompanyConfig, Layout, Segment
 from ..pdf_layout_handler import PdfLayoutHandler
 from ..pdf_support import PdfExtractionSupport
+
+# 分部行标签里的中文在 PDF 中常表现为 (cid:NNN) 噪声，先剥离；
+# 剥离后仍含 20xx 年份说明该行是日期/表头（如财务附注里"2020年1月1日"资产 roll-forward 表），
+# 不是分部数据行——这类表数值也满足"TOTAL=各列之和"，必须靠标签年份排除。
+_CID_TOKEN = re.compile(r"\(cid:\d+\)")
+_YEAR_TOKEN = re.compile(r"20\d{2}")
 
 
 class SubsegmentMatrixHandler(PdfLayoutHandler):
@@ -33,13 +40,22 @@ class SubsegmentMatrixHandler(PdfLayoutHandler):
                 continue
             if self.support.parseNumber(row[0]) is not None:
                 continue
+            # 标签剥掉 (cid:NNN) 噪声后仍含年份 → 日期/表头行（财务附注 roll-forward 表），整表排除
+            label_text = _CID_TOKEN.sub("", row[0] or "")
+            if _YEAR_TOKEN.search(label_text):
+                return 0
+            numeric_cells = 0
             ok = True
             for i in range(expected_data_cols):
                 cell = row[i + 1]
-                if self.support.parseNumber(cell) is None and not self.support.isPlaceholderCell(cell):
-                    ok = False
-                    break
-            if ok:
+                if self.support.parseNumber(cell) is None:
+                    if not self.support.isPlaceholderCell(cell):
+                        ok = False
+                        break
+                else:
+                    numeric_cells += 1
+            # 至少 2 个数字单元格：排除"全空 + 末尾页码碎片"之类的伪行（百分比表的页码行）
+            if ok and numeric_cells >= 2:
                 qualified.append(row)
         if len(qualified) != len(row_descs):
             return 0
@@ -70,7 +86,9 @@ class SubsegmentMatrixHandler(PdfLayoutHandler):
                 tol = max(1.0, abs(total_val) * 0.005)
                 if diff <= tol:
                     passed += 1
-            if attempted == 0 or passed * 2 < attempted:
+            # 只要有可校验行，所有行都必须通过合计校验（容差 0.5%）：
+            # 百分比变动表的数字普遍 < 1000 且合计不成立，借此把混入的百分比行整表拒掉
+            if attempted == 0 or passed < attempted:
                 return 0
 
         period = context.resolvePeriod(mapping.periodCode)
@@ -86,7 +104,6 @@ class SubsegmentMatrixHandler(PdfLayoutHandler):
             metric_code = desc.metricCode
             if metric_code is None or metric_code == "":
                 continue
-            sub_code = desc.subSegmentCode
             row_cells = qualified[row_idx]
 
             for col_idx in range(len(segment_codes)):
@@ -99,6 +116,17 @@ class SubsegmentMatrixHandler(PdfLayoutHandler):
                 value = self.support.parseNumber(row_cells[col_idx + 1])
                 if value is None:
                     continue
+
+                # 该行的二级分部 code 按列解析：同一收入明细行在不同一级分部下列示同名二级分部，
+                # 但须用各自独立的 code（如美团：核心本地商業列=DELIVERY，新業務列=NEW_DELIVERY）；
+                # 未配置按列映射时回退到行级 subSegmentCode（空=挂一级分部本身）。
+                sub_code = None
+                if desc.subSegmentCodes:
+                    sub_code = desc.subSegmentCodes.get(l1_code)
+                    if sub_code is None:
+                        sub_code = desc.subSegmentCodes.get(l1_code.upper())
+                if sub_code is None:
+                    sub_code = desc.subSegmentCode
 
                 l1 = l1_buckets.get(l1_code)
                 if l1 is None:

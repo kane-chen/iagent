@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.util.Calendar;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -43,6 +44,9 @@ public class FinancialIngestService {
     @Autowired(required = false)
     private SegmentIngestor segmentIngestor;
 
+    @Autowired(required = false)
+    private FinancialReportService reportService ;
+
     /**
      * 采集结果摘要（供工具层展示）。
      */
@@ -51,6 +55,32 @@ public class FinancialIngestService {
 
     public void buildResult(List<MetricValueDO> values){
         repository.batchUpsertMetrics(values);
+    }
+
+    /**
+     * 采集指定公司的财报文件和三大表数据并入库。
+     *
+     * @param ticker  裸 ticker（00700 / BABA / 600519）
+     * @param periods 拉取期数；null 用默认配置
+     */
+    public BuildResult downloadAndBuild(String ticker, Integer periods) {
+        int num = periods != null && periods > 0 ? periods : properties.getDefaultPeriods();
+        // download
+        int endYear = Calendar.getInstance().get(Calendar.YEAR) ;
+        int years = num%4 == 0 ? num/4 : num/4+1 ;
+        int startYear = endYear - years ;
+        // 必须用 downloadBatch：types 传 null 时它按市场展开默认报告类型
+        //（港股/A股=年报+中报+季报，美股=年报+季报）；直接调 download(...,null) 会把 null 类型
+        // 透传给下载器，港股 switch 分类时抛 NPE 被吞掉、静默不下任何文件。
+        FinancialReportService.DownloadResult downloaded =
+                reportService.downloadBatch(ticker, null, startYear, endYear) ;
+        if (!downloaded.success()) {
+            // 下载为 best-effort：失败不阻断后续构建（可能已有历史文件），但需留痕避免静默失败
+            log.warn("财报下载未成功（继续用已下载文件构建）: ticker={}, message={}",
+                    ticker, downloaded.message());
+        }
+        // build
+        return this.build(ticker,num) ;
     }
 
     /**

@@ -1,13 +1,14 @@
 package io.invest.iagent.financial.web;
 
 import io.invest.iagent.financial.option.OptionStrangleService;
+import io.invest.iagent.financial.service.FinancialIngestService;
 import io.invest.iagent.financial.service.FinancialQueryService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
@@ -31,20 +32,27 @@ import java.util.Map;
 @ConditionalOnProperty(prefix = "app.financial", name = "enabled", havingValue = "true")
 public class FinancialWebController {
 
-    private final FinancialQueryService queryService;
+    @Autowired(required = false)
+    private FinancialQueryService queryService;
 
-    private final OptionStrangleService optionStrangleService;
+    @Autowired(required = false)
+    private OptionStrangleService optionStrangleService;
 
-    public FinancialWebController(FinancialQueryService queryService,
-                                  OptionStrangleService optionStrangleService) {
-        this.queryService = queryService;
-        this.optionStrangleService = optionStrangleService;
-    }
+    @Autowired(required = false)
+    private FinancialIngestService ingestService ;
 
     /** 页面入口：/financial 重定向到静态页面。 */
     @GetMapping("/financial")
     public String page() {
         return "redirect:/financial/index.html";
+    }
+
+    @GetMapping("/api/financial/build")
+    @ResponseBody
+    public FinancialIngestService.BuildResult build(
+            @RequestParam("ticker") String ticker,
+            @RequestParam(value = "quarters", defaultValue = "16") Integer quarters) {
+        return ingestService.downloadAndBuild(ticker, quarters);
     }
 
     /** 仪表盘：最近一个季度核心指标（净利润/经营利润/自由现金流/资产负债表）。 */

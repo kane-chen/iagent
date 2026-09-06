@@ -64,7 +64,9 @@ public class FinancialReportService {
             // 中概股(FPI)：ANNUAL→20-F 年报，QUARTERLY→6-K 季度/全年业绩公告。
             return List.of(ReportType.ANNUAL, ReportType.QUARTERLY) ;
         }
-        return List.of(ReportType.ANNUAL,ReportType.INTERIM,ReportType.INTERIM) ;
+        // 港股/A股：年报（Q4/全年）+ 中期报告（Q2/半年度）+ 季报（Q1/Q3）三类，缺一不可；
+        // 每类内部由下载器同时查「业绩公告」与「完整报告」，业绩公告早 1~2 个月发布、含同样分部数据。
+        return List.of(ReportType.ANNUAL, ReportType.INTERIM, ReportType.QUARTERLY) ;
     }
 
     public DownloadResult download(String ticker, ReportType type, int startYear, int endYear) {

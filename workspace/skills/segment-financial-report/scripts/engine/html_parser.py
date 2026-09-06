@@ -385,6 +385,20 @@ class HtmlReportParser:
         title = table.title.lower() if table.title else ""
         all_headers = " ".join(table.headers).lower()
         combined = title + " " + all_headers
+        # 单位/币种标注常放在表体（数据行）而非标题/表头：如年报摘要数据表首行的
+        # "(in thousands, except percentages)"、币种行 "RMB"/"US$"。title/headers/
+        # surrounding 都取不到时会漏判单位，导致千元值未归一并溢出 numeric(12,4)。
+        # 这里补充扫描表体前若干行的文本单元格（跳过纯数字单元格）。
+        body_parts = []
+        for r in table.rows[:8]:
+            if r.getLabel():
+                body_parts.append(r.getLabel())
+            for c in r.getCells():
+                txt = c.getText()
+                if txt and not c.isNumeric():
+                    body_parts.append(txt)
+        if body_parts:
+            combined += " " + " ".join(body_parts).lower()
         surrounding = self._extract_surrounding_text(table_el)
         if surrounding:
             combined += " " + surrounding.lower()

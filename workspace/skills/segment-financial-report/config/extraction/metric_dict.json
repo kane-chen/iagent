@@ -25,7 +25,7 @@
     "metricName": "运营费用",
     "metricCategory": "EXPENSE",
     "isStandard": true,
-    "synonyms": ["Operating expenses", "Operating Expenses", "运营费用", "营业费用", "经营费用", "运营开支"]
+    "synonyms": ["Operating expenses", "Operating Expenses", "运营费用", "营业费用", "经营费用", "运营开支", "经营开支", "經營開支", "經營費用"]
   },
   {
     "metricCode": "RD_EXPENSES",

@@ -37,7 +37,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 关键字补充指标提取：futu API 不提供、且不便走 RAG 的指标（分红、回购等），
@@ -68,6 +70,9 @@ public class KeywordMetricExtractor {
     private static final int PARAGRAPH_MAX_CHARS = 100;
     /** 长段落按逗号/分号（中英文）拆子句 */
     private static final Pattern CLAUSE_SPLIT_RE = Pattern.compile("[,，;；]");
+    /** 千分位逗号：数字内部的 ","（如 1,234,567），切子句前临时替换为占位符，避免金额被当子句边界切碎 */
+    private static final Pattern THOUSANDS_COMMA_RE = Pattern.compile("(\\d),(?=\\d{3}(?!\\d))");
+    private static final String COMMA_PLACEHOLDER = "\uE000";  // 私有区占位符，财报文本中不会出现
     /** 金额子句识别（含数字即可，兼容 1,234,567 / 1,234.5） */
     private static final Pattern AMOUNT_RE = Pattern.compile("\\d[\\d,\\.]*");
 
@@ -98,8 +103,8 @@ public class KeywordMetricExtractor {
      */
     public record KeywordExtractResult(int extracted, List<String> warnings) {}
 
-    /** 命中段落：保留文本、来源文件、相关性打分。 */
-    private record Snippet(String text, Path file, int score) {}
+    /** 命中段落：保留文本、来源文件、命中行号（1 基，证据溯源用）、相关性打分。 */
+    private record Snippet(String text, Path file, int line, int score) {}
 
     /**
      * 对指定公司执行关键字补充指标提取（best-effort，异常不抛出）。
@@ -289,6 +294,9 @@ public class KeywordMetricExtractor {
      */
     private List<Snippet> searchSnippets(List<Path> files, List<String> keywords,
                                          Map<Path, String> textCache, int topN) {
+        // 关键字编译为单个交替正则（字面量、大小写不敏感）：行内命中检测与段落打分共用，
+        // 一次 find() 扫描替代原先"逐关键字 contains + 逐关键字 indexOf 计数"的多遍匹配。
+        Pattern kwRegex = buildKeywordRegex(keywords);
         List<Snippet> hits = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (Path file : files) {
@@ -299,7 +307,7 @@ public class KeywordMetricExtractor {
             String[] lines = text.split("\\R");
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i].trim();
-                if (line.isEmpty() || !containsKeyword(line, keywords)) {
+                if (line.isEmpty() || !kwRegex.matcher(line).find()) {
                     continue;
                 }
                 String para = joinLines(lines, i - CONTEXT_LINES_BEFORE, i + CONTEXT_LINES_AFTER);
@@ -309,14 +317,31 @@ public class KeywordMetricExtractor {
                 if (StringUtils.isBlank(snippet)) {
                     continue;
                 }
-                int score = scoreSnippet(snippet, keywords);
+                int score = scoreSnippet(snippet, kwRegex);
                 if (score > 0 && seen.add(snippet)) {
-                    hits.add(new Snippet(snippet, file, score));
+                    hits.add(new Snippet(snippet, file, i + 1, score));   // 行号 1 基
                 }
             }
         }
         hits.sort(Comparator.comparingInt(Snippet::score).reversed());
         return hits.size() > topN ? new ArrayList<>(hits.subList(0, topN)) : hits;
+    }
+
+    /**
+     * 把关键字列表编译为单个交替正则（{@code kw1|kw2|...}）。
+     * 关键字按字面量处理（{@link Pattern#quote} 转义正则特殊字符），大小写不敏感；
+     * 关键字全为空时返回永不匹配的正则（{@code (?!)}），避免空交替匹配任意位置。
+     */
+    private static Pattern buildKeywordRegex(List<String> keywords) {
+        String alt = keywords.stream()
+                .filter(k -> k != null && !k.isBlank())
+                .map(String::trim)
+                .distinct()
+                .map(Pattern::quote)
+                .collect(Collectors.joining("|"));
+        return alt.isEmpty()
+                ? Pattern.compile("(?!)")
+                : Pattern.compile(alt, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     }
 
     /** 拼接 [from, to] 行号区间内的非空行（单行 trim，行间以空格连接）。 */
@@ -340,11 +365,14 @@ public class KeywordMetricExtractor {
      * 说明分列）一并保留，避免只剩文字没有数值。
      */
     private String extractClauses(String paragraph, List<String> keywords) {
-        String[] clauses = CLAUSE_SPLIT_RE.split(paragraph);
+        // 先把数字内部的千分位逗号（1,234,567）替换为占位符，否则会被 CLAUSE_SPLIT_RE 当子句边界切碎金额；
+        // 切分并筛选后，在保留的子句里把占位符还原为逗号。
+        String protectedText = THOUSANDS_COMMA_RE.matcher(paragraph).replaceAll("$1" + COMMA_PLACEHOLDER);
+        String[] clauses = CLAUSE_SPLIT_RE.split(protectedText);
         List<String> kept = new ArrayList<>();
         boolean prevKept = false;
         for (String raw : clauses) {
-            String c = raw.trim();
+            String c = raw.trim().replace(COMMA_PLACEHOLDER, ",");
             if (c.isEmpty()) {
                 continue;
             }
@@ -358,22 +386,22 @@ public class KeywordMetricExtractor {
         return kept.isEmpty() ? null : String.join("，", kept);
     }
 
-    /** 相关性打分：命中不同关键字数（权重 3）+ 命中次数（上限 5）+ 含金额 3 分 + 含单位 1 分。 */
-    private int scoreSnippet(String snippet, List<String> keywords) {
-        String lower = snippet.toLowerCase(Locale.ROOT);
-        int distinct = 0;
+    /**
+     * 相关性打分：单遍扫描关键字正则——命中不同关键字短语数（权重 3）+ 命中次数（上限 5）
+     * + 含金额 3 分 + 含单位 1 分。
+     */
+    private int scoreSnippet(String snippet, Pattern kwRegex) {
+        Set<String> distinct = new HashSet<>();
         int occurrences = 0;
-        for (String kw : keywords) {
-            int c = countOccurrences(lower, kw.toLowerCase(Locale.ROOT));
-            if (c > 0) {
-                distinct++;
-                occurrences += c;
-            }
+        Matcher m = kwRegex.matcher(snippet);
+        while (m.find()) {
+            occurrences++;
+            distinct.add(m.group().toLowerCase(Locale.ROOT));
         }
-        if (distinct == 0) {
+        if (distinct.isEmpty()) {
             return 0;
         }
-        int score = distinct * 3 + Math.min(occurrences, 5);
+        int score = distinct.size() * 3 + Math.min(occurrences, 5);
         if (AMOUNT_RE.matcher(snippet).find()) {
             score += 3;
         }
@@ -381,19 +409,6 @@ public class KeywordMetricExtractor {
             score += 1;
         }
         return score;
-    }
-
-    private static int countOccurrences(String haystack, String needle) {
-        if (needle.isEmpty()) {
-            return 0;
-        }
-        int count = 0;
-        int idx = 0;
-        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
-            count++;
-            idx += needle.length();
-        }
-        return count;
     }
 
     private static boolean containsKeyword(String text, List<String> keywords) {
@@ -443,7 +458,8 @@ public class KeywordMetricExtractor {
         }
         sb.append("原文片段（按相关性排序，均来自该公司财报，可能含当期数与上年同期对比数）：\n");
         for (int i = 0; i < snippets.size(); i++) {
-            sb.append(i + 1).append(". 【").append(snippets.get(i).file().getFileName()).append("】")
+            sb.append(i + 1).append(". 【").append(snippets.get(i).file().getFileName())
+                    .append(" 第").append(snippets.get(i).line()).append("行】")
                     .append(snippets.get(i).text()).append("\n");
         }
         sb.append("""

@@ -81,10 +81,12 @@ class CompanyConfigLoader:
             layout = Layout.SEGMENTS_AS_COLUMNS
         row_descs = []
         for rd in m.get("rowDescriptors") or []:
+            sub_by_col = rd.get("subSegmentCodes")
             row_descs.append(RowDescriptor(
                 metricCode=rd.get("metricCode"),
                 subSegmentCode=rd.get("subSegmentCode"),
                 abs=bool(rd.get("abs", False)),
+                subSegmentCodes=dict(sub_by_col) if isinstance(sub_by_col, dict) else {},
             ))
         return PdfColumnMapping(
             layout=layout,

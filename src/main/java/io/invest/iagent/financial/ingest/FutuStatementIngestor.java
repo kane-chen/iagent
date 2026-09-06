@@ -347,7 +347,10 @@ public class FutuStatementIngestor {
      * <ul>
      *   <li>累计链必须连续：缺少前置累计锚点时不得把累计值直接当单季（否则 Q2 单季 == H1 累计）；
      *       某季累计缺失则该季跳过，其后季度可在累计锚点恢复后继续差分；</li>
-     *   <li>单季已由 ftype=1-4 单季报直取时，跳过失真（直取值优先）。</li>
+     *   <li>单季已由 ftype=1-4 单季报直取时，跳过失真（直取值优先）；</li>
+     *   <li>差分的两个锚点必须属同一财年且相邻（相差一个季度）：跨财年（上年 FY → 新年 H1）差分出
+     *       大额负数；同财年但缺季（仅半年报公司 H1→FY 横跨 H2 六个月）差分出多月金额——两者都不是
+     *       单季，一律不输出。仅披露半年报/年报的公司（如港股 09992）没有季度数据，只保留 CUMULATIVE/FY。</li>
      * </ul>
      */
     private List<MetricValueDO> differCumulative(List<MetricValueDO> rows, int fyeMonth) {
@@ -415,33 +418,60 @@ public class FutuStatementIngestor {
                 return y * 10 + q;
             }));
 
-            BigDecimal prev = null; // 上一已知年内累计锚点
+            BigDecimal prev = null;   // 上一累计锚点值
+            int prevFyKey = 0;        // 上一锚点所属财年 key
+            int prevPos = 0;          // 上一锚点在财年内序号
             for (String slot : slots) {
                 int q = Integer.parseInt(quarterTag(slot).substring(1));
                 int pos = ((q - restartQ + 4) % 4) + 1; // 财年内序号：重启季=1
+                int fyKey = fiscalYearKey(slot, fySlotQ);
                 BigDecimal current = ytd.get(slot);
                 if (existingSingle.contains(metricCode + "|" + slot)) {
                     // 单季报已直取，无需差分；累计锚点同步推进，锚点缺失则链断
                     prev = current;
+                    prevFyKey = fyKey;
+                    prevPos = pos;
                     continue;
                 }
                 if (current == null) {
                     // 本季累计缺失 → 本季无法差分，链断
                     prev = null;
+                    prevPos = 0;
                     continue;
                 }
+                // 同一财年且与上一锚点相邻（相差恰好一个季度）才是合法单季差分：
+                //  - 跨财年（上一锚点为上年 FY、本季为新年 H1）：H1本年 - FY上年 为大额负数，必须断链；
+                //  - 同财年但锚点间缺季（如仅披露半年报：H1→FY 横跨 H2 六个月）：差分为多月金额，
+                //    不是单季，不得输出（仅披露半年报/年报的公司本就无季度数据）。
+                boolean sameFy = prev != null && fyKey == prevFyKey;
                 if (pos == 1) {
                     // 财年重启季：3 个月累计即单季
                     out.add(buildSingleRow(templateByMetric.get(metricCode), slot, current));
-                } else if (prev != null) {
-                    // 前置锚点存在：单季 = 本期累计 - 上期累计
+                } else if (sameFy && pos == prevPos + 1) {
+                    // 前置锚点存在且相邻：单季 = 本期累计 - 上期累计
                     out.add(buildSingleRow(templateByMetric.get(metricCode), slot, current.subtract(prev)));
                 }
-                // pos!=1 且前置锚点缺失：累计值不能直接当单季，跳过输出，但本季累计仍成为下季锚点
+                // 否则跳过输出，但本季累计仍作为后续锚点（推进 prev）
                 prev = current;
+                prevFyKey = fyKey;
+                prevPos = pos;
             }
         }
         return out;
+    }
+
+    /**
+     * 计算自然季度 slot 所属财年的线性 key（= 该财年年报结束的自然季度序号 y*4+q）。
+     * 同一财年的 Q1/H1/Q9/FY 锚点 key 相同；跨财年 key 不同，用于累计差分的财年边界判定。
+     *
+     * @param fySlotQ 年报(FY)结束的自然季度号（12 月财年=4；3 月财年=1）
+     */
+    private static int fiscalYearKey(String slot, int fySlotQ) {
+        int y = Integer.parseInt(yearOf(slot));
+        int q = Integer.parseInt(quarterTag(slot).substring(1));
+        int nq = y * 4 + q;                 // 自然季度线性序号
+        int delta = (fySlotQ - q + 4) % 4; // 推进到本财年 FY 结束季度所需季度数
+        return nq + delta;
     }
 
     private MetricValueDO buildSingleRow(MetricValueDO template, String period, BigDecimal value) {

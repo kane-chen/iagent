@@ -272,6 +272,47 @@ class FutuStatementIngestorTest {
         assertTrue(fcf == null || fcf.getValue() == null, "CAPEX 缺失时不应派生 FCF");
     }
 
+    /**
+     * 仅披露半年报/年报的港股公司（如 09992 泡泡玛特，FYE=12）：每期只有 H1(ftype=5, 自然Q2累计)
+     * 与 FY(ftype=7)，没有 Q1 单季锚、也没有 Q3/9M 累计锚。
+     * 修复前累计链跨财年不断开，会把「新年 H1 − 上年 FY」差分成大额负数单季（如 2026Q2 = 17173−37120 < 0），
+     * 且把「FY − H1 = H2 六个月」误当 Q4 单季。修复后：不产出任何 SINGLE_Q（本就无季度数据），
+     * 只保留 CUMULATIVE(H1) 与 FY 原行。
+     */
+    @Test
+    void hkSemiannualOnly_noNegativeSingleQuarter() {
+        JSONObject root = new JSONObject();
+        root.put("code", "HK.09992");
+        root.put("ticker", "09992");
+        root.put("currency", "CNY");
+        root.put("cumulative", true);
+        JSONObject statements = new JSONObject();
+        // 累计收入（百万）：H1 / FY；H1 为上半年累计，FY 为全年
+        statements.put("income", stmt(
+                report("2024/H1", "2024-06-30", 2024, 5, item(5001, 4557.8)),
+                report("FY2024", "2024-12-31", 2024, 7, item(5001, 13037.7)),
+                report("2025/H1", "2025-06-30", 2025, 5, item(5001, 13876.3)),
+                report("FY2025", "2025-12-31", 2025, 7, item(5001, 37120.1)),
+                report("2026/H1", "2026-06-30", 2026, 5, item(5001, 17172.9))));
+        root.put("statements", statements);
+        root.put("errors", new JSONObject());
+
+        FutuStatementIngestor.IngestResult r = ingestor.processRoot(root);
+
+        // 不得产出任何单季行（无 Q1 重启锚；H1→FY 跨 H2 两个月；FY→次年 H1 跨财年）
+        for (MetricValueDO v : r.values()) {
+            if ("REVENUE".equals(v.getMetricCode()) && PeriodType.SINGLE_Q.name().equals(v.getPeriodType())) {
+                org.junit.jupiter.api.Assertions.fail(
+                        "半年报公司不应差分出单季收入: " + v.getFiscalPeriod() + " = " + v.getValue());
+            }
+        }
+        // 累计 H1 与年报 FY 原行保留
+        assertValue(r, "REVENUE", "2025Q2", PeriodType.CUMULATIVE, "13876.3");
+        assertValue(r, "REVENUE", "2026Q2", PeriodType.CUMULATIVE, "17172.9");
+        assertValue(r, "REVENUE", "FY2025", PeriodType.FY, "37120.1");
+        assertValue(r, "REVENUE", "FY2024", PeriodType.FY, "13037.7");
+    }
+
     // =========================================================
     //  辅助
     // =========================================================

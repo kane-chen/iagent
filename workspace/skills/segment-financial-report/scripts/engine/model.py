@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +246,10 @@ class RowDescriptor:
     metricCode: Optional[str] = None
     subSegmentCode: Optional[str] = None
     abs: bool = False
+    # 按列（L1 分部 code → 该列子分部 code）覆盖 subSegmentCode：用于同一行在不同一级分部下列示
+    # 同名但需独立编码的二级分部（如美团 配送服務 在核心本地商業=DELIVERY、在新業務=NEW_DELIVERY）。
+    # 为空或列未命中时回退 subSegmentCode。
+    subSegmentCodes: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

@@ -235,7 +235,9 @@ public class FinancialQueryService {
      */
     public DashboardResult dashboard(String ticker) {
         List<String> warnings = new ArrayList<>();
-        Loaded loaded = load(ticker, PeriodType.SINGLE_Q);
+        // 取全部口径数据：仅披露半年报/年报的公司（如港股 09992）没有单季流量值，
+        // 需按公司实际披露口径自适应选择 SINGLE_Q / CUMULATIVE / FY，否则净利润等卡片会为空。
+        Loaded loaded = loadAll(ticker);
         String bare = loaded.ticker();
         CompanyDO company = loaded.company();
         if (loaded.rows().isEmpty()) {
@@ -244,14 +246,24 @@ public class FinancialQueryService {
                     "未查询到 " + bare + " 的财务数据，请先调用 financial_data_build 采集。", warnings, List.of(), List.of());
         }
 
-        List<String> periods = sortedPeriods(loaded.rows());
+        // 流量指标口径按「最新流量期间」自适应；资产负债表 STOCK 时点数任何口径都保留
+        //（季报为 SINGLE_Q、年报为 FY，期间标签互不冲突），保证资产负债卡片在半年报口径下也有数。
+        PeriodType flowType = selectFlowPeriodType(loaded.rows());
+        List<MetricValueDO> rows = new ArrayList<>();
+        for (MetricValueDO r : loaded.rows()) {
+            if (isStockMetric(r.getMetricCode()) || flowType.name().equals(r.getPeriodType())) {
+                rows.add(r);
+            }
+        }
+
+        List<String> periods = sortedPeriods(rows);
         String latest = periods.get(periods.size() - 1);
-        Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
+        Map<String, Map<String, MetricValueDO>> grid = buildGrid(rows);
         // 最新一期及其去年同期派生指标（自由现金流/比率），后者用于卡片同比
         FiscalPeriod latestFp = FiscalPeriod.parse(latest);
         List<String> derivePeriods = latestFp == null ? List.of(latest)
                 : List.of(latest, latestFp.yearAgo().canonical());
-        addDerivedRatios(bare, derivePeriods, PeriodType.SINGLE_Q, grid, warnings);
+        addDerivedRatios(bare, derivePeriods, flowType, grid, warnings);
         Map<String, MetricValueDO> cell = grid.getOrDefault(latest, Map.of());
 
         List<MetricCard> cards = new ArrayList<>();
@@ -411,7 +423,9 @@ public class FinancialQueryService {
         }
         MetricDef def = metricCatalog.get(code);
 
-        Loaded loaded = load(bare, ptype);
+        // 仅半年报/年报的公司（如 09992）无单季流量值：默认 SINGLE_Q 时自动合并 H1(CUMULATIVE)+FY 展示
+        DisplayLoad display = loadForDisplay(bare, ptype);
+        Loaded loaded = display.loaded();
         if (loaded.rows().isEmpty()) {
             return new TrendResult(bare, code, def.getNameCn(), def.getUnit(), ptype.name(), false,
                     "未查询到 " + bare + " 的财务数据，请先采集。", warnings, List.of());
@@ -421,7 +435,7 @@ public class FinancialQueryService {
         List<String> periods = latestPeriods(loaded.rows(), n);
         Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
         // 派生比率指标（毛利率/ROE 等）需要现场计算
-        addDerivedRatios(bare, periods, ptype, grid, warnings);
+        addDerivedRatios(bare, periods, display.deriveType(), grid, warnings);
 
         List<TrendPoint> points = new ArrayList<>();
         for (String p : periods) {
@@ -453,7 +467,9 @@ public class FinancialQueryService {
         }
         MetricDef def = metricCatalog.get(code);
 
-        Loaded loaded = load(bare, PeriodType.SINGLE_Q);
+        // 仅半年报/年报的公司（如 09992）无单季流量值：自动合并 H1(CUMULATIVE)+FY 展示构成
+        DisplayLoad display = loadForDisplay(bare, PeriodType.SINGLE_Q);
+        Loaded loaded = display.loaded();
         CompanyDO company = loaded.company();
         if (loaded.rows().isEmpty()) {
             return new CompositionResult(bare, code, def.getNameCn(), def.getStatement(),
@@ -475,7 +491,7 @@ public class FinancialQueryService {
 
         Map<String, Map<String, MetricValueDO>> grid = buildGrid(loaded.rows());
         // 查询时派生指标（自由现金流等），保证存量数据的派生行也有值
-        addDerivedRatios(bare, periods, PeriodType.SINGLE_Q, grid, warnings);
+        addDerivedRatios(bare, periods, display.deriveType(), grid, warnings);
         List<TreeNode> tree = buildStatementTree(st, grid, periods, basisCode, code);
         return new CompositionResult(bare, code, def.getNameCn(), def.getStatement(),
                 companyCurrency(company), ratioBasis, periods, true, null, warnings, tree);
@@ -738,9 +754,11 @@ public class FinancialQueryService {
         }
 
         // 合成利润率行（查询时派生，非入库行）：同期收入与对应利润都有值时，紧跟利润行插入。
-        // 毛利后插毛利率，调整后EBITA后插EBITA利润率；任一期可算即保留，否则剪枝。
+        // 毛利后插毛利率、营业利润后插营业利润率、调整后EBITA后插EBITA利润率；任一期可算即保留，否则剪枝。
         insertSegmentRowAfter(rows, "GROSS_PROFIT",
                 buildSegmentRatioRow("GROSS_MARGIN", "GROSS_PROFIT", grid, periods));
+        insertSegmentRowAfter(rows, "OPERATING_INCOME",
+                buildSegmentRatioRow("OPERATING_MARGIN", "OPERATING_INCOME", grid, periods));
         insertSegmentRowAfter(rows, "ADJUSTED_EBITA",
                 buildSegmentRatioRow("EBITA_MARGIN", "ADJUSTED_EBITA", grid, periods));
         return rows;
@@ -1260,6 +1278,15 @@ public class FinancialQueryService {
 
     /** 自动补采（库中期间不足时先采集）并加载某口径下的全部指标行。 */
     private Loaded load(String ticker, PeriodType ptype) {
+        Loaded all = loadAll(ticker);
+        List<MetricValueDO> rows = new ArrayList<>(all.rows());
+        // 口径过滤
+        rows.removeIf(r -> !ptype.name().equals(r.getPeriodType()));
+        return new Loaded(all.ticker(), all.company(), rows);
+    }
+
+    /** 自动补采（库中期间不足时先采集）并加载该公司全部口径的指标行（不过滤期间口径）。 */
+    private Loaded loadAll(String ticker) {
         String bare = normalizeTicker(ticker);
         boolean backfilled = ingestService.backfillIfNeeded(bare);
         CompanyDO company = repository.findCompany(bare);
@@ -1268,9 +1295,77 @@ public class FinancialQueryService {
             company = repository.findCompany(bare);
         }
         List<MetricValueDO> rows = repository.queryMetrics(bare, null, null);
-        // 口径过滤
-        rows.removeIf(r -> !ptype.name().equals(r.getPeriodType()));
         return new Loaded(bare, company, rows);
+    }
+
+    /** 指标是否为资产负债表时点数（STOCK）：时点值与披露口径无关，任何期间口径下都按其期间标签展示。 */
+    private boolean isStockMetric(String metricCode) {
+        MetricDef d = metricCatalog.get(metricCode);
+        return d != null && d.valueTypeEnum() == ValueType.STOCK;
+    }
+
+    /**
+     * 选择仪表盘流量指标（利润表/现金流量表）的期间口径。
+     * <p>按 SINGLE_Q → CUMULATIVE → FY 顺序，取该口径下「最新流量期间」最靠后的口径；同期时优先 SINGLE_Q。
+     * 仅披露半年报/年报的公司（如港股 09992）没有单季流量值，其 H1 累计（CUMULATIVE）最新期间晚于
+     * 上一份年报（FY），故选 CUMULATIVE；季度披露的公司 SINGLE_Q 与 CUMULATIVE 最新期间相同，优先 SINGLE_Q。
+     * 资产负债表 STOCK 时点数不参与口径选择（任何口径下都保留）。
+     */
+    private PeriodType selectFlowPeriodType(List<MetricValueDO> allRows) {
+        PeriodType best = PeriodType.SINGLE_Q;
+        int bestKey = -1;
+        for (PeriodType pt : List.of(PeriodType.SINGLE_Q, PeriodType.CUMULATIVE, PeriodType.FY)) {
+            int latest = -1;
+            for (MetricValueDO r : allRows) {
+                if (isStockMetric(r.getMetricCode()) || !pt.name().equals(r.getPeriodType())) {
+                    continue;
+                }
+                FiscalPeriod fp = FiscalPeriod.parse(r.getFiscalPeriod());
+                if (fp != null) {
+                    latest = Math.max(latest, fp.sortKey());
+                }
+            }
+            if (latest > bestKey) {
+                bestKey = latest;
+                best = pt;
+            }
+        }
+        return best;
+    }
+
+    /** 是否存在单季流量值（利润表/现金流量表 SINGLE_Q 行）：季度披露公司为 true，仅半年报/年报公司为 false。 */
+    private boolean hasSingleQuarterFlow(List<MetricValueDO> allRows) {
+        return allRows.stream().anyMatch(r ->
+                PeriodType.SINGLE_Q.name().equals(r.getPeriodType()) && !isStockMetric(r.getMetricCode()));
+    }
+
+    /** 展示类接口取数结果：数据行 + 派生比率口径（合并半年报/年报时用 FY，使年报单元格派生 ROE/ROA）。 */
+    private record DisplayLoad(Loaded loaded, PeriodType deriveType) {}
+
+    /**
+     * 趋势/构成等展示接口取数：
+     * <ul>
+     *   <li>季度披露公司（存在单季流量值）：按请求口径取数（默认 SINGLE_Q），行为不变；</li>
+     *   <li>仅披露半年报/年报的公司（如港股 09992，无任何单季流量值）且请求 SINGLE_Q 时：合并
+     *       CUMULATIVE（H1 半年报）+ FY（年报）的流量行，并保留全部 STOCK 时点行（中报/年报资产负债表），
+     *       使趋势图与构成表能按时间序展示半年报与年报数据；期间标签互不冲突（H1=yyyyQ2、年报=FYyyyy），
+     *       YoY 由去年同期自然对齐（H1↔H1、FY↔FY）。派生口径取 FY 以便年报单元格计算 ROE/ROA。</li>
+     * </ul>
+     */
+    private DisplayLoad loadForDisplay(String ticker, PeriodType requested) {
+        Loaded all = loadAll(ticker);
+        if (requested == PeriodType.SINGLE_Q && !hasSingleQuarterFlow(all.rows())) {
+            List<MetricValueDO> rows = all.rows().stream()
+                    .filter(r -> isStockMetric(r.getMetricCode())
+                            || PeriodType.CUMULATIVE.name().equals(r.getPeriodType())
+                            || PeriodType.FY.name().equals(r.getPeriodType()))
+                    .toList();
+            return new DisplayLoad(new Loaded(all.ticker(), all.company(), rows), PeriodType.FY);
+        }
+        List<MetricValueDO> rows = all.rows().stream()
+                .filter(r -> requested.name().equals(r.getPeriodType()))
+                .toList();
+        return new DisplayLoad(new Loaded(all.ticker(), all.company(), rows), requested);
     }
 
     /**

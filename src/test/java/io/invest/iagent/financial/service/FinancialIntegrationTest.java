@@ -60,6 +60,21 @@ public class FinancialIntegrationTest {
         this.filling(ticker, startYear, endYear);
     }
 
+    @Test
+    public void test_LI_init() {
+        String ticker = "LI";
+        int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
+
+    @Test
+    public void test_PDD_init() {
+        String ticker = "PDD";
+        int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
 
     @Test
     public void test_META_init() {
@@ -73,6 +88,14 @@ public class FinancialIntegrationTest {
     public void test_83690_init() {
         String ticker = "83690";
         int startYear = 2020;
+        int endYear = 2026;
+        this.filling(ticker, startYear, endYear);
+    }
+
+    @Test
+    public void test_09992_init() {
+        String ticker = "09992";
+        int startYear = 2021;
         int endYear = 2026;
         this.filling(ticker, startYear, endYear);
     }

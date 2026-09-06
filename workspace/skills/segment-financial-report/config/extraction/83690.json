@@ -9,7 +9,7 @@
     {
       "segmentCode": "LOCAL_SERVICE",
       "segmentName": "核心本地商業",
-      "aliases": ["核心本地商業", "本地服务"],
+      "aliases": ["核心本地商業", "本地服务", "總收入"],
       "level": 1,
       "parentCode": null
     },
@@ -22,15 +22,29 @@
     },
     {
       "segmentCode": "COMMISSION",
-      "segmentName": "佣金或商家服务",
-      "aliases": ["佣金","商家服務"],
+      "segmentName": "佣金",
+      "aliases": ["佣金"],
       "level": 2,
       "parentCode": "LOCAL_SERVICE"
     },
     {
       "segmentCode": "MARKETING",
-      "segmentName": "在線營銷服務或商品销售",
-      "aliases": ["在線營銷服務","商品銷售"],
+      "segmentName": "在線營銷服務",
+      "aliases": ["在線營銷服務"],
+      "level": 2,
+      "parentCode": "LOCAL_SERVICE"
+    },
+    {
+      "segmentCode": "MERCHANT_SERVICE",
+      "segmentName": "商家服務",
+      "aliases": ["商家服務"],
+      "level": 2,
+      "parentCode": "LOCAL_SERVICE"
+    },
+    {
+      "segmentCode": "PRODUCT_SALES",
+      "segmentName": "商品銷售",
+      "aliases": ["商品銷售"],
       "level": 2,
       "parentCode": "LOCAL_SERVICE"
     },
@@ -47,16 +61,66 @@
       "aliases": ["新業務"],
       "level": 1,
       "parentCode": null
+    },
+    {
+      "segmentCode": "NEW_DELIVERY",
+      "segmentName": "配送服務",
+      "aliases": ["配送服務"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_COMMISSION",
+      "segmentName": "佣金",
+      "aliases": ["佣金"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_MARKETING",
+      "segmentName": "在線營銷服務",
+      "aliases": ["在線營銷服務"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_MERCHANT_SERVICE",
+      "segmentName": "商家服務",
+      "aliases": ["商家服務"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_PRODUCT_SALES",
+      "segmentName": "商品銷售",
+      "aliases": ["商品銷售"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
+    },
+    {
+      "segmentCode": "NEW_OTHER",
+      "segmentName": "其他服務及銷售",
+      "aliases": ["其他服務及銷售（包括利息收入）"],
+      "level": 2,
+      "parentCode": "NEW_SERVICE"
     }
   ],
   "metricMappingRules": [
     {
       "standardMetricCode": "REVENUE",
-      "rawMetricNames": ["Revenue", "Revenues", "收入", "分部收入", "营业额", "营收"]
+      "rawMetricNames": ["Revenue", "Revenues", "收入", "分部收入", "营业额", "营收","總收入"]
     },
     {
       "standardMetricCode": "COST",
-      "rawMetricNames": ["銷售成本、經營開支及未分配項目", "COST"]
+      "rawMetricNames": ["銷售成本、經營開支及未分配項目", "銷售成本"]
+    },
+    {
+      "standardMetricCode": "GROSS_PROFIT",
+      "rawMetricNames": ["GROSS_PROFIT","毛利"]
+    },
+    {
+      "standardMetricCode": "OPERATING_EXPENSES",
+      "rawMetricNames": ["經營開支", "EXPENSE"]
     },
     {
       "standardMetricCode": "OPERATING_INCOME",
@@ -67,82 +131,91 @@
     "美团港股财报 PDF 因字体乱码无法读中文标签，仅能靠位置匹配。",
     "分部披露表结构（page 2 或类似位置）：",
     "  列 = [标签, LOCAL_SERVICE, NEW_SERVICE, 未分配, 合計]",
-    "  前 4 行 = L2 REVENUE（配送/佣金/在線營銷/其他）",
-    "  第 5 行 = L1 REVENUE 合计（跳过）",
-    "  第 6 行 = L1 COST",
-    "  第 7 行 = L1 OPERATING_INCOME（本期是虧損，字段名沿用 OPERATING_INCOME）",
+    "  前 4 行 = L2 REVENUE 明细（旧口径：配送/佣金/在線營銷/其他；2026Q1 起新口径：配送/商家服務/商品銷售/其他）",
+    "  第 5 行 = L1 REVENUE 合计（總收入，需提取到一級分部）",
+    "  第 6 行 = L1 銷售成本及經營開支合計（旧布局，COST）",
+    "  第 7 行 = L1 經營溢利/虧損（本期是虧損，字段名沿用 OPERATING_INCOME）",
     "报里同一页出现两个同型表：当期（page2 t0）+ 上年同期（page2 t1），两条 mapping 依次消费。",
     "",
     "2026Q1 起分部披露表结构变化：把 [銷售成本、經營開支及未分配項目] 一行拆成 [銷售成本 / 毛利 / 經營開支] 三行，共 9 行。",
     "同时当期表在 page 2、上年同期表移到 page 3；因当前 filter 只按行数匹配，count 差异自然区分新旧布局。",
-    "新布局仅提取 REVENUE 明细 + OPERATING_INCOME；COST 语义与旧版不同（新版仅指銷售成本），暂不映射以避免跨期数据混杂。"
+    "新布局（9 行）：第 6 行銷售成本口径与旧版 COST 不同（新版仅指銷售成本，不含經營開支），不映射；",
+    "第 7 行毛利映射 GROSS_PROFIT（带符号）；第 8 行經營開支映射标准码 OPERATING_EXPENSES（取绝对值，与 AAPL/AMZN/META 及 Java 指标目录一致）。",
+    "新布局 L2 收入拆分同时调整：商家服務=佣金+在線營銷合并，商品銷售单独披露（重述可比期），",
+    "故 9 行 mapping 的 L2 编码用 MERCHANT_SERVICE / PRODUCT_SALES，不能沿用 COMMISSION / MARKETING。",
+    "",
+    "L2 收入明细按列独立编码：核心本地商業(LOCAL_SERVICE)与新業務(NEW_SERVICE)下列示同名二级分部",
+    "（配送/佣金/在線營銷/商家服務/商品銷售/其他），但 Java 侧 segment 身份按 segCode 全局唯一、不按父部分组，",
+    "若共用同一 code 会把两个一级分部的子节点合并成一个、丢失其中一方数值。因此新業務侧使用 NEW_ 前缀独立 code",
+    "（NEW_DELIVERY/NEW_COMMISSION/NEW_MARKETING/NEW_MERCHANT_SERVICE/NEW_PRODUCT_SALES/NEW_OTHER），",
+    "中文展示名与本地侧相同；L2 行用 subSegmentCodes 按列映射 {LOCAL_SERVICE: <本地code>, NEW_SERVICE: <NEW_ code>}。"
   ],
   "pdfColumnMappings": [
     {
-      "_comment": "当期分部表（page 2 第一张同型 5-col × 7-row 表，2025Q1 及更早）",
+      "_comment": "当期分部表（旧布局 5-col × 7-row：L2 REVENUE×4 / 總收入 / 銷售成本及經營開支合計 / 經營溢利，2025Q4 及更早）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
       "periodCode": "CURRENT_Q",
       "rowDescriptors": [
-        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
-        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
-        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
-        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
-        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "DELIVERY", "NEW_SERVICE": "NEW_DELIVERY"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "COMMISSION", "NEW_SERVICE": "NEW_COMMISSION"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "MARKETING", "NEW_SERVICE": "NEW_MARKETING"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "OTHER", "NEW_SERVICE": "NEW_OTHER"}},
+        {"metricCode": "REVENUE", "subSegmentCode": ""},
         {"metricCode": "COST", "subSegmentCode": "", "abs": true},
         {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
       ]
     },
     {
-      "_comment": "上年同期分部表（page 2 第二张同型 5-col × 7-row 表，2025Q1 及更早）",
+      "_comment": "上年同期分部表（旧布局 5-col × 7-row，2025Q4 及更早）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
       "periodCode": "PRIOR_Q",
       "rowDescriptors": [
-        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
-        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
-        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
-        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
-        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "DELIVERY", "NEW_SERVICE": "NEW_DELIVERY"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "COMMISSION", "NEW_SERVICE": "NEW_COMMISSION"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "MARKETING", "NEW_SERVICE": "NEW_MARKETING"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "OTHER", "NEW_SERVICE": "NEW_OTHER"}},
+        {"metricCode": "REVENUE", "subSegmentCode": ""},
         {"metricCode": "COST", "subSegmentCode": "", "abs": true},
         {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
       ]
     },
     {
-      "_comment": "2026Q1+ 当期分部表（新布局 5-col × 9-row：REVENUE×4 / 合计 / 销售成本 / 毛利 / 经营开支 / 经营亏损）",
+      "_comment": "2026Q1+ 当期分部表（新布局 5-col × 9-row：L2 REVENUE×4 / 總收入 / 銷售成本(跳过) / 毛利 / 經營開支 / 經營虧損）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
       "periodCode": "CURRENT_Q",
       "rowDescriptors": [
-        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
-        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
-        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
-        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "DELIVERY", "NEW_SERVICE": "NEW_DELIVERY"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "MERCHANT_SERVICE", "NEW_SERVICE": "NEW_MERCHANT_SERVICE"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "PRODUCT_SALES", "NEW_SERVICE": "NEW_PRODUCT_SALES"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "OTHER", "NEW_SERVICE": "NEW_OTHER"}},
+        {"metricCode": "REVENUE", "subSegmentCode": ""},
         {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "GROSS_PROFIT", "subSegmentCode": ""},
+        {"metricCode": "OPERATING_EXPENSES", "subSegmentCode": "", "abs": true},
         {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
       ]
     },
     {
-      "_comment": "2026Q1+ 上年同期分部表（同 9-row 新布局，通常出现在 page 3）",
+      "_comment": "2026Q1+ 上年同期分部表（新布局 9-row，可比期已按新口径重述，通常在 page 3）",
       "layout": "SUBSEGMENT_MATRIX",
       "columnCount": 4,
       "segmentCodes": ["LOCAL_SERVICE", "NEW_SERVICE", "SKIP", "TOTAL"],
       "periodCode": "PRIOR_Q",
       "rowDescriptors": [
-        {"metricCode": "REVENUE", "subSegmentCode": "DELIVERY"},
-        {"metricCode": "REVENUE", "subSegmentCode": "COMMISSION"},
-        {"metricCode": "REVENUE", "subSegmentCode": "MARKETING"},
-        {"metricCode": "REVENUE", "subSegmentCode": "OTHER"},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "DELIVERY", "NEW_SERVICE": "NEW_DELIVERY"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "MERCHANT_SERVICE", "NEW_SERVICE": "NEW_MERCHANT_SERVICE"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "PRODUCT_SALES", "NEW_SERVICE": "NEW_PRODUCT_SALES"}},
+        {"metricCode": "REVENUE", "subSegmentCodes": {"LOCAL_SERVICE": "OTHER", "NEW_SERVICE": "NEW_OTHER"}},
+        {"metricCode": "REVENUE", "subSegmentCode": ""},
         {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
-        {"metricCode": "", "subSegmentCode": ""},
+        {"metricCode": "GROSS_PROFIT", "subSegmentCode": ""},
+        {"metricCode": "OPERATING_EXPENSES", "subSegmentCode": "", "abs": true},
         {"metricCode": "OPERATING_INCOME", "subSegmentCode": ""}
       ]
     }

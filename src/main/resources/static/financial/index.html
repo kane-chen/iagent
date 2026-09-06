@@ -166,6 +166,35 @@
   .strangle-table td .pos { color: var(--up); font-weight: 600; }
   .strangle-table td .neg { color: var(--down); font-weight: 600; }
   #strangleChart { width: 100%; height: 300px; margin-top: 14px; }
+
+  /* 构建公司信息库 */
+  .build-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .build-form .ctrl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .build-form input {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none;
+  }
+  .build-form .btn { padding: 7px 18px; }
+  .build-form .btn:disabled { opacity: .6; cursor: not-allowed; }
+  .build-tip {
+    font-size: 12px; color: var(--muted); line-height: 1.7; background: #f8fafc;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 12px;
+  }
+  .build-result { margin-top: 14px; display: none; }
+  .build-result.show { display: block; }
+  .build-box { border-radius: 10px; padding: 14px 16px; border: 1px solid; }
+  .build-box.ok { background: #f0fdf4; border-color: #bbf7d0; }
+  .build-box.fail { background: #fef2f2; border-color: #fecaca; }
+  .build-status { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .build-box.ok .build-status { color: var(--down); }
+  .build-box.fail .build-status { color: var(--up); }
+  .build-msg { line-height: 1.7; }
+  .build-stats { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .build-stats b { color: var(--text); }
+  .build-warn {
+    margin-top: 10px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; color: #92400e; font-size: 12px; line-height: 1.7;
+  }
+  .build-actions { margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -175,6 +204,7 @@
   <div class="search">
     <input id="tickerInput" placeholder="输入股票代码，如 00700 / BABA / 600519" />
     <button id="searchBtn">查询</button>
+    <button class="btn-opt" id="buildBtn" title="下载财报并构建公司财务信息库">🏗️ 构建信息库</button>
     <button class="btn-opt" id="strangleBtn" title="期权买入宽跨式(strangle)组合推荐">🎯 期权策略</button>
   </div>
 </header>
@@ -257,6 +287,32 @@
     </div>
     <div id="strangleChart" style="display:none"></div>
     <div class="modal-msg" id="strangleMsg"></div>
+  </div>
+</div>
+
+<!-- 构建公司信息库弹窗 -->
+<div class="modal-mask" id="buildModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <h2>🏗️ 构建公司信息库</h2>
+      <span class="spacer"></span>
+      <button class="close-btn" data-close="buildModal">✕</button>
+    </div>
+    <div class="build-form">
+      <span class="ctrl">股票代码
+        <input id="buildTicker" placeholder="如 00700 / BABA / 600519" style="width:190px">
+      </span>
+      <span class="ctrl">季度数
+        <input type="number" id="buildQuarters" min="4" max="40" step="1" value="16" style="width:70px">
+      </span>
+      <button class="btn primary" id="buildRunBtn">开始构建</button>
+    </div>
+    <div class="build-tip">
+      将下载近年财报文件并采集三大表与业务分部数据入库（全量刷新该公司旧指标数据）。
+      构建耗时较长（数分钟），期间请勿关闭页面。
+    </div>
+    <div class="modal-msg" id="buildMsg"></div>
+    <div class="build-result" id="buildResult"></div>
   </div>
 </div>
 
@@ -898,8 +954,72 @@ function drawStrangleChart(c, rank, idx) {
   state.strangleChart.resize();
 }
 
+// ---------- 构建公司信息库 ----------
+function openBuild() {
+  // 默认带入搜索框中的代码，可在弹窗内修改
+  const t = $('#tickerInput').value.trim();
+  if (t) $('#buildTicker').value = t;
+  $('#buildResult').classList.remove('show');
+  $('#buildResult').innerHTML = '';
+  $('#buildMsg').classList.remove('show');
+  $('#buildMsg').textContent = '';
+  $('#buildModal').classList.add('show');
+  $('#buildTicker').focus();
+}
+
+async function runBuild() {
+  const ticker = $('#buildTicker').value.trim();
+  if (!ticker) {
+    $('#buildMsg').classList.add('show');
+    $('#buildMsg').textContent = '请先输入股票代码。';
+    return;
+  }
+  const quarters = $('#buildQuarters').value || 16;
+  const btn = $('#buildRunBtn');
+  btn.disabled = true;
+  $('#buildResult').classList.remove('show');
+  $('#buildMsg').classList.add('show');
+  $('#buildMsg').textContent = '构建中…（正在下载财报并采集三大表/分部数据，可能需要数分钟，请勿关闭页面）';
+  try {
+    const d = await api(`/api/financial/build?ticker=${encodeURIComponent(ticker)}&quarters=${quarters}`);
+    $('#buildMsg').classList.remove('show');
+    renderBuildResult(d, ticker);
+  } catch (e) {
+    $('#buildMsg').textContent = '构建失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** 展示构建结果：BuildResult{success,message,periodCount,metricCount,warnings}；异常兜底返回 {hasData:false,message}。 */
+function renderBuildResult(d, ticker) {
+  const ok = d.success === true;
+  const stats = ok
+    ? `<div class="build-stats">共入库 <b>${d.periodCount}</b> 个期间、<b>${d.metricCount}</b> 条指标值</div>` : '';
+  const warn = (d.warnings && d.warnings.length)
+    ? `<div class="build-warn">⚠️ ${d.warnings.map(esc).join('<br>⚠️ ')}</div>` : '';
+  const actions = ok
+    ? `<div class="build-actions"><button class="btn primary" onclick="gotoBuilt('${esc(d.ticker || ticker)}')">立即查询该公司</button></div>` : '';
+  $('#buildResult').innerHTML = `<div class="build-box ${ok ? 'ok' : 'fail'}">
+      <div class="build-status">${ok ? '✅ 构建成功' : '❌ 构建失败'}</div>
+      <div class="build-msg">${esc(d.message || '未知结果')}</div>
+      ${stats}${warn}${actions}
+    </div>`;
+  $('#buildResult').classList.add('show');
+}
+
+/** 构建成功后跳转查询：回填搜索框、关闭弹窗并加载仪表盘。 */
+function gotoBuilt(ticker) {
+  $('#tickerInput').value = ticker;
+  $('#buildModal').classList.remove('show');
+  loadDashboard();
+}
+
 // ---------- 事件绑定 ----------
 $('#searchBtn').addEventListener('click', loadDashboard);
+$('#buildBtn').addEventListener('click', openBuild);
+$('#buildRunBtn').addEventListener('click', runBuild);
+$('#buildTicker').addEventListener('keydown', e => { if (e.key === 'Enter') runBuild(); });
 $('#strangleBtn').addEventListener('click', openStrangle);
 $('#strangleExpiries').addEventListener('change', loadStrangle);
 $('#tickerInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadDashboard(); });

@@ -70,12 +70,18 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
     # suffix is "Q1"/"Q2"/"Q3"/"Q4"/"FY"/"QTD6"/"QTD9".
     col_month_map = _build_column_month_map(table, m2q)
 
+    # 逐条目解析 table.headers 里的期间分组（PDD 6-K 这类混合期间表：左 "three months"
+    # 单季 + 右 "six/nine months/year ended" 累计 并列）。>=2 个分组时不能用一个全局
+    # 最长期间标签盖所有列，需在 Pass2 按分组逐列赋值。
+    header_groups = _scan_header_groups(table, m2q)
+    multi_header_groups = len(header_groups) >= 2
+
     # Also scan table.headers (which contains the text of the rows skipped by
     # _parse_rows, e.g. the period group header "Three months ended March 31,")
     # for a global month/period qualifier.  This is the case for BABA press
     # releases where TR0 holds the "Three months ended March 31," cell spanning
-    # all data columns.
-    if not col_month_map:
+    # all data columns.  混合期间表（>=2 分组）不走全局兜底，否则单季列会被错标成累计期。
+    if not col_month_map and not multi_header_groups:
         hdr_month, hdr_suffix = _scan_headers_for_period(table, m2q, defaultQuarter)
         if hdr_month is not None:
             year_cols_all: List[int] = []
@@ -96,8 +102,9 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
     # June 30, 2025" or "fiscal year ended March 31, 2026" from surrounding
     # press-release text) and no column month map could be derived from the
     # table's own headers, use the hint to set the suffix/month for all bare
-    # year columns.
-    if not col_month_map and getattr(table, "period", None):
+    # year columns.  混合期间表同样跳过：文档级 hint 只反映最长期间（如 six months），
+    # 会把单季列错标成累计期。
+    if not col_month_map and not multi_header_groups and getattr(table, "period", None):
         hint_lower = table.period.lower().replace("\xa0", " ")
         mon = effective_period_month(hint_lower, _find_month(hint_lower))
         if mon is not None:
@@ -135,7 +142,7 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
         if row is None:
             continue
         if row.getLabel():
-            lbl_lower = row.getLabel().lower()
+            lbl_lower = row.getLabel().lower().replace("\xa0", " ")
             mon = effective_period_month(lbl_lower, _find_month(lbl_lower))
             if mon is not None:
                 if "three month" in lbl_lower:
@@ -159,7 +166,7 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
             text = cell.getText()
             if text is None or not text.strip():
                 continue
-            lower = text.lower()
+            lower = text.lower().replace("\xa0", " ")
 
             group_suffix = _classify_group_suffix(lower, defaultQuarter)
             m = YEAR_PATTERN.search(text)
@@ -216,6 +223,12 @@ def _collect_year_columns(table: FinancialTable, defaultQuarter: str,
 
     # ----- Pass 2: assign periods to plain year columns -----
     if plain_year_columns:
+        # getRows 未检出分组表头、但 table.headers 里存在 >=2 个并列期间分组（PDD 6-K：
+        # three months 单季 + six/nine months/year ended 累计）。用 headers 分组补齐
+        # group_headers，交给下面的按分组赋值逻辑（num_years % num_groups == 0 时按文档
+        # 顺序把年份均分给各分组），从而让单季列得 Qn、累计列得 QTD6/QTD9/FY。
+        if not group_headers and multi_header_groups:
+            group_headers = [_GroupHeader(oi, suf, mon) for (oi, suf, mon) in header_groups]
         group_headers.sort(key=lambda g: g.columnIdx)
         year_sorted_idx = sorted(range(len(plain_year_columns)),
                                  key=lambda i: plain_year_columns[i][0])
@@ -341,7 +354,7 @@ def _build_column_month_map(table: FinancialTable, m2q: dict) -> dict:
                 text = cell.getText()
                 if text is None:
                     continue
-                lower = text.lower()
+                lower = text.lower().replace("\xa0", " ")
                 mon = effective_period_month(lower, _find_month(lower))
                 if mon is not None:
                     suffix = _classify_group_suffix(lower, None)
@@ -350,7 +363,7 @@ def _build_column_month_map(table: FinancialTable, m2q: dict) -> dict:
                     month_cells.append((c_idx, suffix, mon))
         # Row label -- e.g. "Three Months Ended September 30," in Microsoft 10-Q
         if row.getLabel():
-            lbl_lower = row.getLabel().lower()
+            lbl_lower = row.getLabel().lower().replace("\xa0", " ")
             mon = effective_period_month(lbl_lower, _find_month(lbl_lower))
             if mon is not None:
                 if "three month" in lbl_lower or "quarter" in lbl_lower:
@@ -400,6 +413,55 @@ def _classify_hint_suffix(hint_lower: str, defaultQuarter: str,
         return "QTD6"
     # "quarter ended" or "three months ended"
     return m2q.get(mon, defaultQuarter)
+
+
+def _scan_header_groups(table: FinancialTable, m2q: dict) -> List[Tuple[int, str, str]]:
+    """逐条目解析 table.headers，返回按文档顺序排列的期间分组 (order_idx, suffix, month)。
+
+    用于混合期间表（PDD 6-K 业绩稿）：表头行被 _parse_rows 跳过、整体进入 table.headers，
+    且一行里并列出现多个不同期间的分组单元格，例如::
+
+        "For the three months ended June 30," | "For the six months ended June 30,"
+
+    若按 _scan_headers_for_period 把所有表头拼一起、只取一个最长期间后缀，单季列会被
+    错标成累计期。这里逐格分类：
+      - "three months"/"quarter ended" + 月份 -> 该月所在财季 Qn（具体季度）
+      - "six months"/"half year"            -> QTD6
+      - "nine months"/"year to date"/ytd    -> QTD9
+      - "year ended"/"twelve months"/"fiscal year"/"full year" -> FY
+    仅保留含显式期间关键词且能识别月份的条目，避免把普通表头误判为期间分组。
+    """
+    groups: List[Tuple[int, str, str]] = []
+    headers = table.getHeaders() or []
+    for idx, h in enumerate(headers):
+        if not h:
+            continue
+        lower = h.lower().replace("\xa0", " ").replace("-", " ")
+        lower = re.sub(r"\s+", " ", lower).strip()
+        # 多年年报表头为复数 "Years Ended"，归一为单数以命中 FY 判定
+        lower = re.sub(r"years?\s+ended", "year ended", lower)
+        mon = effective_period_month(lower, _find_month(lower))
+        if mon is None:
+            continue
+        if not any(kw in lower for kw in (
+                "three month", "six month", "nine month", "twelve month",
+                "year ended", "fiscal year", "quarter ended", "full year",
+                "year to date", "ytd", "half year")):
+            continue
+        if "year ended" in lower or "fiscal year" in lower or "twelve month" in lower or "full year" in lower:
+            suffix = "FY"
+        elif "nine month" in lower or "year to date" in lower or "ytd" in lower:
+            suffix = "QTD9"
+        elif "six month" in lower or "half year" in lower:
+            suffix = "QTD6"
+        elif "three month" in lower or "quarter" in lower:
+            suffix = m2q.get(mon)
+        else:
+            continue
+        if suffix is None:
+            continue
+        groups.append((idx, suffix, mon))
+    return groups
 
 
 def _scan_headers_for_period(table: FinancialTable, m2q: dict,
@@ -474,8 +536,13 @@ def _find_month(lower: str) -> Optional[str]:
 
 
 def _classify_group_suffix(lower: str, defaultQuarter: str) -> Optional[str]:
-    # Normalize hyphens: "three-month" -> "three month"
-    l = lower.replace("-", " ")
+    # Normalize hyphens: "three-month" -> "three month"; 非断行空格 \xa0 -> 普通空格，
+    # 否则 "For\xa0the\xa0Year\xa0Ended" 里的 "year ended" 等短语匹配不到，会漏判 FY
+    # 而回退成月份所在季度（如 December -> Q4）。
+    l = lower.replace("\xa0", " ").replace("-", " ")
+    # 多年年报表头用复数 "For the Years Ended December 31,"（如 20-F 摘要数据表），
+    # 归一为单数 "year ended" 以便命中 FY 判定，否则会漏判成月份所在季度（December -> Q4）。
+    l = re.sub(r"years?\s+ended", "year ended", l)
     if ("nine month" in l or "9 month" in l
             or "year to date" in l or "ytd" in l):
         return "QTD9"

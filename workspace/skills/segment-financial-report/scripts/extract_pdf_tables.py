@@ -409,11 +409,28 @@ _NUM_TOKEN = re.compile(r"^[\(\-]?[\d]{1,3}(?:,\d{3})*(?:\.\d+)?[\%\)]?[\*\)]?$"
 _PLACEHOLDER_TOKEN = re.compile(r"^[\-–—−�－ーCcｰ]{1,4}$")
 
 
+def _repair_glitched_numbers(line):
+    """粘合 PDF 字符间距异常导致的数字碎片（港股年报常见，括号负数行尤为多发）。
+
+    pdfplumber extract_text 偶发在数字内部插入空格，实测形态：
+      - "(31,911,64 2)"、"14,062,71 8"  —— 数字在最后一组千分位前断开（",XX" + 空格 + 1~2 位数字）
+      - "(74,880,316 )"                 —— 右括号前多了空格，拆成 "(74,880,316" + ")"
+    真实数字不可能以",XX"（两位）结尾，孤立的 ")" 也只可能来自括号负数，故这两类粘合是安全的。
+    """
+    # 数字内部断裂：...,XX<空格>YY[)]  → ...,XXYY[)]（YY 为 1~2 位数字碎片）
+    line = re.sub(r"(\d{1,3}(?:,\d{3})+,\d{2})\s+(\d{1,2})(\)?)(?![\d,])",
+                  r"\1\2\3", line)
+    # 右括号前的空格："(74,880,316 )" → "(74,880,316)"
+    line = re.sub(r"(\d{1,3}(?:,\d{3})*)\s+\)", r"\1)", line)
+    return line
+
+
 def _tokenize_line_for_table(line):
     """把一行文字切成 [label, num, num, ...] 的候选 token 列表。
     切分规则：从右往左识别"数字/占位符"末尾 token，剩下前缀作为 label。
     占位符（em-dash 及其乱码变体）会转成空串保留在数据 token 里。
     返回 None 表示这行不像"标签 + 数字*"结构。"""
+    line = _repair_glitched_numbers(line)
     tokens = re.split(r"\s+", line.strip())
     if len(tokens) < 3:
         return None
