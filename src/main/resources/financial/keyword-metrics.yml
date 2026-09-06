@@ -9,17 +9,14 @@
 
 companies:
   BABA:
-    - code: NON_GAAP_CAPEX
+    - code: ICS_CAPEX
       keywords: "资本开支"
-      hint: 现金流口径的资本开支，通常在业绩公告的流动资金及财务中披露。
-    - code: DIVIDENDS_PAID
-      keywords: "dividends paid,派付股息"
-      hint: 在现金流量表筹资活动披露，取报告期实际支付的股利。
+      hint: 现金流口径的资本开支。
 
   "00700":
-    - code: NON_GAAP_CAPEX
+    - code: ICS_CAPEX
       keywords: "资本开支"
-      hint: 现金流口径的资本开支，通常在业绩公告的流动资金及财务中披露。
+      hint: 现金流口径的资本开支。
     - code: SHARE_BUYBACK
-      keywords: "回購股份"
+      keywords: "回購股份,購回,回購"
       hint: 在现金流量表筹资活动（購回股份支付的現金）披露，取报告期实际回购支出。

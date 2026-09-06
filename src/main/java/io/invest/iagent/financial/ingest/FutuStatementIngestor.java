@@ -14,6 +14,7 @@ import io.invest.iagent.financial.model.PeriodType;
 import io.invest.iagent.financial.model.StatementType;
 import io.invest.iagent.financial.model.ValueType;
 import io.invest.iagent.utils.ProcessRunner;
+import io.invest.iagent.utils.PythonResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -78,7 +79,7 @@ public class FutuStatementIngestor {
 
         Path script = workspace.resolve(SCRIPT_REL);
         List<String> cmd = List.of(
-                properties.getPythonExecutable(), script.toAbsolutePath().toString(),
+                PythonResolver.resolve(properties.getPythonExecutable()), script.toAbsolutePath().toString(),
                 futuCode, "--num", String.valueOf(num),
                 "--output", output.toAbsolutePath().toString());
         ProcessRunner.Result result = ProcessRunner.run(cmd, null, properties.getPythonTimeoutSeconds());

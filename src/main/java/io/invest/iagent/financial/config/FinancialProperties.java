@@ -41,7 +41,7 @@ public class FinancialProperties {
     /** 分部数据提取脚本超时秒数（PDF 解析较慢，默认 900） */
     private int segmentTimeoutSeconds = 900;
 
-    /** python 可执行文件（默认 python，Windows 上也可能是 python） */
+    /** python 可执行文件（默认 python；实际调用时经 PythonResolver 探测，macOS/Linux 无 python 时自动回退 python3） */
     private String pythonExecutable = "python";
 
     /** 采集的期数下限，低于该覆盖率视为缺失（用于查询时自动补采判断） */

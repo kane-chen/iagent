@@ -37,7 +37,7 @@ class FinancialIngestServiceTest {
     @Test
     public void test_build_baba_capex_manu(){
         String ticker = "BABA" ;
-        String metricCode = "NON_GAAP_CAPEX" ;
+        String metricCode = "ICS_CAPEX" ;
         Map<String,Integer> values = new HashMap<>() ;
         values.put("2026Q2",67680);
         values.put("2026Q1",26890);

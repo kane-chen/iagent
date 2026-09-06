@@ -121,7 +121,7 @@ public class KeywordMetricExtractor {
             warnings.add("关键字补充指标提取跳过：LLM 模块未启用。");
             return new KeywordExtractResult(0, warnings);
         }
-        List<KeywordMetricDef> defines = resolveDefs(ticker);
+        List<KeywordMetricDef> defines = resolveDefines(ticker);
         if (defines.isEmpty()) {
             // 公司未配置关键字指标，静默跳过
             return new KeywordExtractResult(0, warnings);
@@ -213,7 +213,7 @@ public class KeywordMetricExtractor {
     }
 
     /** 取公司维度的关键字指标配置（ticker 原样匹配失败时按大写重试）。 */
-    private List<KeywordMetricDef> resolveDefs(String ticker) {
+    private List<KeywordMetricDef> resolveDefines(String ticker) {
         Map<String, List<KeywordMetricDef>> companies = metricConfig.getCompanies();
         if (companies == null || companies.isEmpty()) {
             return List.of();
@@ -348,14 +348,14 @@ public class KeywordMetricExtractor {
     private static String joinLines(String[] lines, int from, int to) {
         StringBuilder sb = new StringBuilder();
         for (int j = Math.max(0, from); j < Math.min(lines.length, to + 1); j++) {
-            String l = lines[j].trim();
-            if (l.isEmpty()) {
+            String line = lines[j].trim();
+            if (line.isEmpty()) {
                 continue;
             }
-            if (sb.length() > 0) {
+            if (!sb.isEmpty()) {
                 sb.append(' ');
             }
-            sb.append(l);
+            sb.append(line);
         }
         return sb.toString();
     }
@@ -456,20 +456,18 @@ public class KeywordMetricExtractor {
         if (def.getHint() != null && !def.getHint().isBlank()) {
             sb.append("提示：").append(def.getHint()).append("\n");
         }
-        sb.append("原文片段（按相关性排序，均来自该公司财报，可能含当期数与上年同期对比数）：\n");
+        sb.append("# 原文片段（按相关性排序，均来自该公司财报，可能含当期数与上年同期对比数）：\n");
         for (int i = 0; i < snippets.size(); i++) {
             sb.append(i + 1).append(". 【").append(snippets.get(i).file().getFileName())
                     .append(" 第").append(snippets.get(i).line()).append("行】")
                     .append(snippets.get(i).text()).append("\n");
         }
         sb.append("""
-                严格要求：
+                # 严格要求：
                 1. 只能使用片段中明确披露的数据，不得推测或计算（片段没有就 found=false）；
                 2. 注意区分当期数与上年同期/前期对比数，取要求期间的当期发生额；
-                3. 金额一律换算为"百万"单位（原文为千元/千港元/千人民币则除以1000，为万元则除以100，
-                   为十亿美元则乘以1000；原文已是百万/百萬则不变）；
-                4. 分红、回购为现金流量表/权益变动表中该期间的实际发生额；
-                5. 只输出一个 JSON 对象，不要输出任何解释文字，格式：
+                3. 金额一律换算为"百万"单位（原文为千元/千港元/千人民币则除以1000，为十亿美元则乘以1000；原文已是百万/百萬则不变）；
+                4. 只输出一个 JSON 对象，不要输出任何解释文字，格式：
                 {"METRIC_CODE": {"found": true, "value": 123.45, "unit": "million", "confidence": 90, "evidence": "原文短句"}}
                 confidence 为 0-100 的整数，表达你对数值与口径的把握。
                 """);

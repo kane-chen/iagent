@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import io.invest.iagent.financial.config.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuCodeUtil;
 import io.invest.iagent.utils.ProcessRunner;
+import io.invest.iagent.utils.PythonResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -63,7 +64,7 @@ public class OptionChainFetcher {
 
         Path script = workspace.resolve(SCRIPT_REL);
         List<String> cmd = List.of(
-                properties.getPythonExecutable(), script.toAbsolutePath().toString(),
+                PythonResolver.resolve(properties.getPythonExecutable()), script.toAbsolutePath().toString(),
                 futuCode, "--expiries", String.valueOf(expiries),
                 "--output", output.toAbsolutePath().toString());
         ProcessRunner.Result result = ProcessRunner.run(cmd, null, properties.getPythonTimeoutSeconds());

@@ -56,7 +56,7 @@ public class OllamaChatter implements Chatter {
             return Objects.requireNonNull(message).getTextContent() ;
         } catch (Exception e) {
             log.warn("LLM chat failed: {}", e.getMessage());
-            return userPrompt;
+            throw new RuntimeException("doChat occur exception",e);
         }
     }
 

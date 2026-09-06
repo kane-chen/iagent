@@ -265,7 +265,7 @@ class FutuStatementIngestorTest {
         assertValue(r, "OPERATING_CF", "2026Q1", PeriodType.SINGLE_Q, "101351");
         // 投资净额取 5069（旧映射 5076 在稀疏报中同样缺失），符号保留
         assertValue(r, "INVESTING_CF", "2026Q1", PeriodType.SINGLE_Q, "-10560");
-        // 稀疏报无资本开支字段 → 单季 CAPEX/FCF 留空（由 RAG NON_GAAP_CAPEX 补充）
+        // 稀疏报无资本开支字段 → 单季 CAPEX/FCF 留空
         MetricValueDO capex = find(r, "CAPEX", "2026Q1", PeriodType.SINGLE_Q);
         assertTrue(capex == null || capex.getValue() == null, "稀疏 Q1 报不应产生 CAPEX 值");
         MetricValueDO fcf = find(r, "FREE_CASH_FLOW", "2026Q1", PeriodType.SINGLE_Q);

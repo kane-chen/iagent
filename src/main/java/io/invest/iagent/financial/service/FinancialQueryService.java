@@ -808,10 +808,10 @@ public class FinancialQueryService {
     /**
      * 构成表中不按目录位置展示的指标：
      * EBITDA/ADJUSTED_EBITDA 为利润表中间口径，干扰净利润/营业利润的构成阅读；
-     * NON_GAAP_CAPEX 为非 GAAP 补充口径，不作为投资活动子项展示，提升为自由现金流因子行「资本开支」。
+     * ICS_CAPEX 为非 GAAP 补充口径，不作为投资活动子项展示，提升为自由现金流因子行「资本开支」。
      */
     private static final Set<String> COMPOSITION_HIDDEN_CODES =
-            Set.of("EBITDA", "ADJUSTED_EBITDA", "NON_GAAP_CAPEX");
+            Set.of("EBITDA", "ADJUSTED_EBITDA", "ICS_CAPEX");
 
     /** 合成行编码：税率（所得税/税前利润），非入库指标，仅构成表展示。 */
     private static final String TAX_RATE_CODE = "EFFECTIVE_TAX_RATE";
@@ -824,8 +824,8 @@ public class FinancialQueryService {
      *       作为根级行排在毛利与营业利润之间（形成 毛利 − 营业费用 = 营业利润 的因子链）；
      *       毛利后插毛利率、营业费用后插营业费用率、营业利润后插营业利润率、所得税后插税率
      *       （均为查询时派生的合成行）；</li>
-     *   <li>现金流量表：NON_GAAP_CAPEX 提升为自由现金流因子行「资本开支」，排在自由现金流之前
-     *       （值取 NON_GAAP_CAPEX，缺失回退 GAAP CAPEX，与 FCF 派生口径一致）。</li>
+     *   <li>现金流量表：ICS_CAPEX 提升为自由现金流因子行「资本开支」，排在自由现金流之前
+     *       （值取 ICS_CAPEX，缺失回退 GAAP CAPEX，与 FCF 派生口径一致）。</li>
      * </ul>
      */
     private List<TreeNode> buildStatementTree(StatementType statement,
@@ -970,7 +970,7 @@ public class FinancialQueryService {
     }
 
     /**
-     * 自由现金流因子行「资本开支」：排在自由现金流行之前，值取 NON_GAAP_CAPEX（业绩公告经调整口径，
+     * 自由现金流因子行「资本开支」：排在自由现金流行之前，值取 ICS_CAPEX（业绩公告经调整口径，
      * 与 FCF 派生口径一致），缺失时回退 GAAP CAPEX，保证 经营现金流 − 资本开支 = 自由现金流 可对账；
      * 占收入比与其他流量行一致。所有期间均无值时返回 null（按空行剪枝）。
      */
@@ -980,7 +980,7 @@ public class FinancialQueryService {
         boolean hasValue = false;
         for (String p : periods) {
             Map<String, MetricValueDO> cell = grid.getOrDefault(p, Map.of());
-            MetricValueDO capex = cell.get("NON_GAAP_CAPEX");
+            MetricValueDO capex = cell.get("ICS_CAPEX");
             if (capex == null || capex.getValue() == null) {
                 capex = cell.get("CAPEX");
             }
@@ -996,8 +996,8 @@ public class FinancialQueryService {
             }
             cells.add(new CompCell(value, capex == null ? null : capex.getYoy(), ratio));
         }
-        return hasValue ? new TreeNode("NON_GAAP_CAPEX", "资本开支", "million", ValueType.FLOW.name(),
-                false, "NON_GAAP_CAPEX".equals(targetCode), List.of(), cells) : null;
+        return hasValue ? new TreeNode("ICS_CAPEX", "资本开支", "million", ValueType.FLOW.name(),
+                false, "ICS_CAPEX".equals(targetCode), List.of(), cells) : null;
     }
 
     /**
@@ -1397,7 +1397,7 @@ public class FinancialQueryService {
 
     /**
      * 派生自由现金流 FCF = 经营现金流 OCF − 资本开支：
-     * 资本开支优先取 Non-GAAP 经调整资本开支（NON_GAAP_CAPEX，业绩公告口径，RAG 提取），
+     * 资本开支优先取 Non-GAAP 经调整资本开支（ICS_CAPEX，业绩公告口径，RAG 提取），
      * 缺失时回退三大表 GAAP 资本开支（CAPEX）。每次查询现场重算并覆盖采集时按 GAAP 口径派生的存量 FCF 行，
      * 保证 FCF 卡片/趋势/构成统一使用最新口径；组件缺失无法计算时保留库存值。
      */
@@ -1407,7 +1407,7 @@ public class FinancialQueryService {
             return;
         }
         MetricValueDO ocf = cell.get("OPERATING_CF");
-        MetricValueDO capex = cell.get("NON_GAAP_CAPEX");
+        MetricValueDO capex = cell.get("ICS_CAPEX");
         if (capex == null || capex.getValue() == null) {
             capex = cell.get("CAPEX");
         }

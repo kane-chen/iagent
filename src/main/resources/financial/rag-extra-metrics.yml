@@ -15,8 +15,3 @@ metrics:
     min_confidence: 60
     aliases: [股份回购, 股票回购, 回购股票, 回购股份, share repurchase, share buyback, repurchase of common stock]
     hint: 在现金流量表筹资活动（"回购股票支付的现金"/Repurchases of common stock）或股本变动附注中披露。取报告期回购支出金额。
-
-  - code: NON_GAAP_CAPEX
-    min_confidence: 70
-    aliases: [資本開支, 资本开支, 经调整资本开支, non-GAAP CapEx]
-    hint: 非 GAAP 指标，通常在业绩公告（earnings release）的流动资金及财务资源中披露。

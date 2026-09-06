@@ -11,6 +11,7 @@ import io.invest.iagent.financial.model.SegmentValueDO;
 import io.invest.iagent.financial.repository.FinancialRepository;
 import io.invest.iagent.rag.filing.model.FiscalPeriod;
 import io.invest.iagent.utils.ProcessRunner;
+import io.invest.iagent.utils.PythonResolver;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -118,7 +119,7 @@ public class SegmentIngestor {
         Path output = workspace.resolve("temp").resolve(ticker + "_segments.json");
         Path script = workspace.resolve(SCRIPT_REL);
         List<String> cmd = new ArrayList<>(List.of(
-                properties.getPythonExecutable(), script.toAbsolutePath().toString(),
+                PythonResolver.resolve(properties.getPythonExecutable()), script.toAbsolutePath().toString(),
                 "--ticker", ticker,
                 "--workspace", workspace.toAbsolutePath().toString(),
                 "--output", output.toAbsolutePath().toString(),
@@ -272,13 +273,26 @@ public class SegmentIngestor {
 
     /**
      * 按覆盖期间过滤财报文件：仅保留自然年期间落在 coveredCanonical 内的财报。
-     * 每份财报同时披露当期与上年同期对比表，故当期或去年同期任一命中即保留；
-     * 文件名无法解析期间时保守保留（避免误删）。
+     * 每份财报同时披露当期与上年同期对比表：当期命中即保留；当期未命中、但其去年同期
+     * 命中覆盖期间时，仅在<strong>该去年同期没有"当期即命中"的财报</strong>时才靠本期
+     * 对比列补数（避免当期财报已存在时仍冗余拉入次年财报，如 BABA 2024Q1 已有
+     * 20240514 财报时，不应再因对比列拉入 20250515）。文件名无法解析期间时保守保留（避免误删）。
      */
     static List<Path> filterReportsByPeriods(List<Path> files, Set<String> coveredCanonical, int fyeMonth) {
+        // 先汇总每份财报"当期"所属自然年期间，用于判断某覆盖期间是否已有专属当期财报
+        Map<Path, String> periodOf = new LinkedHashMap<>();
+        Set<String> ownPeriods = new HashSet<>();
+        for (Path f : files) {
+            String p = reportNaturalPeriod(f.getFileName().toString(), fyeMonth);
+            periodOf.put(f, p);
+            if (p != null) {
+                ownPeriods.add(p);
+            }
+        }
+
         List<Path> kept = new ArrayList<>();
         for (Path f : files) {
-            String period = reportNaturalPeriod(f.getFileName().toString(), fyeMonth);
+            String period = periodOf.get(f);
             if (period == null) {
                 kept.add(f);
                 continue;
@@ -287,11 +301,13 @@ public class SegmentIngestor {
                 kept.add(f);
                 continue;
             }
-            // 财报含上年同期对比表：去年同期命中覆盖期间时也需保留
+            // 财报含上年同期对比表：去年同期命中、且该同期没有专属当期财报时，才靠对比列补数
             FiscalPeriod fp = FiscalPeriod.parse(period);
-            if (fp != null && fp.yearAgo() != null
-                    && coveredCanonical.contains(fp.yearAgo().canonical())) {
-                kept.add(f);
+            if (fp != null && fp.yearAgo() != null) {
+                String yearAgo = fp.yearAgo().canonical();
+                if (coveredCanonical.contains(yearAgo) && !ownPeriods.contains(yearAgo)) {
+                    kept.add(f);
+                }
             }
         }
         return kept;
