@@ -12,11 +12,22 @@ companies:
     - code: ICS_CAPEX
       keywords: "资本开支"
       hint: 现金流口径的资本开支。
+    - code: SHARE_BUYBACK
+      keywords: "Share Repurchase"
+      hint: 股份回购实际支出。
 
   "00700":
     - code: ICS_CAPEX
       keywords: "资本开支"
       hint: 现金流口径的资本开支。
     - code: SHARE_BUYBACK
-      keywords: "回購股份,購回,回購"
-      hint: 在现金流量表筹资活动（購回股份支付的現金）披露，取报告期实际回购支出。
+      keywords: "購回的股份"
+      hint: 股份回购实际支出。
+    - code: DIVIDENDS_PAID
+      keywords: "該等股息"
+      hint: 股息实际支持。
+
+  "GOOG":
+    - code: ICS_CAPEX
+      keywords: "资本开支"
+      hint: 现金流口径的资本开支。

@@ -276,7 +276,13 @@ public class SegmentIngestor {
      * 每份财报同时披露当期与上年同期对比表：当期命中即保留；当期未命中、但其去年同期
      * 命中覆盖期间时，仅在<strong>该去年同期没有"当期即命中"的财报</strong>时才靠本期
      * 对比列补数（避免当期财报已存在时仍冗余拉入次年财报，如 BABA 2024Q1 已有
-     * 20240514 财报时，不应再因对比列拉入 20250515）。文件名无法解析期间时保守保留（避免误删）。
+     * 20240514 财报时，不应再因对比列拉入 20250515）。
+     *
+     * <p>年报兜底：财年末季单季数据只随年报披露（如 fyeMonth=12 的公司不发 Q4 季报，
+     * 四季度数据在 FY 年报中；fyeMonth=3 时对应自然年 Q1）。年报当期（FY）未命中、
+     * 但其财年末季（自然年口径 {@code <FY年份>Q<(fyeMonth-1)/3+1>}）命中覆盖期间，
+     * 且该季度没有专属当期财报时，才用年报补数——优先取季报，季报不存在时取年报。
+     * 文件名无法解析期间时保守保留（避免误删）。
      */
     static List<Path> filterReportsByPeriods(List<Path> files, Set<String> coveredCanonical, int fyeMonth) {
         // 先汇总每份财报"当期"所属自然年期间，用于判断某覆盖期间是否已有专属当期财报
@@ -303,9 +309,18 @@ public class SegmentIngestor {
             }
             // 财报含上年同期对比表：去年同期命中、且该同期没有专属当期财报时，才靠对比列补数
             FiscalPeriod fp = FiscalPeriod.parse(period);
-            if (fp != null && fp.yearAgo() != null) {
+            if (fp != null) {
                 String yearAgo = fp.yearAgo().canonical();
                 if (coveredCanonical.contains(yearAgo) && !ownPeriods.contains(yearAgo)) {
+                    kept.add(f);
+                    continue;
+                }
+            }
+            // 年报兜底：财年末季（fyeMonth=12 → 自然年 Q4，fyeMonth=3 → Q1，以此类推）
+            // 只随年报披露，该季命中覆盖期间且无专属季报时，用年报补数（优先季报、缺失才取年报）
+            if (period.startsWith("FY") && fyeMonth >= 1 && fyeMonth <= 12) {
+                String lastQuarter = period.substring(2) + "Q" + ((fyeMonth - 1) / 3 + 1);
+                if (coveredCanonical.contains(lastQuarter) && !ownPeriods.contains(lastQuarter)) {
                     kept.add(f);
                 }
             }
