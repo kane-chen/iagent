@@ -1,6 +1,6 @@
 package io.invest.iagent.financial.ingest;
 
-import io.invest.iagent.financial.config.KeywordMetricDef;
+import io.invest.iagent.financial.config.prop.KeywordMetricDef;
 import io.invest.iagent.financial.ingest.KeywordMetricExtractor.StorageKey;
 import io.invest.iagent.financial.model.MetricValueDO;
 import io.invest.iagent.financial.model.PeriodType;

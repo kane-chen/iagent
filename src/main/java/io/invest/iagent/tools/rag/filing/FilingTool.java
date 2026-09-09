@@ -28,7 +28,7 @@ public class FilingTool {
         this.buildService = buildService;
     }
 
-    @Tool(name = "filing_kb_qa", description = "检索财报知识库并直接给出上市公司财报相关问题（收入、利润、现金流、同比环比、指引等）的答案。"
+    @Tool(name = "filing_kb_qa", description = "检索财报知识库并直接给出上市公司财报相关问题的答案。"
             + "支持按股票代码和财报周期过滤，自动解析\"最新财报/去年同期/近N个季度\"等相对时间，并对金融术语做同义词扩展。"
             + "工具内部已完成混合检索、重排与 LLM 答案合成，会直接返回基于知识库片段生成的回答，并在引用数据处标注来源片段编号；"
             + "若 LLM 合成不可用，则回退为返回带 [Cn] 引用编号的片段列表，由你组织最终答案。"

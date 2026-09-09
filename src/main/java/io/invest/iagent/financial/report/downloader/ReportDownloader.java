@@ -1,6 +1,6 @@
 package io.invest.iagent.financial.report.downloader;
 
-import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
 import io.invest.iagent.financial.report.enums.Market;
 import io.invest.iagent.financial.report.enums.ReportType;
 import io.invest.iagent.financial.report.model.ReportMeta;

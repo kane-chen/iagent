@@ -3,7 +3,7 @@ package io.invest.iagent.financial.ingest;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
 import io.invest.iagent.financial.model.CompanyDO;
 import io.invest.iagent.financial.model.MetricSource;
 import io.invest.iagent.financial.model.SegmentDO;

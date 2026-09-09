@@ -1,6 +1,6 @@
 package io.invest.iagent.financial.service;
 
-import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuStatementIngestor;
 import io.invest.iagent.financial.ingest.SegmentIngestor;
 import io.invest.iagent.financial.model.CompanyDO;

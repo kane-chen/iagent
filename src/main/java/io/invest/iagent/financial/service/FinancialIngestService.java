@@ -1,7 +1,7 @@
 package io.invest.iagent.financial.service;
 
 import com.alibaba.fastjson2.JSON;
-import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuStatementIngestor;
 import io.invest.iagent.financial.ingest.KeywordMetricExtractor;
 import io.invest.iagent.financial.ingest.RagMetricExtractor;

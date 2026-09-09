@@ -1,7 +1,7 @@
 package io.invest.iagent.financial.ingest;
 
-import io.invest.iagent.financial.config.FinancialProperties;
-import io.invest.iagent.financial.config.RagExtraMetric;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
+import io.invest.iagent.financial.config.prop.RagExtraMetric;
 import io.invest.iagent.financial.model.MetricCatalog;
 import io.invest.iagent.financial.model.MetricSource;
 import io.invest.iagent.financial.model.MetricValueDO;

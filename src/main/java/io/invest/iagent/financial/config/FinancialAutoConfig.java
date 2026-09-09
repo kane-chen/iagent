@@ -1,18 +1,17 @@
 package io.invest.iagent.financial.config;
 
 import com.alibaba.fastjson2.JSON;
-import com.zaxxer.hikari.HikariDataSource;
+import io.invest.iagent.financial.config.prop.FutuFieldMapping;
+import io.invest.iagent.financial.config.prop.KeywordDictEntry;
+import io.invest.iagent.financial.config.prop.KeywordMetricConfig;
+import io.invest.iagent.financial.config.prop.RagExtraMetric;
 import io.invest.iagent.financial.model.MetricCatalog;
 import io.invest.iagent.financial.model.MetricDef;
-import io.invest.iagent.rag.config.RagProperties;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;

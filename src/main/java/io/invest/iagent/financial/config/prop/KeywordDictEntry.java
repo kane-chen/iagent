@@ -1,4 +1,4 @@
-package io.invest.iagent.financial.config;
+package io.invest.iagent.financial.config.prop;
 
 import lombok.Data;
 

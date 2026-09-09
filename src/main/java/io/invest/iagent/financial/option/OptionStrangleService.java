@@ -1,6 +1,6 @@
 package io.invest.iagent.financial.option;
 
-import io.invest.iagent.financial.config.FinancialProperties;
+import io.invest.iagent.financial.config.prop.FinancialProperties;
 import io.invest.iagent.financial.ingest.FutuCodeUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -3,7 +3,7 @@ package io.invest.iagent.financial.ingest;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSONArray;
-import io.invest.iagent.financial.config.FutuFieldMapping;
+import io.invest.iagent.financial.config.prop.FutuFieldMapping;
 import io.invest.iagent.financial.model.MetricCatalog;
 import io.invest.iagent.financial.model.MetricValueDO;
 import io.invest.iagent.financial.model.PeriodType;
